@@ -158,6 +158,36 @@ def _parse_response(content: str, provider: str) -> dict:
     }
 
 
+# ── Mock judge (demos/testing, no API key needed) ──
+
+def _mock_judge(trace: list[Any], evaluation: dict[str, Any]) -> Any:
+    """Mock judge that returns a fixed score. For demos without API keys."""
+    from . import EvalResult
+    criteria = evaluation.get("criteria", "")
+    # Simple heuristic: check if the last assistant response looks reasonable
+    last_content = ""
+    for s in reversed(trace):
+        if s.actor == "assistant" and s.content:
+            last_content = str(s.content)
+            break
+
+    # Give a reasonable mock score based on content length and keywords
+    score = 0.85  # Default: good
+    if not last_content:
+        score = 0.3
+    elif len(last_content) < 10:
+        score = 0.4
+
+    return EvalResult(
+        type="llm_judge",
+        passed=score >= 0.7,
+        score=score,
+        reason=f"[mock] Response seems {'good' if score >= 0.7 else 'weak'} "
+               f"(content length: {len(last_content)} chars). "
+               f"Criteria: {criteria[:80]}",
+    )
+
+
 # ── Main entry point (called from evaluators/__init__.py) ──
 
 async def evaluate(trace: list[Any], evaluation: dict[str, Any]) -> Any:
@@ -167,6 +197,9 @@ async def evaluate(trace: list[Any], evaluation: dict[str, Any]) -> Any:
     provider = _detect_provider()
 
     if not provider:
+        # Mock judge for demos/testing — no API key needed
+        if os.environ.get("ABS_MOCK_JUDGE", "").lower() in ("1", "true", "yes"):
+            return _mock_judge(trace, evaluation)
         return EvalResult(
             type="llm_judge",
             passed=False,
@@ -174,7 +207,7 @@ async def evaluate(trace: list[Any], evaluation: dict[str, Any]) -> Any:
             reason=(
                 "No LLM provider available. Set one of:\n"
                 "  OPENAI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY\n"
-                "Or install an external adapter: pip install aievaluator"
+                "For demos without API keys: ABS_MOCK_JUDGE=true"
             ),
         )
 

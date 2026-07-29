@@ -161,6 +161,33 @@ function parseJudgeResponse(content: string, provider: string): EvalResult {
   };
 }
 
+// ── Mock judge (demos/testing, no API key needed) ──
+
+function mockJudge(trace: ObservedStep[], evaluation: any): EvalResult {
+  const criteria = evaluation.criteria || "";
+  let lastContent = "";
+  for (let i = trace.length - 1; i >= 0; i--) {
+    if (trace[i].actor === "assistant" && trace[i].content) {
+      lastContent = String(trace[i].content);
+      break;
+    }
+  }
+
+  let score = 0.85;
+  if (!lastContent) score = 0.3;
+  else if (lastContent.length < 10) score = 0.4;
+
+  return {
+    type: "llm_judge",
+    passed: score >= 0.7,
+    score,
+    reason:
+      `[mock] Response seems ${score >= 0.7 ? "good" : "weak"} ` +
+      `(content length: ${lastContent.length} chars). ` +
+      `Criteria: ${criteria.substring(0, 80)}`,
+  };
+}
+
 // ── Main adapter ──
 
 async function builtinLlmJudge(
@@ -170,6 +197,10 @@ async function builtinLlmJudge(
   const provider = detectProvider();
 
   if (!provider) {
+    // Mock judge for demos/testing — no API key needed
+    if (["1", "true", "yes"].includes((process.env.ABS_MOCK_JUDGE || "").toLowerCase())) {
+      return mockJudge(trace, evaluation);
+    }
     return {
       type: "llm_judge",
       passed: false,
@@ -177,7 +208,7 @@ async function builtinLlmJudge(
       reason:
         "No LLM provider available. Set one of:\n" +
         "  OPENAI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY\n" +
-        "Or install an external adapter: npm install -g aievaluator",
+        "For demos without API keys: ABS_MOCK_JUDGE=true",
     };
   }
 
