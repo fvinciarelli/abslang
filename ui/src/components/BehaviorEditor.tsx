@@ -5,7 +5,8 @@ import { Plus } from 'lucide-react';
 import { PropertySheet, PropertyRow } from './ui/property-sheet';
 import { Select } from './ui/select';
 import { EvaluationEditor } from './EvaluationEditor';
-import { cn } from '../lib/utils';
+
+// ── Props ──
 
 interface Props {
   behavior: Behavior;
@@ -14,62 +15,85 @@ interface Props {
   onRemoveEvaluation: (idx: number) => void;
 }
 
-const ACTOR_STYLE: Record<string, string> = {
-  user: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:border-blue-600',
-  assistant: 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100 data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:border-violet-600',
-  tool: 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 data-[state=active]:bg-amber-600 data-[state=active]:text-white data-[state=active]:border-amber-600',
-  system: 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 data-[state=active]:bg-slate-600 data-[state=active]:text-white data-[state=active]:border-slate-600',
-  human: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:border-emerald-600',
-  external: 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 data-[state=active]:bg-rose-600 data-[state=active]:text-white data-[state=active]:border-rose-600',
+// ── Actor pill colors ──
+
+const ACTOR_COLOR: Record<string, { pill: string; dot: string }> = {
+  user:      { pill: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-500' },
+  assistant: { pill: 'bg-violet-50 text-violet-700 border-violet-200', dot: 'bg-violet-500' },
+  tool:      { pill: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
+  system:    { pill: 'bg-slate-50 text-slate-600 border-slate-200', dot: 'bg-slate-400' },
+  human:     { pill: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+  external:  { pill: 'bg-rose-50 text-rose-700 border-rose-200', dot: 'bg-rose-500' },
 };
 
-const ACTION_CATEGORIES: Record<string, string[]> = {
+// ── Action groups for select ──
+
+const ACTION_GROUPS: Record<string, string[]> = {
   Communication: ['says', 'asks', 'responds', 'informs', 'greets', 'clarifies', 'confirms', 'rejects', 'suggests', 'shows'],
-  Execution: ['calls', 'submits', 'retrieves', 'stores', 'updates'],
-  Interaction: ['selects', 'uploads', 'downloads', 'approves'],
-  Delegation: ['hands_off'],
+  Execution:     ['calls', 'submits', 'retrieves', 'stores', 'updates'],
+  Interaction:   ['selects', 'uploads', 'downloads', 'approves'],
+  Delegation:    ['hands_off'],
 };
 
 const EVAL_TYPES = ['contains', 'exact_match', 'regex', 'schema', 'tool_call', 'llm_judge'];
 
+// ── Component ──
+
 export function BehaviorEditor({ behavior, onUpdate, onAddEvaluation, onRemoveEvaluation }: Props) {
   const [showEvalPicker, setShowEvalPicker] = useState(false);
-  const isExecution = ['calls', 'submits', 'retrieves', 'stores', 'updates'].includes(behavior.action);
-  const showTarget = ['calls', 'submits', 'hands_off', 'selects', 'uploads', 'approves', 'shows'].includes(behavior.action);
-  const showContent = behavior.action !== 'calls';
+
+  const isExec   = ['calls', 'submits', 'retrieves', 'stores', 'updates'].includes(behavior.action);
+  const hasTarget = ['calls', 'submits', 'hands_off', 'selects', 'uploads', 'approves', 'shows'].includes(behavior.action);
+  const hasContent = behavior.action !== 'calls';
+
+  const inputClass =
+    'w-full h-[34px] px-2.5 rounded-md border border-slate-200 text-[13px] text-slate-700 ' +
+    'placeholder:text-slate-350 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 ' +
+    'transition-shadow';
+
+  const textareaClass =
+    'w-full px-2.5 py-2 rounded-md border border-slate-200 text-[13px] text-slate-700 font-mono ' +
+    'placeholder:text-slate-350 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 ' +
+    'transition-shadow resize-y';
 
   return (
     <div className="space-y-6">
-      {/* Actor */}
       <PropertySheet>
+        {/* ── Actor ── */}
         <PropertyRow label="Actor">
           <div className="flex gap-1.5 flex-wrap">
-            {ACTOR_OPTIONS.map((a) => (
-              <button
-                key={a}
-                data-state={behavior.actor === a ? 'active' : 'inactive'}
-                onClick={() => onUpdate({ actor: a })}
-                className={cn(
-                  'px-3 py-1.5 rounded-lg text-sm font-medium border transition-all',
-                  ACTOR_STYLE[a] || 'bg-slate-50 text-slate-700 border-slate-200'
-                )}
-              >
-                {a}
-              </button>
-            ))}
+            {ACTOR_OPTIONS.map((a) => {
+              const c = ACTOR_COLOR[a] || ACTOR_COLOR.system;
+              const active = behavior.actor === a;
+              return (
+                <button
+                  key={a}
+                  onClick={() => onUpdate({ actor: a })}
+                  className={
+                    `relative flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12px] font-medium border transition-all ` +
+                    (active
+                      ? `text-white border-transparent shadow-sm ${c.dot}`
+                      : `${c.pill} hover:border-slate-300`)
+                  }
+                >
+                  {active && <span className="w-1.5 h-1.5 rounded-full bg-white/40" />}
+                  {a}
+                </button>
+              );
+            })}
           </div>
         </PropertyRow>
 
-        {/* Action */}
+        {/* ── Action ── */}
         <PropertyRow label="Action">
           <Select value={behavior.action} onValueChange={(v) => onUpdate({ action: v })}>
-            <Select.Trigger className="w-full">
+            <Select.Trigger className="w-full h-[34px] text-[13px]">
               <Select.Value />
             </Select.Trigger>
             <Select.Content>
-              {Object.entries(ACTION_CATEGORIES).map(([cat, actions]) => (
+              {Object.entries(ACTION_GROUPS).map(([cat, actions]) => (
                 <Select.Group key={cat}>
-                  <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                  <div className="px-2 pt-1.5 pb-0.5 text-[10px] font-semibold text-slate-400 uppercase tracking-widest">
                     {cat}
                   </div>
                   {actions.map((a) => (
@@ -81,21 +105,21 @@ export function BehaviorEditor({ behavior, onUpdate, onAddEvaluation, onRemoveEv
           </Select>
         </PropertyRow>
 
-        {/* Target */}
-        {showTarget && (
-          <PropertyRow label={isExecution ? 'Tool / API' : behavior.action === 'hands_off' ? 'Recipient' : 'UI Element'}>
+        {/* ── Target (conditional) ── */}
+        {hasTarget && (
+          <PropertyRow label={isExec ? 'Tool' : behavior.action === 'hands_off' ? 'Recipient' : 'UI Element'}>
             <input
               type="text"
               value={behavior.target || ''}
               onChange={(e) => onUpdate({ target: e.target.value })}
-              placeholder={isExecution ? 'e.g. Order MCP' : 'e.g. Appointment Options'}
-              className="w-full h-9 px-3 rounded-md border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 placeholder:text-slate-400"
+              placeholder={isExec ? 'Order MCP' : 'Appointment Options'}
+              className={inputClass}
             />
           </PropertyRow>
         )}
 
-        {/* Content */}
-        {showContent && (
+        {/* ── Content (conditional) ── */}
+        {hasContent && (
           <PropertyRow label="Content">
             {typeof behavior.content === 'object' && behavior.content !== null ? (
               <textarea
@@ -103,93 +127,88 @@ export function BehaviorEditor({ behavior, onUpdate, onAddEvaluation, onRemoveEv
                 onChange={(e) => {
                   try { onUpdate({ content: JSON.parse(e.target.value) }); } catch { onUpdate({ content: e.target.value }); }
                 }}
-                className="w-full px-3 py-2 rounded-md border border-slate-200 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 placeholder:text-slate-400 h-24 resize-y"
+                className={textareaClass + ' h-24'}
                 placeholder='{"key": "value"}'
               />
             ) : (
               <textarea
                 value={(behavior.content as string) || ''}
                 onChange={(e) => onUpdate({ content: e.target.value })}
-                className="w-full px-3 py-2 rounded-md border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 placeholder:text-slate-400 h-20 resize-y"
-                placeholder={behavior.actor === 'user' ? 'What the user says...' : 'What the assistant responds...'}
+                className={textareaClass + ' h-[68px]'}
+                placeholder={behavior.actor === 'user' ? 'What the user says…' : 'Assistant response…'}
               />
             )}
           </PropertyRow>
         )}
 
-        {/* With */}
-        {isExecution && (
+        {/* ── Parameters (execution only) ── */}
+        {isExec && (
           <PropertyRow label="Parameters">
             <textarea
               value={behavior.with ? JSON.stringify(behavior.with, null, 2) : ''}
               onChange={(e) => {
                 try { onUpdate({ with: JSON.parse(e.target.value) }); } catch { onUpdate({ with: undefined }); }
               }}
-              className="w-full px-3 py-2 rounded-md border border-slate-200 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 placeholder:text-slate-400 h-20 resize-y"
+              className={textareaClass + ' h-[68px]'}
               placeholder='{"orderId": "{{orderId}}"}'
             />
           </PropertyRow>
         )}
 
-        {/* Capture */}
+        {/* ── Capture ── */}
         <PropertyRow label="Capture">
           <textarea
             value={behavior.capture ? JSON.stringify(behavior.capture, null, 2) : ''}
             onChange={(e) => {
               try { onUpdate({ capture: JSON.parse(e.target.value) }); } catch { onUpdate({ capture: undefined }); }
             }}
-            className="w-full px-3 py-2 rounded-md border border-slate-200 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 placeholder:text-slate-400 h-16 resize-y"
+            className={textareaClass + ' h-[52px]'}
             placeholder='{"orderId": "12345"}'
           />
         </PropertyRow>
       </PropertySheet>
 
-      {/* Evaluations */}
+      {/* ── Evaluations ── */}
       <PropertySheet>
         <PropertyRow label="Evaluations">
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {(behavior.evaluations || []).map((e, i) => (
               <EvaluationEditor
                 key={i}
                 evaluation={e}
                 onChange={(updates) => {
-                  const updated = [...(behavior.evaluations || [])];
-                  updated[i] = { ...updated[i], ...updates };
-                  onUpdate({ evaluations: updated });
+                  const next = [...(behavior.evaluations || [])];
+                  next[i] = { ...next[i], ...updates };
+                  onUpdate({ evaluations: next });
                 }}
                 onRemove={() => onRemoveEvaluation(i)}
               />
             ))}
 
-            {showEvalPicker ? (
-              <div className="flex gap-1.5 flex-wrap p-2 bg-slate-50 rounded-lg border border-slate-200">
+            {showEvalPicker && (
+              <div className="flex gap-1.5 flex-wrap">
                 {EVAL_TYPES.map((t) => (
                   <button
                     key={t}
                     onClick={() => { onAddEvaluation(newEvaluation(t)); setShowEvalPicker(false); }}
-                    className="px-2.5 py-1 text-xs rounded-md border border-slate-200 bg-white hover:bg-indigo-50 hover:border-indigo-300 transition-colors text-slate-600"
+                    className="px-2.5 py-1 text-[12px] rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700 transition-colors"
                   >
                     {t}
                   </button>
                 ))}
-                <button
-                  onClick={() => setShowEvalPicker(false)}
-                  className="px-2.5 py-1 text-xs rounded-md text-slate-400 hover:text-slate-600"
-                >
+                <button onClick={() => setShowEvalPicker(false)} className="px-2 py-1 text-[12px] text-slate-400 hover:text-slate-600">
                   cancel
                 </button>
               </div>
-            ) : (
+            )}
+
+            {!showEvalPicker && (
               <button
                 onClick={() => setShowEvalPicker(true)}
-                className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                className="inline-flex items-center gap-1 text-[12px] text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
               >
                 <Plus size={14} /> Add evaluation
               </button>
-            )}
-
-            {(behavior.evaluations || []).length === 0 && !showEvalPicker && (
-              <p className="text-xs text-slate-400">No evaluations yet.</p>
             )}
           </div>
         </PropertyRow>

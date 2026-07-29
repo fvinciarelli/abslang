@@ -1,33 +1,28 @@
-import { cn } from "../../lib/utils";
+import type { ReactNode } from "react";
 
-interface PropertyRowProps {
-  label: string;
-  children: React.ReactNode;
-  className?: string;
-}
+// ── PropertySheet: container with single external border ──
 
-export function PropertyRow({ label, children, className }: PropertyRowProps) {
+export function PropertySheet({ children }: { children: ReactNode }) {
   return (
-    <div className={cn("flex items-start gap-4 py-3 px-4 border-b border-slate-100 last:border-b-0", className)}>
-      <label className="w-28 shrink-0 pt-2 text-xs font-medium text-slate-500 uppercase tracking-wider">
-        {label}
-      </label>
-      <div className="flex-1">
-        {children}
-      </div>
+    <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+      {children}
     </div>
   );
 }
 
-interface PropertySheetProps {
-  children: React.ReactNode;
-  className?: string;
-}
+// ── PropertyRow: single row, no border overlap ──
 
-export function PropertySheet({ children, className }: PropertySheetProps) {
+export function PropertyRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className={cn("bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm", className)}>
-      {children}
+    <div className="flex items-start border-b border-slate-100 last:border-b-0">
+      <div className="w-[120px] shrink-0 px-4 py-[11px]">
+        <span className="text-[11px] font-medium text-slate-400 uppercase tracking-[0.04em] leading-4">
+          {label}
+        </span>
+      </div>
+      <div className="flex-1 px-4 py-[9px] min-w-0">
+        {children}
+      </div>
     </div>
   );
 }
