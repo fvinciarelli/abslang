@@ -21,10 +21,9 @@
 These are specification chapters, not conceptual design — the model exists, the precise rules don't yet:
 
 1. **Evaluation Specification** — the core design is now **decided**: ABS is descriptive and testable by the same document (no `evaluations` = pure description); Evaluations exist at two levels, step-level (one Behavior) and session-level/chain (the whole trace, via `sequence`, `eventually`, `never`, `count`, `within`, `variable_consistency`); composition uses `all_of`/`any_of`/`none_of`; failure propagation defaults to non-blocking/best-effort with an opt-in `blocking: true` checkpoint. See EVALUATIONS.md. Still open: `llm_judge` calibration/reproducibility across model versions, whether the chain-evaluator selector needs partial/regex matching, and the precise algorithm for propagating `inconclusive` status through variable dependencies.
-2. **Tool Interaction Specification** — precise rules for validating `calls`/`responds` pairs: required vs. optional parameters, partial matching, ordering when multiple tools are called.
-3. **Variable/Context Specification** — typed variables, computed/derived values, and whether cross-Session variable sharing should exist at all.
-4. **Official JSON Schema** — a normative machine-checkable schema for the document format in SPECIFICATION.md. A draft, non-normative version exists at `schema/abs.schema.json` as a starting point.
-5. **UI Authoring Model** — how a visual/no-code editor constructs and edits ABS documents without exposing raw YAML to non-technical authors.
+2. **Variable/Context Specification** — typed variables, computed/derived values, and whether cross-Session variable sharing should exist at all.
+3. **Official JSON Schema** — a normative machine-checkable schema for the document format in SPECIFICATION.md. A draft, non-normative version exists at `schema/abs.schema.json` as a starting point.
+4. **UI Authoring Model** — how a visual/no-code editor constructs and edits ABS documents without exposing raw YAML to non-technical authors.
 
 ## Open design questions
 

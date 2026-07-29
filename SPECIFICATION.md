@@ -74,7 +74,13 @@ Behaviors within a Session's list MUST be interpreted as an ordered sequence unl
 
 ## 6. Variable resolution
 
-Any `content` or `with` value MAY contain a `{{variable}}` reference. A conforming implementation MUST resolve `{{variable}}` against the nearest prior `capture:` earlier in the same Session before evaluating the Behavior that references it. Referencing a variable with no prior `capture:` in the same Session is an error and MUST be reported as such.
+Any `content` or `with` value MAY contain a `{{variable}}` reference. A conforming implementation MUST resolve `{{variable}}` in this order of precedence:
+
+1. **Captured value** — the nearest prior `capture:` of that name earlier in the same Session.
+2. **Runtime binding** — a value provided at execution time via dataset row, CLI flag, or environment variable (see VARIABLES.md, "Runtime bindings").
+3. If no resolution source exists, it is an error and MUST be reported as such.
+
+This means a Session can be written once with `{{placeholders}}` and executed many times with different concrete values, without changing the Session file. See VARIABLES.md for the full rules.
 
 ## 7. Alternate and branching flows
 
@@ -93,7 +99,44 @@ Conformance to evaluator types beyond (3) and (4), and to the not-yet-closed Too
 
 ## 9. Versioning
 
-This is v0.1. Changes prior to v1.0 should be expected to be breaking. Documents SHOULD declare `abs_version: "0.1"`; this becomes REQUIRED starting v0.2.
+### Version numbers
+
+ABS uses simple integer versions: `0.1`, `0.2`, `0.3`, …, `1.0`. No patch numbers. Every version is a breaking-change boundary until 1.0.
+
+A change is **breaking** if a document that was valid under version N could be rejected or misinterpreted under version N+1. Examples:
+
+- Renaming or removing a field
+- Changing the semantics of an existing action or evaluator
+- Adding a new REQUIRED field
+- Changing the matching rules for `target` or `with`
+
+A change is **non-breaking** (and does not require a version bump) if:
+
+- Adding a new optional field to Behavior or Evaluation
+- Adding a new action to the vocabulary (extensions are forward-compatible by design)
+- Adding a new evaluator type
+- Clarifying an ambiguity without changing behavior
+
+### Declaring the version
+
+Documents SHOULD declare `abs_version: "0.1"`. This becomes REQUIRED in v0.2. Implementations MUST use the declared version to select the correct schema, parser behavior, and evaluation semantics.
+
+### Schema versioning
+
+The normative JSON Schema for each version is published at:
+
+```
+https://abs-lang.org/schema/v0.1/abs.schema.json
+https://abs-lang.org/schema/v0.2/abs.schema.json
+```
+
+Implementations SHOULD validate documents against the schema matching their declared `abs_version`. If no `abs_version` is declared, implementations SHOULD assume the latest stable version they support, and SHOULD emit a warning.
+
+### Implementation support
+
+An implementation MAY support multiple versions simultaneously. When it does, it MUST apply the rules of the version declared in the document, not the latest version it knows about. A document written for v0.1 should still run correctly under a v0.2-capable implementation.
+
+This is the same strategy used by OpenAPI (`openapi: 3.0.3`) and AsyncAPI (`asyncapi: 2.6.0`): the document declares its contract, and the tool adapts.
 
 ## 10. Non-goals
 

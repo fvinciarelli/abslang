@@ -35,10 +35,14 @@ behaviors:
 | [CORE_MODEL.md](./CORE_MODEL.md) | Session, Behavior, Actor, Action, Target, Content, Variables, Evaluations |
 | [VOCABULARY.md](./VOCABULARY.md) | Standard action vocabulary and semantics |
 | [EVALUATIONS.md](./EVALUATIONS.md) | How Behaviors are verified |
-| [VARIABLES.md](./VARIABLES.md) | Capture and reuse of runtime values |
+| [VARIABLES.md](./VARIABLES.md) | Capture, reuse, and runtime binding of values |
+| [COMPOSITION.md](./COMPOSITION.md) | Fragments and reusable Behaviors |
+| [TOOLS.md](./TOOLS.md) | Tool interaction — `calls`, `responds`, matching rules |
+| [RUNNER.md](./RUNNER.md) | How ABS sessions get executed against a real agent |
+| [CLI.md](./CLI.md) | `abs init`, `abs run`, `abs report` — the command-line interface |
 | [EXAMPLES.md](./EXAMPLES.md) | Worked, narrated examples |
 | [ROADMAP.md](./ROADMAP.md) | What's next, and open design questions |
-| [schema/abs.schema.json](./schema/abs.schema.json) | Draft JSON Schema (proposal, not yet normative) |
+| [schema/abs.schema.json](./schema/abs.schema.json) | Normative JSON Schema for v0.1 document validation |
 | [examples/](./examples/) | Runnable example sessions in `.yaml` |
 
 ## Status of the standard

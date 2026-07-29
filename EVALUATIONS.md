@@ -93,13 +93,14 @@ evaluations:
 ```
 
 ### `tool_call`
-Validates that a `calls` Behavior was invoked with the expected target and/or parameters. Full semantics are deferred to the planned Tool Interaction Specification.
+Validates that one or more `calls` Behaviors were invoked correctly: target matches, parameters match (per `with`/`with_only` rules), and optionally that ordering is respected when multiple tools are called. See [TOOLS.md](./TOOLS.md) for the full rules.
 ```yaml
 evaluations:
   - type: tool_call
     target: "Order MCP"
     with:
       orderId: "{{orderId}}"
+    ordered: true
 ```
 
 ### `llm_judge`
