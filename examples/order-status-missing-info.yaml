@@ -1,0 +1,45 @@
+session: Order status requires order number
+description: Alternate path to order-status.yaml — the user does not provide the order number up front.
+behaviors:
+  - actor: user
+    action: says
+    content: "Where is my order?"
+
+  - actor: assistant
+    action: asks
+    content: "Please provide your order number"
+    evaluations:
+      - type: contains
+        value: "order number"
+
+  - actor: user
+    action: says
+    content: "12345"
+    capture:
+      orderId: "12345"
+
+  - actor: assistant
+    action: calls
+    target: Order MCP
+    with:
+      orderId: "{{orderId}}"
+    evaluations:
+      - type: tool_call
+        target: "Order MCP"
+        with:
+          orderId: "12345"
+
+  - actor: assistant
+    action: informs
+    content: "Your order is on the way"
+
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: asks }
+      - { actor: assistant, action: calls, target: "Order MCP" }
+      - { actor: assistant, action: informs }
+  - type: variable_consistency
+    variable: orderId
+  - type: never
+    match: { actor: assistant, action: hands_off }

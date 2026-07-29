@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.org/abs/schema/abs.schema.json",
+  "title": "ABS Document (DRAFT — non-normative, v0.1)",
+  "description": "Draft JSON Schema for the ABS core document format. This is a starting point for the official JSON Schema chapter listed in ROADMAP.md and is NOT yet normative.",
+  "type": "object",
+  "required": ["session", "behaviors"],
+  "properties": {
+    "session": {
+      "type": "string",
+      "description": "Human-readable Session name."
+    },
+    "description": {
+      "type": "string"
+    },
+    "abs_version": {
+      "type": "string",
+      "description": "Optional in v0.1, will be required starting v0.2."
+    },
+    "behaviors": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/behavior" },
+      "minItems": 1
+    },
+    "evaluations": {
+      "type": "array",
+      "description": "Session-level (chain) evaluations, operating over the whole trace. See EVALUATIONS.md.",
+      "items": { "$ref": "#/definitions/evaluation" }
+    }
+  },
+  "definitions": {
+    "behavior": {
+      "type": "object",
+      "required": ["actor", "action"],
+      "properties": {
+        "actor": {
+          "type": "string",
+          "description": "See VOCABULARY.md and CORE_MODEL.md#actor. Not restricted to a closed enum in v0.1."
+        },
+        "action": {
+          "type": "string",
+          "description": "See VOCABULARY.md. Not restricted to a closed enum in v0.1 — custom actions are permitted."
+        },
+        "target": {
+          "type": "string",
+          "description": "Meaning depends on the action category — see CORE_MODEL.md#target."
+        },
+        "content": {
+          "description": "Free text, structured payload, or displayed content. Intentionally untyped in v0.1 — see ROADMAP.md, 'Content typing'."
+        },
+        "capture": {
+          "type": "object",
+          "description": "Names runtime values for later reuse via {{variable}} syntax. See VARIABLES.md."
+        },
+        "with": {
+          "type": "object",
+          "description": "Parameters for an outbound action, MAY reference captured variables."
+        },
+        "evaluations": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/evaluation" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "evaluation": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "exact_match", "contains", "regex", "schema", "tool_call", "llm_judge", "custom",
+            "sequence", "eventually", "never", "count", "within", "variable_consistency",
+            "all_of", "any_of", "none_of"
+          ]
+        },
+        "blocking": {
+          "type": "boolean",
+          "description": "Optional checkpoint flag. See EVALUATIONS.md, 'Failure semantics'."
+        }
+      },
+      "additionalProperties": true,
+      "description": "Per-type fields (value, pattern, schema, target, with, criteria, id, match, order, variable, min, max, after, max_steps, evaluations) are documented in EVALUATIONS.md and deliberately left open here (additionalProperties: true) pending the formal Evaluation Specification."
+    }
+  }
+}

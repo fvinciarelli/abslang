@@ -1,0 +1,35 @@
+session: Order status
+description: Happy path — user has the order number, assistant resolves it in one round trip.
+behaviors:
+  - actor: user
+    action: says
+    content: "Where is my order?"
+    capture:
+      userQuery: "Where is my order?"
+
+  - actor: assistant
+    action: calls
+    target: Order MCP
+    with:
+      orderId: "12345"
+
+  - actor: tool
+    action: responds
+    target: Order MCP
+    content:
+      status: "in_transit"
+      eta: "2026-07-30"
+    evaluations:
+      - type: schema
+        schema:
+          type: object
+          required: [status]
+          properties:
+            status: { type: string }
+
+  - actor: assistant
+    action: informs
+    content: "Your order is on the way"
+    evaluations:
+      - type: contains
+        value: "on the way"

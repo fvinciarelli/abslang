@@ -1,0 +1,13 @@
+session: Chatbot greeting
+description: Minimal valid Session — useful as a smoke test for a new ABS-conformant tool.
+behaviors:
+  - actor: user
+    action: says
+    content: "Hi"
+
+  - actor: assistant
+    action: greets
+    content: "Hello! How can I help you today?"
+    evaluations:
+      - type: llm_judge
+        criteria: "Friendly greeting that invites the user to state their need, without assuming what they want."

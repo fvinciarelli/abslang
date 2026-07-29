@@ -1,0 +1,74 @@
+session: Appointment booking with fallback to human
+description: Multi-step flow combining a tool call, a UI selection, a second tool call, and a confirmation.
+behaviors:
+  - actor: user
+    action: says
+    content: "I need to book a dentist appointment"
+
+  - actor: assistant
+    action: calls
+    target: Calendar API
+    with:
+      service: "dentist"
+
+  - actor: tool
+    action: responds
+    target: Calendar API
+    content:
+      slots: ["2026-08-03T09:00", "2026-08-03T14:00"]
+
+  - actor: assistant
+    action: shows
+    target: Appointment Options
+    content:
+      slots: ["2026-08-03T09:00", "2026-08-03T14:00"]
+
+  - actor: user
+    action: selects
+    target: Appointment Options
+    content: "2026-08-03T09:00"
+    capture:
+      selectedSlot: "2026-08-03T09:00"
+
+  - actor: assistant
+    action: submits
+    target: Calendar API
+    with:
+      slot: "{{selectedSlot}}"
+
+  - actor: assistant
+    action: confirms
+    content: "You're booked for August 3rd at 9:00 AM"
+    evaluations:
+      - type: contains
+        value: "August 3rd"
+
+---
+session: Appointment booking, no slot fits — hand off to human
+description: Same starting point as above, diverging where the user rejects both offered slots.
+behaviors:
+  - actor: user
+    action: says
+    content: "I need to book a dentist appointment"
+
+  - actor: assistant
+    action: calls
+    target: Calendar API
+    with:
+      service: "dentist"
+
+  - actor: assistant
+    action: shows
+    target: Appointment Options
+    content:
+      slots: ["2026-08-03T09:00", "2026-08-03T14:00"]
+
+  - actor: user
+    action: rejects
+    target: Appointment Options
+    content: "Neither of those work for me"
+
+  - actor: assistant
+    action: hands_off
+    target: Human Agent
+    content: "Transferring you to a team member who can find more options"
