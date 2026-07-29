@@ -1,5 +1,7 @@
 import type { Evaluation } from '../types';
 import { X } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 
 interface Props {
   evaluation: Evaluation;
@@ -7,51 +9,51 @@ interface Props {
   onRemove: () => void;
 }
 
-const sharedInput =
-  'w-full text-[13px] border-none outline-none bg-transparent placeholder:text-slate-300';
-
 export function EvaluationEditor({ evaluation, onChange, onRemove }: Props) {
   return (
-    <div className="flex items-start gap-2 px-2.5 py-1.5 rounded-md border border-slate-200 bg-white group">
-      <span className="shrink-0 mt-[3px] text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded uppercase tracking-widest select-none">
+    <div className="flex items-start gap-2 group">
+      <span className="shrink-0 mt-1.5 text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded uppercase tracking-wider select-none">
         {evaluation.type}
       </span>
 
       <div className="flex-1 min-w-0">
         {evaluation.type === 'contains' || evaluation.type === 'exact_match' ? (
-          <input type="text" value={evaluation.value || ''}
+          <Input value={evaluation.value || ''}
             onChange={(e) => onChange({ value: e.target.value })}
-            placeholder={evaluation.type === 'contains' ? 'Substring…' : 'Exact text…'}
-            className={sharedInput} />
+            placeholder={evaluation.type === 'contains' ? 'Substring to find…' : 'Exact text…'}
+            className="h-8 text-[13px]" />
         ) : evaluation.type === 'regex' ? (
-          <input type="text" value={evaluation.pattern || ''}
+          <Input value={evaluation.pattern || ''}
             onChange={(e) => onChange({ pattern: e.target.value })}
-            placeholder="Pattern…" className={sharedInput + ' font-mono'} />
+            placeholder="Regular expression…"
+            className="h-8 text-[13px] font-mono" />
         ) : evaluation.type === 'llm_judge' ? (
-          <textarea value={evaluation.criteria || ''}
+          <Textarea value={evaluation.criteria || ''}
             onChange={(e) => onChange({ criteria: e.target.value })}
-            placeholder="Criteria for the judge…"
-            className={sharedInput + ' resize-none h-10'} />
+            placeholder="Criteria for the LLM judge…"
+            className="text-[13px] min-h-[40px] py-1.5" />
         ) : evaluation.type === 'schema' ? (
-          <textarea value={evaluation.schema ? JSON.stringify(evaluation.schema, null, 2) : ''}
+          <Textarea value={evaluation.schema ? JSON.stringify(evaluation.schema, null, 2) : ''}
             onChange={(e) => { try { onChange({ schema: JSON.parse(e.target.value) }); } catch {} }}
             placeholder='{"type":"object","required":["status"]}'
-            className={sharedInput + ' resize-none h-10 font-mono'} />
+            className="text-[13px] font-mono min-h-[40px] py-1.5" />
         ) : evaluation.type === 'tool_call' ? (
-          <input type="text" value={evaluation.target || ''}
+          <Input value={evaluation.target || ''}
             onChange={(e) => onChange({ target: e.target.value })}
-            placeholder="Tool name…" className={sharedInput} />
+            placeholder="Tool name…"
+            className="h-8 text-[13px]" />
         ) : evaluation.type === 'variable_consistency' ? (
-          <input type="text" value={evaluation.variable || ''}
+          <Input value={evaluation.variable || ''}
             onChange={(e) => onChange({ variable: e.target.value })}
-            placeholder="Variable name…" className={sharedInput} />
+            placeholder="Variable name…"
+            className="h-8 text-[13px]" />
         ) : (
           <span className="text-[13px] text-slate-400">{evaluation.type} evaluation</span>
         )}
       </div>
 
       <button onClick={onRemove}
-        className="shrink-0 mt-[3px] text-slate-300 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100">
+        className="shrink-0 mt-1.5 text-slate-300 hover:text-slate-500 transition-colors opacity-0 group-hover:opacity-100">
         <X size={14} />
       </button>
     </div>
