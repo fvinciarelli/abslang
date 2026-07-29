@@ -53,6 +53,28 @@ export interface ABSSession {
   evaluations?: Evaluation[];
 }
 
+// ── Palette items for the sidebar ──
+
+export const PALETTE_ITEMS = [
+  { actor: 'user', action: 'says', label: 'User message' },
+  { actor: 'assistant', action: 'says', label: 'Assistant says' },
+  { actor: 'assistant', action: 'asks', label: 'Assistant asks' },
+  { actor: 'assistant', action: 'informs', label: 'Assistant informs' },
+  { actor: 'assistant', action: 'calls', label: 'Tool call' },
+  { actor: 'tool', action: 'responds', label: 'Tool response' },
+  { actor: 'assistant', action: 'hands_off', label: 'Hand-off' },
+  { actor: 'user', action: 'selects', label: 'User selects' },
+];
+
+export const ACTOR_COLORS: Record<string, { dot: string; bg: string; text: string }> = {
+  user: { dot: '#3b82f6', bg: '#eff6ff', text: '#1d4ed8' },
+  assistant: { dot: '#8b5cf6', bg: '#f5f3ff', text: '#6d28d9' },
+  tool: { dot: '#f59e0b', bg: '#fffbeb', text: '#b45309' },
+  system: { dot: '#6b7280', bg: '#f9fafb', text: '#374151' },
+  human: { dot: '#10b981', bg: '#ecfdf5', text: '#047857' },
+  external: { dot: '#f43f5e', bg: '#fff1f2', text: '#be123c' },
+};
+
 // ── Action vocabulary ──
 
 export const ACTOR_OPTIONS = ['user', 'assistant', 'tool', 'system', 'human', 'external'];

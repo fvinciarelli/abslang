@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { Behavior, ABSSession, Evaluation } from '../types';
 import { newBehavior, newId } from '../types';
 
@@ -20,6 +20,18 @@ export function useSession() {
     ? session.behaviors.find((b) => b.id === selectedId) ?? null
     : null;
 
+  useEffect(() => {
+    if (session.behaviors.length === 0) {
+      if (selectedId !== null) setSelectedId(null);
+      return;
+    }
+
+    const exists = selectedId ? session.behaviors.some((b) => b.id === selectedId) : false;
+    if (!exists) {
+      setSelectedId(session.behaviors[0].id);
+    }
+  }, [session.behaviors, selectedId]);
+
   const select = useCallback((id: string) => setSelectedId(id), []);
 
   const updateBehavior = useCallback((id: string, updates: Partial<Behavior>) => {
@@ -31,24 +43,34 @@ export function useSession() {
     }));
   }, []);
 
-  const addBehavior = useCallback((afterId?: string) => {
+  const addBehavior = useCallback((afterId?: string, initial?: Partial<Behavior>) => {
     setSession((prev) => {
-      const nb = newBehavior();
+      const nb = { ...newBehavior(), ...initial };
       const idx = afterId
         ? prev.behaviors.findIndex((b) => b.id === afterId)
         : prev.behaviors.length - 1;
       const updated = [...prev.behaviors];
       updated.splice(idx + 1, 0, nb);
+      setSelectedId(nb.id);
       return { ...prev, behaviors: updated };
     });
   }, []);
 
   const removeBehavior = useCallback((id: string) => {
-    setSession((prev) => ({
-      ...prev,
-      behaviors: prev.behaviors.filter((b) => b.id !== id),
-    }));
-    if (selectedId === id) setSelectedId(null);
+    setSession((prev) => {
+      const index = prev.behaviors.findIndex((b) => b.id === id);
+      const nextBehaviors = prev.behaviors.filter((b) => b.id !== id);
+
+      if (selectedId === id) {
+        const replacement = nextBehaviors[index] ?? nextBehaviors[index - 1] ?? null;
+        setSelectedId(replacement?.id ?? null);
+      }
+
+      return {
+        ...prev,
+        behaviors: nextBehaviors,
+      };
+    });
   }, [selectedId]);
 
   const moveBehavior = useCallback((fromIdx: number, toIdx: number) => {
