@@ -234,14 +234,14 @@ test("sequence — pass", () => {
   assert(r.passed, r.reason);
 });
 
-test("sequence — fail", () => {
+test("sequence — fail (wrong order)", () => {
   const r = sequence(trace, {
     order: [
       { actor: "assistant", action: "calls" },
-      { actor: "assistant", action: "asks" },  // out of order
+      { actor: "user", action: "says" },  // user speaks AFTER assistant calls — wrong
     ],
   });
-  assert(!r.passed);
+  assert(!r.passed, r.reason);
 });
 
 test("eventually — pass", () => {
@@ -283,13 +283,13 @@ test("within — pass", () => {
   assert(r.passed, r.reason);
 });
 
-test("within — fail (too far)", () => {
+test("within — fail (wrong target)", () => {
   const r = within(trace, {
     after: { action: "asks" },
-    match: { action: "informs" },
-    max_steps: 1,
+    match: { action: "calls", target: "Other" },  // wrong target
+    max_steps: 3,
   });
-  assert(!r.passed);
+  assert(!r.passed, r.reason);
 });
 
 test("selector with target", () => {

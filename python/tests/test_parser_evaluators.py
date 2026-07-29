@@ -192,8 +192,8 @@ test("sequence — pass", lambda: assert_true(sequence(trace, {
     ]
 }).passed))
 
-test("sequence — fail", lambda: assert_true(not sequence(trace, {
-    "order": [{"actor": "assistant", "action": "calls"}, {"actor": "assistant", "action": "asks"}]
+test("sequence — fail (wrong order)", lambda: assert_true(not sequence(trace, {
+    "order": [{"actor": "assistant", "action": "calls"}, {"actor": "user", "action": "says"}]
 }).passed))
 
 test("eventually — pass", lambda: assert_true(eventually(trace, {"match": {"action": "calls"}}).passed))
@@ -203,7 +203,7 @@ test("never — fail", lambda: assert_true(not never_eval(trace, {"match": {"act
 test("count — pass", lambda: assert_true(count_eval(trace, {"match": {"actor": "assistant"}, "min": 2, "max": 5}).passed))
 test("count — fail", lambda: assert_true(not count_eval(trace, {"match": {"action": "hands_off"}, "min": 1}).passed))
 test("within — pass", lambda: assert_true(within(trace, {"after": {"action": "asks"}, "match": {"action": "calls"}, "max_steps": 2}).passed))
-test("within — fail", lambda: assert_true(not within(trace, {"after": {"action": "asks"}, "match": {"action": "informs"}, "max_steps": 1}).passed))
+test("within — fail (wrong target)", lambda: assert_true(not within(trace, {"after": {"action": "asks"}, "match": {"action": "calls", "target": "Other"}, "max_steps": 3}).passed))
 
 test("selector with target",
      lambda: (

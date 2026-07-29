@@ -29,6 +29,12 @@ behaviors:
         with:
           orderId: "12345"
 
+  - actor: tool
+    action: responds
+    target: Order MCP
+    content:
+      status: "in_transit"
+
   - actor: assistant
     action: informs
     content: "Your order is on the way"

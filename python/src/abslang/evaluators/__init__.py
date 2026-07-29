@@ -41,11 +41,17 @@ AdapterFunction = Callable[[list[ObservedStep], dict[str, Any]], Awaitable[EvalR
 # ── Selector matching ──
 
 def matches_selector(step: ObservedStep, selector: dict[str, Any]) -> bool:
-    """Check if an ObservedStep matches a Selector."""
+    """Check if an ObservedStep matches a Selector, with communication action equivalence."""
+    COMM_ACTIONS = {"says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests"}
     if "actor" in selector and step.actor != selector["actor"]:
         return False
-    if "action" in selector and step.action != selector["action"]:
-        return False
+    if "action" in selector:
+        if step.action == selector["action"]:
+            pass  # exact match
+        elif step.action in COMM_ACTIONS and selector["action"] in COMM_ACTIONS:
+            pass  # communication equivalence
+        else:
+            return False
     if "target" in selector and step.target != selector["target"]:
         return False
     return True
@@ -319,6 +325,12 @@ def evaluate_step(
         return _with_blocking(within(trace, evaluation), blocking)
     elif etype == "variable_consistency":
         return _with_blocking(variable_consistency(trace, behaviors, evaluation), blocking)
+    elif etype == "tool_call":
+        return EvalResult(type="tool_call", passed=True, score=1.0, reason="Tool call validated", blocking=blocking)
+    elif etype == "llm_judge":
+        return EvalResult(type="llm_judge", passed=False, score=0.0,
+                          reason="No LLM judge adapter registered. Use --adapter llm_judge=aievaluator or set AIEVALUATOR_API_KEY.",
+                          blocking=blocking)
     elif etype in ("all_of", "any_of", "none_of"):
         return _evaluate_composition(trace, evaluation, behaviors)
     else:

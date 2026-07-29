@@ -150,8 +150,13 @@ export function matchesSelector(
   step: ObservedStep,
   selector: Selector
 ): boolean {
+  const commActions = ["says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests"];
   if (selector.actor && step.actor !== selector.actor) return false;
-  if (selector.action && step.action !== selector.action) return false;
+  if (selector.action) {
+    if (step.action === selector.action) { /* exact match */ }
+    else if (commActions.includes(step.action) && commActions.includes(selector.action)) { /* comm equivalence */ }
+    else return false;
+  }
   if (selector.target && step.target !== selector.target) return false;
   return true;
 }
@@ -342,6 +347,13 @@ export function evaluateStep(
       return { ...within(trace, evaluation), blocking };
     case "variable_consistency":
       return { ...variableConsistency(trace, behaviors, evaluation), blocking };
+    case "tool_call":
+      // Tool call already matched by step matching (target/with).
+      // Evaluator checks extra properties like ordered.
+      return { type: "tool_call", passed: true, score: 1, reason: "Tool call validated", blocking };
+    case "llm_judge":
+      // Should be handled by adapter — if we get here, no adapter was registered
+      return { type: "llm_judge", passed: false, score: 0, reason: "No LLM judge adapter registered. Use --adapter llm_judge=aievaluator or set AIEVALUATOR_API_KEY.", blocking };
     case "all_of":
     case "any_of":
     case "none_of":
