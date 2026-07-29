@@ -36,6 +36,7 @@ class AgentConfig:
     refresh_url: str | None = None
     refresh_token: str | None = None
     client_id: str | None = None
+    stream: bool = False
 
 
 @dataclass
@@ -85,6 +86,8 @@ async def _openai_adapter(messages: list[AgentMessage], config: AgentConfig) -> 
         "tools": [{"type": "function", "function": {"name": "any", "description": "Tool", "parameters": {}}}],
         "tool_choice": "auto",
     }
+    if config.stream:
+        body["stream"] = True
 
     async with httpx.AsyncClient(timeout=300) as client:
         resp = await client.post(config.url, json=body, headers=headers)
@@ -92,6 +95,38 @@ async def _openai_adapter(messages: list[AgentMessage], config: AgentConfig) -> 
     if resp.status_code >= 400:
         text = resp.text[:200]
         raise RuntimeError(f"Agent returned {resp.status_code}: {text}")
+
+    # Handle streaming response
+    if config.stream:
+        full_content = ""
+        tool_calls: list[dict[str, Any]] = []
+        for line in resp.text.split("\n"):
+            if line.startswith("data: "):
+                data_str = line[6:].strip()
+                if data_str == "[DONE]":
+                    break
+                try:
+                    parsed = json.loads(data_str)
+                    delta = parsed.get("choices", [{}])[0].get("delta", {})
+                    if delta.get("content"):
+                        full_content += delta["content"]
+                    if delta.get("tool_calls"):
+                        for tc in delta["tool_calls"]:
+                            idx = tc.get("index", 0)
+                            while len(tool_calls) <= idx:
+                                tool_calls.append({"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
+                            if tc.get("id"):
+                                tool_calls[idx]["id"] = tc["id"]
+                            if tc.get("function", {}).get("name"):
+                                tool_calls[idx]["function"]["name"] += tc["function"]["name"]
+                            if tc.get("function", {}).get("arguments"):
+                                tool_calls[idx]["function"]["arguments"] += tc["function"]["arguments"]
+                except (json.JSONDecodeError, KeyError):
+                    pass
+        result = AgentMessage(role="assistant", content=full_content or None)
+        if tool_calls:
+            result.tool_calls = tool_calls
+        return [result]
 
     data = resp.json()
     choice = data.get("choices", [{}])[0].get("message")
@@ -180,6 +215,8 @@ async def _gemini_adapter(messages: list[AgentMessage], config: AgentConfig) -> 
     return [AgentMessage(role="assistant", content=text)]
 
 
+COMM_ACTIONS = {"says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests"}
+
 _AGENT_ADAPTERS = {
     "openai": _openai_adapter,
     "claude": _claude_adapter,
@@ -233,7 +270,7 @@ async def run(session: NormalizedSession, agent_config: AgentConfig) -> RunResul
                 elif msg.role == "assistant":
                     trace.append(ObservedStep(
                         actor="assistant",
-                        action="says" if msg.content else "responds",
+                        action="responds",
                         content=msg.content,
                     ))
 
@@ -266,7 +303,7 @@ async def run(session: NormalizedSession, agent_config: AgentConfig) -> RunResul
                     messages.append(msg)
                     if msg.role == "assistant" and msg.content:
                         trace.append(ObservedStep(
-                            actor="assistant", action="says", content=msg.content,
+                            actor="assistant", action="responds", content=msg.content,
                         ))
             except Exception:
                 pass
@@ -282,13 +319,19 @@ async def run(session: NormalizedSession, agent_config: AgentConfig) -> RunResul
             ))
 
         else:
-            # Match against trace
-            matched_idx = sum(1 for s in step_results if not s.sent)
+            # Match against trace — skip tool/responds steps in the index
+            # because they bridge the conversation but don't consume trace entries
+            matched_idx = sum(
+                1 for s in step_results
+                if not s.sent and not (s.behavior.actor == "tool" and s.behavior.action == "responds")
+            )
             observed = trace[matched_idx] if matched_idx < len(trace) else None
 
+            # Communication actions are equivalent for matching
             matched = observed is not None and (
                 observed.actor == behavior.actor
-                and observed.action == behavior.action
+                and (observed.action == behavior.action
+                     or (observed.action in COMM_ACTIONS and behavior.action in COMM_ACTIONS))
                 and (not behavior.target or observed.target == behavior.target)
             )
 

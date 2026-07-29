@@ -22,6 +22,7 @@ from .parser import parse, parse_multi, load_dataset, resolve_variables, Normali
 from .runner import run, AgentConfig, RunResult
 from .evaluators.adapters.aievaluator import configure as configure_evaluator
 from .formatters.table import format_table, format_json_output, format_junit
+from .config import merge_config
 
 SMOKE_SESSION = """session: Order status
 description: User asks about an order. Happy path.
@@ -211,6 +212,19 @@ def run_cmd(
         abs run sessions/ --agent $URL --dataset datasets/
     """
     agent_url = agent or os.environ.get("ABS_AGENT_URL")
+    
+    # Load config file and merge with CLI options (CLI wins)
+    cfg = merge_config({
+        "agent_url": agent_url,
+        "agent_format": agent_format,
+        "agent_auth": agent_auth,
+        "agent_token": agent_token,
+    })
+    agent_url = cfg["agent_url"]
+    agent_format = cfg["agent_format"]
+    agent_auth = cfg["agent_auth"]
+    agent_token = cfg["agent_token"]
+    
     if not agent_url:
         click.echo("❌ Provide --agent or set ABS_AGENT_URL.", err=True)
         sys.exit(2)
@@ -263,27 +277,33 @@ def run_cmd(
     async def _run_all():
         nonlocal all_results
 
+        async def run_one(sess: NormalizedSession, vars_dict: dict[str, Any]):
+            import copy
+            sess_copy = copy.deepcopy(sess)
+            sess_copy.behaviors = resolve_variables(sess_copy.behaviors, vars_dict)
+            result = await run(sess_copy, agent_config)
+            return {"result": result, "row_vars": vars_dict}
+
         if dataset:
-            for row in dataset:
-                vars_combined = {**runtime_vars, **row}
-                for sess in sessions:
-                    # Deep copy and resolve
-                    import copy
-                    sess_copy = copy.deepcopy(sess)
-                    sess_copy.behaviors = resolve_variables(sess_copy.behaviors, vars_combined)
-                    result = await run(sess_copy, agent_config)
-                    all_results.append({"result": result, "row_vars": row})
+            # Parallel execution with semaphore
+            sem = asyncio.Semaphore(parallel)
+            async def run_with_semaphore(row: dict[str, Any]):
+                async with sem:
+                    vars_combined = {**runtime_vars, **row}
+                    tasks = []
+                    for sess in sessions:
+                        tasks.append(run_one(sess, vars_combined))
+                    return await asyncio.gather(*tasks)
+            
+            all_batches = await asyncio.gather(*[run_with_semaphore(row) for row in dataset])
+            for batch in all_batches:
+                all_results.extend(batch)
         elif runtime_vars:
             for sess in sessions:
-                import copy
-                sess_copy = copy.deepcopy(sess)
-                sess_copy.behaviors = resolve_variables(sess_copy.behaviors, runtime_vars)
-                result = await run(sess_copy, agent_config)
-                all_results.append({"result": result, "row_vars": {}})
+                all_results.append(await run_one(sess, runtime_vars))
         else:
             for sess in sessions:
-                result = await run(sess, agent_config)
-                all_results.append({"result": result, "row_vars": {}})
+                all_results.append(await run_one(sess, {}))
 
     _run_async(_run_all())
 

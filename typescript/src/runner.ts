@@ -43,6 +43,7 @@ export interface AgentConfig {
   refreshUrl?: string;
   refreshToken?: string;
   clientId?: string;
+  stream?: boolean;
 }
 
 // ── Run result ──
@@ -97,6 +98,7 @@ export async function openaiAdapter(
   // Add tool support by default
   body.tools = [{ type: "function", function: { name: "any", description: "Tool", parameters: {} } }];
   body.tool_choice = "auto";
+  if (config.stream) body.stream = true;
 
   const resp = await fetch(config.url, {
     method: "POST",
@@ -107,6 +109,44 @@ export async function openaiAdapter(
   if (!resp.ok) {
     const text = await resp.text();
     throw new Error(`Agent returned ${resp.status}: ${text.substring(0, 200)}`);
+  }
+
+  // Handle streaming response
+  if (config.stream && resp.body) {
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let fullContent = "";
+    let toolCalls: any[] = [];
+    let done = false;
+    while (!done) {
+      const { value, done: streamDone } = await reader.read();
+      done = streamDone;
+      if (value) {
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split("\n").filter((l) => l.startsWith("data: "));
+        for (const line of lines) {
+          const data = line.slice(6).trim();
+          if (data === "[DONE]") { done = true; break; }
+          try {
+            const parsed = JSON.parse(data);
+            const delta = parsed.choices?.[0]?.delta;
+            if (delta?.content) fullContent += delta.content;
+            if (delta?.tool_calls) {
+              for (const tc of delta.tool_calls) {
+                const idx = tc.index ?? 0;
+                if (!toolCalls[idx]) toolCalls[idx] = { id: tc.id || "", type: "function", function: { name: "", arguments: "" } };
+                if (tc.id) toolCalls[idx].id = tc.id;
+                if (tc.function?.name) toolCalls[idx].function.name += tc.function.name;
+                if (tc.function?.arguments) toolCalls[idx].function.arguments += tc.function.arguments;
+              }
+            }
+          } catch {}
+        }
+      }
+    }
+    const result: AgentMessage = { role: "assistant", content: fullContent || null };
+    if (toolCalls.length > 0) result.tool_calls = toolCalls;
+    return { messages: [result], raw: { streamed: true } };
   }
 
   const data = await resp.json() as any;
@@ -307,7 +347,7 @@ export async function run(
         } else if (msg.role === "assistant") {
           observed = {
             actor: "assistant",
-            action: msg.content ? "says" : "responds",
+            action: "responds",
             content: msg.content,
           };
         }
@@ -359,7 +399,7 @@ export async function run(
         if (msg.role === "assistant" && msg.content) {
           trace.push({
             actor: "assistant",
-            action: "says",
+            action: "responds",
             content: msg.content,
           });
         }
@@ -373,14 +413,21 @@ export async function run(
         evaluations: [],
       });
     } else {
-      // Match against trace
-      const observed = trace[stepResults.filter((s) => !s.sent).length] ?? null;
+      // Match against trace — skip tool/responds steps in the index
+      // because they bridge the conversation but don't consume trace entries
+      const matchedIdx = stepResults.filter(s => !s.sent && !(s.behavior.actor === "tool" && s.behavior.action === "responds")).length;
+      const observed = trace[matchedIdx] ?? null;
+
+      // Communication actions are equivalent for matching purposes
+      const commActions = ["says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests"];
       const matched = observed
-        ? observed.actor === behavior.actor && observed.action === behavior.action &&
+        ? observed.actor === behavior.actor &&
+          (observed.action === behavior.action ||
+           (commActions.includes(observed.action) && commActions.includes(behavior.action))) &&
           (!behavior.target || observed.target === behavior.target)
         : false;
 
-      const matchObserved = matched ? observed : null;
+      const matchObserved: ObservedStep | null = matched ? observed : null;
 
       // Run step-level evaluations
       const evalResults: EvalResult[] = [];

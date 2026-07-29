@@ -17,6 +17,7 @@ import {
   getAIEvaluatorConfig,
 } from "./evaluators/adapters/aievaluator";
 import { formatTable, formatJson, formatJunit } from "./formatters/table";
+import { mergeConfig } from "./config";
 
 const program = new Command();
 
@@ -166,28 +167,38 @@ program
     }
 
     const agentUrl = options.agent || process.env.ABS_AGENT_URL;
-    if (!agentUrl) {
+
+    // Load config file and merge with CLI options (CLI wins)
+    const cfg = mergeConfig({
+      agent_url: agentUrl,
+      agent_format: options.agentFormat,
+      agent_auth: options.agentAuth,
+      agent_token: options.agentToken,
+      dataset: options.dataset,
+      adapters: options.adapter,
+    });
+
+    if (!cfg.agent_url) {
       console.error(chalk.red("❌ Provide --agent or set ABS_AGENT_URL."));
       process.exit(2);
     }
 
     // Configure AI Evaluator
-    if (options.adapter) {
-      for (const [type, provider] of Object.entries(options.adapter)) {
-        if (provider === "aievaluator") {
-          configureAIEvaluator({
-            apiKey: process.env.AIEVALUATOR_API_KEY,
-            engineUrl: process.env.AIEVALUATOR_ENGINE_URL,
-          });
-        }
+    const adapters = cfg.adapters || {};
+    for (const [type, provider] of Object.entries(adapters)) {
+      if (provider === "aievaluator") {
+        configureAIEvaluator({
+          apiKey: process.env.AIEVALUATOR_API_KEY,
+          engineUrl: process.env.AIEVALUATOR_ENGINE_URL,
+        });
       }
     }
 
     const agentConfig: AgentConfig = {
-      url: agentUrl,
-      format: options.agentFormat,
-      auth: options.agentAuth,
-      token: options.agentToken || process.env.ABS_AGENT_TOKEN,
+      url: cfg.agent_url,
+      format: cfg.agent_format,
+      auth: cfg.agent_auth,
+      token: cfg.agent_token,
     };
 
     const runtimeVars: Record<string, any> = {};
@@ -214,9 +225,9 @@ program
 
     // Load dataset if provided
     let dataset: Record<string, any>[] | null = null;
-    if (options.dataset) {
+    if (cfg.dataset || options.dataset) {
       try {
-        dataset = loadDataset(options.dataset);
+        dataset = loadDataset(cfg.dataset || options.dataset);
       } catch (err: any) {
         console.error(chalk.red(`❌ Cannot load dataset: ${err.message}`));
         process.exit(2);
@@ -231,24 +242,33 @@ program
 
     // Run
     const allResults: (RunResult & { rowVars?: Record<string, any> })[] = [];
+    const parallel = parseInt(options.parallel || "1");
+
+    const runOne = async (session: NormalizedSession, vars: Record<string, any>, rowVars?: Record<string, any>) => {
+      const resolved = {
+        ...session,
+        behaviors: resolveVariables(
+          JSON.parse(JSON.stringify(session.behaviors)),
+          vars
+        ),
+      };
+      const result = await run(resolved, agentConfig);
+      (result as any).rowVars = rowVars || vars;
+      return result;
+    };
 
     if (dataset) {
-      // Run once per dataset row
-      for (const row of dataset) {
+      // Run with concurrency limiter
+      const semaphore = new Array(parallel).fill(null).map(() => Promise.resolve());
+      let semIdx = 0;
+      const tasks = dataset.map(async (row) => {
+        const idx = semIdx++ % parallel;
+        await semaphore[idx];
         const vars = { ...runtimeVars, ...row };
-        for (const session of sessions) {
-          const resolved = {
-            ...session,
-            behaviors: resolveVariables(
-              JSON.parse(JSON.stringify(session.behaviors)),
-              vars
-            ),
-          };
-          const result = await run(resolved, agentConfig);
-          (result as any).rowVars = row;
-          allResults.push(result);
-        }
-      }
+        const results = await Promise.all(sessions.map(s => runOne(s, vars, row)));
+        results.forEach(r => allResults.push(r));
+      });
+      await Promise.all(tasks);
     } else if (Object.keys(runtimeVars).length > 0) {
       // Single run with var bindings
       for (const session of sessions) {
@@ -350,7 +370,7 @@ program
         lines.push("│  ABS — Results                                               │");
         lines.push("├──────────────────────────────────────────────────────────────┤");
         lines.push(`│  Session:  ${allResults[0].session.padEnd(52)}│`);
-        lines.push(`│  Agent:    ${agentUrl.padEnd(52)}│`);
+        lines.push(`│  Agent:    ${cfg.agent_url.padEnd(52)}│`);
         lines.push(`│  Dataset:  ${String(rowsTotal).padEnd(52)} rows│`);
         const status = overallPassed ? chalk.green("✅ PASSED") : chalk.red("❌ FAILED");
         lines.push(`│  Result:   ${status.padEnd(62)}│`);
