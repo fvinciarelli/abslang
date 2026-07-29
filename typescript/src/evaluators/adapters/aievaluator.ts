@@ -2,70 +2,82 @@ import { ObservedStep, EvalResult, registerAdapter } from "../builtin";
 
 // ── AI Evaluator adapter ──
 //
-// Calls the AI Evaluator API for llm_judge and other LLM-based evaluations.
-// Uses the playground endpoint (no API key) by default, or the sync endpoint
-// when an API key is configured.
+// Uses the official aievaluator npm package when available.
+// Falls back gracefully if not installed.
+// Install: npm install -g aievaluator
 
-export interface AIEvaluatorConfig {
-  apiKey?: string;
-  engineUrl?: string;
-  judgeModel?: string;
-}
+let _client: any = null;
 
-let config: AIEvaluatorConfig = {
-  engineUrl: "https://api.aievaluator.dev",
-};
+function getClient(): any {
+  if (_client) return _client;
+  try {
+    // Dynamic require — works at runtime even if not installed at build time
+    const aievaluator = require("aievaluator");
+    const APIClient = aievaluator.api?.APIClient || aievaluator.APIClient;
 
-export function configureAIEvaluator(cfg: AIEvaluatorConfig): void {
-  config = { ...config, ...cfg };
-}
+    if (!APIClient) {
+      return null;
+    }
 
-export function getAIEvaluatorConfig(): AIEvaluatorConfig {
-  return { ...config };
+    let apiKey: string | undefined = process.env.AIEVALUATOR_API_KEY;
+    let engineUrl = process.env.AIEVALUATOR_ENGINE_URL || "https://api.aievaluator.dev";
+
+    // Try to use aievaluator's config resolver
+    try {
+      const config = require("aievaluator/config");
+      if (config.resolveApiKey) apiKey = config.resolveApiKey(undefined) || apiKey;
+      if (config.resolveEngineUrl) engineUrl = config.resolveEngineUrl(undefined) || engineUrl;
+    } catch {}
+
+    _client = new APIClient(engineUrl, apiKey, 60);
+    return _client;
+  } catch {
+    return null;
+  }
 }
 
 async function callAIEvaluator(
   trace: ObservedStep[],
   criteria: string
 ): Promise<EvalResult> {
-  const engineUrl = config.engineUrl ?? "https://api.aievaluator.dev";
+  const client = getClient();
+  if (!client) {
+    return {
+      type: "llm_judge",
+      passed: false,
+      score: 0,
+      reason: "AI Evaluator not installed. Run: npm install -g aievaluator",
+    };
+  }
 
-  // Build a natural-language prompt from the trace + criteria
   const traceText = trace
     .map(
       (s) =>
-        `[${s.actor}] ${s.action}${s.target ? " → " + s.target : ""}: ${typeof s.content === "string" ? s.content : JSON.stringify(s.content)}`
+        `[${s.actor}] ${s.action}${s.target ? " → " + s.target : ""}: ${
+          typeof s.content === "string" ? s.content : JSON.stringify(s.content)
+        }`
     )
     .join("\n");
 
-  const body: any = {
-    queries: [
-      `Given this conversation:\n\n${traceText}\n\nEvaluate: ${criteria}`,
-    ],
-    metrics: ["g_eval"],
-    judge: config.judgeModel ?? "deepseek",
-  };
-
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-  if (config.apiKey) {
-    headers["X-API-Key"] = config.apiKey;
-  }
-
-  const endpoint = config.apiKey
-    ? `${engineUrl}/api/v1/evaluations/sync`
-    : `${engineUrl}/api/v1/playground/evaluate`;
+  const query = `Given this conversation:\n\n${traceText}\n\nEvaluate: ${criteria}`;
 
   try {
-    const resp = await fetch(endpoint, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    });
-    const data = await resp.json() as any;
+    let result: any;
+    if (client.apiKey) {
+      result = await client.evaluateSync(
+        [{ input: query }],
+        "http://localhost/chat",
+        "openai",
+        ["g_eval"]
+      );
+    } else {
+      result = await client.playgroundEvaluate({
+        queries: [query],
+        metrics: ["g_eval"],
+      });
+    }
 
-    const results = data.results ?? [];
+    const results = result.results ?? [];
     if (results.length > 0) {
       const r = results[0];
       const score = r.scores?.g_eval ?? 0.5;
@@ -73,7 +85,7 @@ async function callAIEvaluator(
         type: "llm_judge",
         passed: score >= 0.7,
         score,
-        reason: r.agent_response ?? "No reason provided by judge",
+        reason: r.agent_response ?? JSON.stringify(r.scores ?? {}),
       };
     }
 
@@ -88,7 +100,7 @@ async function callAIEvaluator(
       type: "llm_judge",
       passed: false,
       score: 0,
-      reason: `AI Evaluator request failed: ${err.message}`,
+      reason: `AI Evaluator error: ${err.message}`,
     };
   }
 }
@@ -101,9 +113,30 @@ export async function llmJudgeAdapter(
   return callAIEvaluator(trace, evaluation.criteria);
 }
 
-// Register adapters on import
+// Register adapters
 registerAdapter("llm_judge", llmJudgeAdapter);
-
-// Also register as adapter for common metric names
 registerAdapter("g_eval", llmJudgeAdapter);
 registerAdapter("faithfulness", llmJudgeAdapter);
+
+// Config helpers
+export function configureAIEvaluator(cfg: {
+  apiKey?: string;
+  engineUrl?: string;
+  judgeModel?: string;
+}): void {
+  if (cfg.apiKey) process.env.AIEVALUATOR_API_KEY = cfg.apiKey;
+  if (cfg.engineUrl) process.env.AIEVALUATOR_ENGINE_URL = cfg.engineUrl;
+  _client = null;
+}
+
+export function getAIEvaluatorConfig(): {
+  apiKey?: string;
+  engineUrl?: string;
+  judgeModel?: string;
+} {
+  return {
+    apiKey: process.env.AIEVALUATOR_API_KEY,
+    engineUrl: process.env.AIEVALUATOR_ENGINE_URL ?? "https://api.aievaluator.dev",
+    judgeModel: "deepseek",
+  };
+}

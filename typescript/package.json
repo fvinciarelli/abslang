@@ -19,6 +19,9 @@
     "commander": "^12.1.0",
     "js-yaml": "^4.1.0"
   },
+  "optionalDependencies": {
+    "aievaluator": "*"
+  },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.0.0",
