@@ -36,6 +36,12 @@ behaviors:
     with:
       slot: "{{selectedSlot}}"
 
+  - actor: tool
+    action: responds
+    target: Calendar API
+    content:
+      confirmed: true
+
   - actor: assistant
     action: confirms
     content: "You're booked for August 3rd at 9:00 AM"

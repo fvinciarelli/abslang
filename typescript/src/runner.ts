@@ -419,12 +419,16 @@ export async function run(
       const observed = trace[matchedIdx] ?? null;
 
       // Communication actions are equivalent for matching purposes
-      const commActions = ["says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests"];
+      const commActions = ["says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests", "shows", "hands_off"];
+      // Execution actions are equivalent (all result in tool_calls)
+      const execActions = ["calls", "submits", "retrieves", "stores", "updates"];
       const matched = observed
         ? observed.actor === behavior.actor &&
           (observed.action === behavior.action ||
-           (commActions.includes(observed.action) && commActions.includes(behavior.action))) &&
-          (!behavior.target || observed.target === behavior.target)
+           (commActions.includes(observed.action) && commActions.includes(behavior.action)) ||
+           (execActions.includes(observed.action) && execActions.includes(behavior.action))) &&
+          // Skip target check for communication actions (runner can't detect target from text)
+          (commActions.includes(behavior.action) || !behavior.target || observed.target === behavior.target)
         : false;
 
       const matchObserved: ObservedStep | null = matched ? observed : null;

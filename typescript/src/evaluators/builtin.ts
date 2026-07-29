@@ -150,7 +150,7 @@ export function matchesSelector(
   step: ObservedStep,
   selector: Selector
 ): boolean {
-  const commActions = ["says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests"];
+  const commActions = ["says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests", "shows"];
   if (selector.actor && step.actor !== selector.actor) return false;
   if (selector.action) {
     if (step.action === selector.action) { /* exact match */ }

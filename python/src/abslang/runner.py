@@ -215,7 +215,8 @@ async def _gemini_adapter(messages: list[AgentMessage], config: AgentConfig) -> 
     return [AgentMessage(role="assistant", content=text)]
 
 
-COMM_ACTIONS = {"says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests"}
+COMM_ACTIONS = {"says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests", "shows", "hands_off"}
+EXEC_ACTIONS = {"calls", "submits", "retrieves", "stores", "updates"}
 
 _AGENT_ADAPTERS = {
     "openai": _openai_adapter,
@@ -327,12 +328,14 @@ async def run(session: NormalizedSession, agent_config: AgentConfig) -> RunResul
             )
             observed = trace[matched_idx] if matched_idx < len(trace) else None
 
-            # Communication actions are equivalent for matching
+            # Communication and execution actions are equivalent for matching
             matched = observed is not None and (
                 observed.actor == behavior.actor
                 and (observed.action == behavior.action
-                     or (observed.action in COMM_ACTIONS and behavior.action in COMM_ACTIONS))
-                and (not behavior.target or observed.target == behavior.target)
+                     or (observed.action in COMM_ACTIONS and behavior.action in COMM_ACTIONS)
+                     or (observed.action in EXEC_ACTIONS and behavior.action in EXEC_ACTIONS))
+                # Skip target check for communication actions (runner can't detect target from text)
+                and (behavior.action in COMM_ACTIONS or not behavior.target or observed.target == behavior.target)
             )
 
             match_observed = observed if matched else None

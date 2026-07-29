@@ -113,11 +113,54 @@ APPOINTMENT = Scenario(
         },
         {  # After tool result: show slots
             "role": "assistant",
-            "content": "Here are the available dentist appointments:\n\n🦷 Mon 9:00 AM\n🦷 Mon 2:00 PM\n\nWhich would you prefer?",
+            "content": "Here are the available dentist appointments for Monday August 3rd at 9:00 AM and 2:00 PM. Which would you prefer?",
         },
-        {  # After user selects: confirm
+        {  # After user selects: submit to Calendar API
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_2",
+                    "type": "function",
+                    "function": {
+                        "name": "Calendar API",
+                        "arguments": '{"slot": "2026-08-03T09:00"}',
+                    },
+                }
+            ],
+        },
+        {  # After submit confirm: confirmation
             "role": "assistant",
             "content": "You're booked for Monday August 3rd at 9:00 AM. See you then!",
+        },
+    ],
+)
+
+# Hand-off scenario: user rejects all slots
+APPOINTMENT_HANDOFF = Scenario(
+    name="appointment_handoff",
+    responses=[
+        {  # Call Calendar API for dentist
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "Calendar API",
+                        "arguments": '{"service": "dentist"}',
+                    },
+                }
+            ],
+        },
+        {  # After tool result: show slots
+            "role": "assistant",
+            "content": "Here are the available dentist appointments for Monday August 3rd at 9:00 AM and 2:00 PM. Which would you prefer?",
+        },
+        {  # After user rejects: hand off
+            "role": "assistant",
+            "content": "I understand neither of those work for you. Transferring you to a team member who can find more options.",
         },
     ],
 )
@@ -132,6 +175,8 @@ SCENARIOS: dict[str, Scenario] = {
     "greeting": CHATBOT,
     "appointment": APPOINTMENT,
     "booking": APPOINTMENT,
+    "appointment_handoff": APPOINTMENT_HANDOFF,
+    "handoff": APPOINTMENT_HANDOFF,
 }
 
 

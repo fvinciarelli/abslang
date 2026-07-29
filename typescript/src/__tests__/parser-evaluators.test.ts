@@ -250,12 +250,12 @@ test("eventually — pass", () => {
 });
 
 test("eventually — fail", () => {
-  const r = eventually(trace, { match: { action: "hands_off" } });
+  const r = eventually(trace, { match: { action: "uploads" } });
   assert(!r.passed);
 });
 
 test("never — pass", () => {
-  const r = never(trace, { match: { action: "hands_off" } });
+  const r = never(trace, { match: { action: "uploads" } });
   assert(r.passed);
 });
 
@@ -270,7 +270,7 @@ test("count — pass", () => {
 });
 
 test("count — fail (too few)", () => {
-  const r = count(trace, { match: { action: "hands_off" }, min: 1 });
+  const r = count(trace, { match: { action: "uploads" }, min: 1 });
   assert(!r.passed);
 });
 

@@ -42,7 +42,7 @@ AdapterFunction = Callable[[list[ObservedStep], dict[str, Any]], Awaitable[EvalR
 
 def matches_selector(step: ObservedStep, selector: dict[str, Any]) -> bool:
     """Check if an ObservedStep matches a Selector, with communication action equivalence."""
-    COMM_ACTIONS = {"says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests"}
+    COMM_ACTIONS = {"says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests", "shows"}
     if "actor" in selector and step.actor != selector["actor"]:
         return False
     if "action" in selector:
