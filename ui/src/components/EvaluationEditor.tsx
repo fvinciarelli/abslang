@@ -1,5 +1,5 @@
 import type { Evaluation } from '../types';
-import { FiTrash2 } from 'react-icons/fi';
+import { X } from 'lucide-react';
 
 interface Props {
   evaluation: Evaluation;
@@ -9,71 +9,66 @@ interface Props {
 
 export function EvaluationEditor({ evaluation, onChange, onRemove }: Props) {
   return (
-    <div className="mb-2 p-3 bg-slate-50 rounded-lg border border-slate-200 text-sm">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium text-accent bg-accent/10 px-2 py-0.5 rounded">
-          {evaluation.type}
-        </span>
-        <button onClick={onRemove} className="text-slate-400 hover:text-red-500 transition-colors">
-          <FiTrash2 size={12} />
-        </button>
-      </div>
+    <div className="flex items-start gap-2 p-2.5 bg-white rounded-lg border border-slate-200">
+      <span className="shrink-0 mt-0.5 text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded uppercase tracking-wider">
+        {evaluation.type}
+      </span>
 
-      {evaluation.type === 'contains' || evaluation.type === 'exact_match' ? (
-        <input
-          type="text"
-          value={evaluation.value || ''}
-          onChange={(e) => onChange({ value: e.target.value })}
-          placeholder={evaluation.type === 'contains' ? 'Substring to find...' : 'Exact text to match...'}
-          className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-accent/30"
-        />
-      ) : evaluation.type === 'regex' ? (
-        <input
-          type="text"
-          value={evaluation.pattern || ''}
-          onChange={(e) => onChange({ pattern: e.target.value })}
-          placeholder="Regular expression..."
-          className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs font-mono focus:outline-none focus:ring-1 focus:ring-accent/30"
-        />
-      ) : evaluation.type === 'llm_judge' ? (
-        <textarea
-          value={evaluation.criteria || ''}
-          onChange={(e) => onChange({ criteria: e.target.value })}
-          placeholder="Natural language criteria for the judge..."
-          className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-accent/30 h-16"
-        />
-      ) : evaluation.type === 'schema' ? (
-        <textarea
-          value={evaluation.schema ? JSON.stringify(evaluation.schema, null, 2) : ''}
-          onChange={(e) => {
-            try {
-              onChange({ schema: JSON.parse(e.target.value) });
-            } catch {}
-          }}
-          placeholder='{"type": "object", "required": ["status"]}'
-          className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs font-mono focus:outline-none focus:ring-1 focus:ring-accent/30 h-16"
-        />
-      ) : evaluation.type === 'tool_call' ? (
-        <div className="space-y-1.5">
+      <div className="flex-1">
+        {evaluation.type === 'contains' || evaluation.type === 'exact_match' ? (
+          <input
+            type="text"
+            value={evaluation.value || ''}
+            onChange={(e) => onChange({ value: e.target.value })}
+            placeholder={evaluation.type === 'contains' ? 'Substring to find…' : 'Exact text…'}
+            className="w-full text-sm border-none outline-none bg-transparent placeholder:text-slate-300"
+          />
+        ) : evaluation.type === 'regex' ? (
+          <input
+            type="text"
+            value={evaluation.pattern || ''}
+            onChange={(e) => onChange({ pattern: e.target.value })}
+            placeholder="Regular expression…"
+            className="w-full text-sm font-mono border-none outline-none bg-transparent placeholder:text-slate-300"
+          />
+        ) : evaluation.type === 'llm_judge' ? (
+          <textarea
+            value={evaluation.criteria || ''}
+            onChange={(e) => onChange({ criteria: e.target.value })}
+            placeholder="Criteria for the LLM judge…"
+            className="w-full text-sm border-none outline-none bg-transparent placeholder:text-slate-300 resize-none h-12"
+          />
+        ) : evaluation.type === 'schema' ? (
+          <textarea
+            value={evaluation.schema ? JSON.stringify(evaluation.schema, null, 2) : ''}
+            onChange={(e) => { try { onChange({ schema: JSON.parse(e.target.value) }); } catch {} }}
+            placeholder='{"type":"object","required":["status"]}'
+            className="w-full text-sm font-mono border-none outline-none bg-transparent placeholder:text-slate-300 resize-none h-12"
+          />
+        ) : evaluation.type === 'tool_call' ? (
           <input
             type="text"
             value={evaluation.target || ''}
             onChange={(e) => onChange({ target: e.target.value })}
-            placeholder="Tool name"
-            className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-accent/30"
+            placeholder="Tool name…"
+            className="w-full text-sm border-none outline-none bg-transparent placeholder:text-slate-300"
           />
-        </div>
-      ) : evaluation.type === 'variable_consistency' ? (
-        <input
-          type="text"
-          value={evaluation.variable || ''}
-          onChange={(e) => onChange({ variable: e.target.value })}
-          placeholder="Variable name"
-          className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-accent/30"
-        />
-      ) : (
-        <p className="text-xs text-slate-400">Configuration for {evaluation.type}</p>
-      )}
+        ) : evaluation.type === 'variable_consistency' ? (
+          <input
+            type="text"
+            value={evaluation.variable || ''}
+            onChange={(e) => onChange({ variable: e.target.value })}
+            placeholder="Variable name…"
+            className="w-full text-sm border-none outline-none bg-transparent placeholder:text-slate-300"
+          />
+        ) : (
+          <span className="text-sm text-slate-400">{evaluation.type} evaluation</span>
+        )}
+      </div>
+
+      <button onClick={onRemove} className="shrink-0 mt-0.5 text-slate-300 hover:text-red-400 transition-colors">
+        <X size={14} />
+      </button>
     </div>
   );
 }

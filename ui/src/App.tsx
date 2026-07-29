@@ -4,9 +4,9 @@ import { BehaviorList } from './components/BehaviorList';
 import { BehaviorEditor } from './components/BehaviorEditor';
 import { YAMLPreview } from './components/YAMLPreview';
 import { SessionHeader } from './components/SessionHeader';
-import { FiCode, FiPlus, FiDownload, FiUpload, FiChevronRight } from 'react-icons/fi';
+import { Code2, Plus, Download, Upload, ChevronRight } from 'lucide-react';
 import { newId } from './types';
-import type { ABSSession } from './types';
+
 import { behaviorToYAML } from './types';
 import * as yaml from 'js-yaml';
 
@@ -27,7 +27,6 @@ export default function App() {
   } = useSession();
 
   const [showPreview, setShowPreview] = useState(true);
-  const [sidebarTab, setSidebarTab] = useState<'behaviors' | 'fragments'>('behaviors');
 
   const handleNew = () => {
     setSession({
@@ -40,7 +39,13 @@ export default function App() {
   };
 
   const handleExport = () => {
-    const yamlStr = sessionToYAML(session);
+    const doc: any = { session: session.session };
+    if (session.description) doc.description = session.description;
+    if (session.abs_version) doc.abs_version = session.abs_version;
+    doc.behaviors = session.behaviors.map(behaviorToYAML);
+    if (session.evaluations?.length) doc.evaluations = session.evaluations;
+
+    const yamlStr = yaml.dump(doc, { indent: 2, lineWidth: -1, noRefs: true });
     const blob = new Blob([yamlStr], { type: 'text/yaml' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -77,111 +82,87 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-slate-100">
+    <div className="h-screen flex flex-col bg-slate-50">
       {/* Top bar */}
-      <header className="h-14 bg-white border-b border-slate-200 flex items-center px-4 gap-4 shrink-0 z-10">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center text-white font-bold text-sm">
-            A
+      <header className="h-12 bg-white border-b border-slate-200 flex items-center px-4 gap-3 shrink-0 z-10">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-md bg-indigo-600 flex items-center justify-center text-white font-bold text-xs">
+            ABS
           </div>
-          <span className="font-semibold text-slate-800">ABS Editor</span>
+          <span className="font-semibold text-sm text-slate-800">Editor</span>
         </div>
 
         <div className="flex-1" />
 
-        <button onClick={handleNew} className="px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-lg flex items-center gap-1.5 transition-colors">
-          <FiPlus size={14} /> New
-        </button>
-        <button onClick={handleImport} className="px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-lg flex items-center gap-1.5 transition-colors">
-          <FiUpload size={14} /> Import
-        </button>
-        <button onClick={handleExport} className="px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-lg flex items-center gap-1.5 transition-colors">
-          <FiDownload size={14} /> Export
-        </button>
-        <button
-          onClick={() => setShowPreview(!showPreview)}
-          className={`px-3 py-1.5 text-sm rounded-lg flex items-center gap-1.5 transition-colors ${
-            showPreview ? 'bg-accent text-white' : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <FiCode size={14} /> YAML
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={handleNew} className="h-8 px-3 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-md flex items-center gap-1.5 transition-colors">
+            <Plus size={13} /> New
+          </button>
+          <button onClick={handleImport} className="h-8 px-3 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-md flex items-center gap-1.5 transition-colors">
+            <Upload size={13} /> Import
+          </button>
+          <button onClick={handleExport} className="h-8 px-3 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-md flex items-center gap-1.5 transition-colors">
+            <Download size={13} /> Export
+          </button>
+          <div className="w-px h-5 bg-slate-200 mx-1" />
+          <button
+            onClick={() => setShowPreview(!showPreview)}
+            className={`h-8 px-3 text-xs rounded-md flex items-center gap-1.5 transition-colors ${
+              showPreview ? 'bg-slate-900 text-white hover:bg-slate-800' : 'text-slate-500 hover:bg-slate-100'
+            }`}
+          >
+            <Code2 size={13} /> YAML
+          </button>
+        </div>
       </header>
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left sidebar */}
-        <aside className="w-64 bg-white border-r border-slate-200 flex flex-col shrink-0">
-          <div className="flex border-b border-slate-200">
-            <button
-              onClick={() => setSidebarTab('behaviors')}
-              className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
-                sidebarTab === 'behaviors'
-                  ? 'text-accent border-b-2 border-accent'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Behaviors
-            </button>
-            <button
-              onClick={() => setSidebarTab('fragments')}
-              className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
-                sidebarTab === 'fragments'
-                  ? 'text-accent border-b-2 border-accent'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Fragments
-            </button>
+        <aside className="w-60 bg-white border-r border-slate-200 flex flex-col shrink-0">
+          <div className="px-4 py-3 border-b border-slate-100">
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Behaviors</p>
           </div>
-
           <div className="flex-1 overflow-y-auto">
-            {sidebarTab === 'behaviors' && (
-              <BehaviorList
-                behaviors={session.behaviors}
-                selectedId={selectedId}
-                onSelect={select}
-                onRemove={removeBehavior}
-                onMove={moveBehavior}
-                onAdd={addBehavior}
-              />
-            )}
-            {sidebarTab === 'fragments' && (
-              <div className="p-4 text-sm text-slate-400 text-center mt-8">
-                Fragments coming soon
-              </div>
-            )}
+            <BehaviorList
+              behaviors={session.behaviors}
+              selectedId={selectedId}
+              onSelect={select}
+              onRemove={removeBehavior}
+              onMove={moveBehavior}
+              onAdd={addBehavior}
+            />
           </div>
         </aside>
 
         {/* Center editor */}
-        <main className="flex-1 overflow-y-auto p-6">
-          <SessionHeader
-            session={session}
-            onUpdate={updateSessionMeta}
-          />
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-2xl mx-auto p-8">
+            <SessionHeader session={session} onUpdate={updateSessionMeta} />
 
-          {selected ? (
-            <BehaviorEditor
-              behavior={selected}
-              onUpdate={(updates) => updateBehavior(selected.id, updates)}
-              onAddEvaluation={(e) => addEvaluation(selected.id, e)}
-              onRemoveEvaluation={(idx) => removeEvaluation(selected.id, idx)}
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-              <FiChevronRight size={48} className="mb-4 opacity-30" />
-              <p className="text-lg font-medium">Select a behavior to edit</p>
-              <p className="text-sm mt-1">Click any step in the sidebar to configure it</p>
-            </div>
-          )}
+            {selected ? (
+              <BehaviorEditor
+                behavior={selected}
+                onUpdate={(updates) => updateBehavior(selected.id, updates)}
+                onAddEvaluation={(e) => addEvaluation(selected.id, e)}
+                onRemoveEvaluation={(idx) => removeEvaluation(selected.id, idx)}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center py-24 text-slate-300">
+                <ChevronRight size={40} className="mb-4 opacity-20" />
+                <p className="text-sm font-medium text-slate-400">Select a behavior to edit</p>
+                <p className="text-xs text-slate-350 mt-1">Click any step in the sidebar</p>
+              </div>
+            )}
+          </div>
         </main>
 
         {/* Right preview panel */}
         {showPreview && (
-          <aside className="w-80 bg-slate-900 border-l border-slate-700 flex flex-col shrink-0">
-            <div className="px-4 py-3 border-b border-slate-700 text-slate-300 text-sm font-medium flex items-center gap-2">
-              <FiCode size={14} /> YAML Preview
+          <aside className="w-80 bg-slate-950 border-l border-slate-800 flex flex-col shrink-0">
+            <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-2">
+              <Code2 size={13} className="text-slate-500" />
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">YAML Preview</span>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
               <YAMLPreview session={session} />
@@ -191,18 +172,4 @@ export default function App() {
       </div>
     </div>
   );
-}
-
-function sessionToYAML(session: ABSSession): string {
-  const doc: any = {
-    session: session.session,
-  };
-  if (session.description) doc.description = session.description;
-  if (session.abs_version) doc.abs_version = session.abs_version;
-  doc.behaviors = session.behaviors.map(behaviorToYAML);
-  if (session.evaluations && session.evaluations.length > 0) {
-    doc.evaluations = session.evaluations;
-  }
-
-  return yaml.dump(doc, { indent: 2, lineWidth: -1, noRefs: true });
 }
