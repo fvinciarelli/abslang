@@ -57,6 +57,12 @@ behaviors:
     with:
       service: "dentist"
 
+  - actor: tool
+    action: responds
+    target: Calendar API
+    content:
+      slots: ["2026-08-03T09:00", "2026-08-03T14:00"]
+
   - actor: assistant
     action: shows
     target: Appointment Options

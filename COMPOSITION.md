@@ -16,7 +16,7 @@ What an author has in mind when specifying an agent is a **tree**. A conversatio
 
 What ABS stores is the set of **root-to-leaf paths** through that tree, one Session per path (SPECIFICATION.md §8). Two leaves means two Sessions, and everything above the branch point is written twice. Three decision points means eight Sessions, and every edit to the opening has to be made eight times.
 
-This duplication is not an oversight. It follows directly from storing a tree as a list of paths, and it has a concrete cost that the v0.1 example files already demonstrate: in the original `appointment-booking.yaml`, the first Session recorded the `tool` `responds` step after calling the Calendar API and the second Session silently omitted it, even though both were supposed to describe the same opening. Copies drift. That is the failure mode this chapter closes.
+This duplication is not an oversight. It follows directly from storing a tree as a list of paths, and it has a concrete cost that the v0.1 example files originally demonstrated: the first Session recorded the `tool` `responds` step after calling the Calendar API and the second Session silently omitted it, even though both were supposed to describe the same opening. Copies drift. (The example has since been fixed; this paragraph remains as a record of why fragments matter.) That is the failure mode this chapter closes.
 
 ## The mechanism: fragments
 

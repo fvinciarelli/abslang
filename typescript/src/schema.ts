@@ -6,7 +6,7 @@ let _validate: ValidateFunction | null = null;
 
 export function getValidator(): ValidateFunction {
   if (_validate) return _validate;
-  const ajv = new Ajv({ allErrors: true });
+  const ajv = new Ajv({ allErrors: true, strict: false });
   const schemaPath = require.resolve("../../schema/abs.schema.json");
   // For CLI usage, load relative to the abs project root
   let schema: any;

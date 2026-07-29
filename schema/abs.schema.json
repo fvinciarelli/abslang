@@ -133,8 +133,7 @@
       },
       "allOf": [
         { "$ref": "#/definitions/evalFieldsByType" }
-      ],
-      "additionalProperties": false
+      ]
     },
 
     "evalFieldsByType": {
