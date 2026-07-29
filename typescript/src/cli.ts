@@ -12,10 +12,6 @@ import {
   resolveVariables,
 } from "./parser";
 import { run, AgentConfig, RunResult } from "./runner";
-import {
-  configureAIEvaluator,
-  getAIEvaluatorConfig,
-} from "./evaluators/adapters/aievaluator";
 import { formatTable, formatJson, formatJunit } from "./formatters/table";
 import { mergeConfig } from "./config";
 
@@ -187,6 +183,7 @@ program
     const adapters = cfg.adapters || {};
     for (const [type, provider] of Object.entries(adapters)) {
       if (provider === "aievaluator") {
+        const { configureAIEvaluator } = require("./evaluators/adapters/aievaluator");
         configureAIEvaluator({
           apiKey: process.env.AIEVALUATOR_API_KEY,
           engineUrl: process.env.AIEVALUATOR_ENGINE_URL,
@@ -507,6 +504,7 @@ program
       process.exit(2);
     }
 
+    const { configureAIEvaluator } = require("./evaluators/adapters/aievaluator");
     configureAIEvaluator({ apiKey });
     console.log(chalk.green("✅ Logged in to AI Evaluator"));
   });

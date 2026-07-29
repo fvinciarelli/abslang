@@ -113,12 +113,8 @@ export async function llmJudgeAdapter(
   return callAIEvaluator(trace, evaluation.criteria);
 }
 
-// Register adapters
-registerAdapter("llm_judge", llmJudgeAdapter);
-registerAdapter("g_eval", llmJudgeAdapter);
-registerAdapter("faithfulness", llmJudgeAdapter);
-
-// Config helpers
+// Only register when user opts in via configureAIEvaluator()
+// (called by abs login or --adapter llm_judge=aievaluator)
 export function configureAIEvaluator(cfg: {
   apiKey?: string;
   engineUrl?: string;
@@ -127,6 +123,8 @@ export function configureAIEvaluator(cfg: {
   if (cfg.apiKey) process.env.AIEVALUATOR_API_KEY = cfg.apiKey;
   if (cfg.engineUrl) process.env.AIEVALUATOR_ENGINE_URL = cfg.engineUrl;
   _client = null;
+  // Register adapter now that user opted in
+  registerAdapter("llm_judge", llmJudgeAdapter);
 }
 
 export function getAIEvaluatorConfig(): {

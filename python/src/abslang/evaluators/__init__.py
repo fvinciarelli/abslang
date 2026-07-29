@@ -377,6 +377,14 @@ def _evaluate_composition(
 
 _adapters: dict[str, AdapterFunction] = {}
 
+# Import built-in LLM judge (registers itself via setup function below)
+from . import builtin_judge as _builtin_judge
+
+# Register built-in LLM judge as default adapter
+_adapters["llm_judge"] = _builtin_judge.evaluate
+_adapters["g_eval"] = _builtin_judge.evaluate
+_adapters["faithfulness"] = _builtin_judge.evaluate
+
 
 def register_adapter(etype: str, fn: AdapterFunction) -> None:
     """Register an external evaluator adapter."""

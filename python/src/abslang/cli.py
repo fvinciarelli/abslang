@@ -20,7 +20,6 @@ import click
 from . import __version__
 from .parser import parse, parse_multi, load_dataset, resolve_variables, NormalizedSession
 from .runner import run, AgentConfig, RunResult
-from .evaluators.adapters.aievaluator import configure as configure_evaluator
 from .formatters.table import format_table, format_json_output, format_junit
 from .config import merge_config
 
@@ -234,7 +233,7 @@ def run_cmd(
         if "=" in adapter_spec:
             etype, provider = adapter_spec.split("=", 1)
             if provider.strip() == "aievaluator":
-                configure_evaluator(
+                __import__('abslang.evaluators.adapters.aievaluator', fromlist=['configure']).configure(
                     api_key=os.environ.get("AIEVALUATOR_API_KEY"),
                     engine_url=os.environ.get("AIEVALUATOR_ENGINE_URL"),
                 )
@@ -486,7 +485,7 @@ def login(api_key: Optional[str]):
         click.echo("❌ API key cannot be empty.", err=True)
         sys.exit(2)
 
-    configure_evaluator(api_key=key)
+    __import__('abslang.evaluators.adapters.aievaluator', fromlist=['configure']).configure(api_key=key)
     click.echo("✅ Logged in to AI Evaluator")
 
 
