@@ -4,13 +4,9 @@ import withMDX from '@next/mdx';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  basePath: '/abs',
   pageExtensions: ['tsx', 'ts', 'md', 'mdx'],
   eslint: {
     ignoreDuringBuilds: true
-  },
-  typescript: {
-    ignoreBuildErrors: true
   },
   output: 'export',
   images: {

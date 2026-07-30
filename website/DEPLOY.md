@@ -1,110 +1,153 @@
 # Deploy the ABS website
 
-The website is a [Next.js](https://nextjs.org) static site (`output: 'export'`) —
-it builds to a folder of plain HTML/CSS/JS that any static host can serve.
-
-You already have everything needed in the repo. A push to `main` that touches
-`website/**` triggers the deploy automatically.
+El sitio es Next.js con `output: 'export'` — compila a HTML/CSS/JS plano
+que cualquier host estático puede servir. Acá va el paso a paso para GitHub Pages.
 
 ---
 
-## How it works
+## 1. Configurar `next.config.mjs`
 
-```
-git push main
-    │
-    ▼
-.github/workflows/deploy-website.yml
-    │
-    ├─ 1. Checkout repo
-    ├─ 2. npm ci          (website/)
-    ├─ 3. next build       → website/out/
-    ├─ 4. upload artifact
-    └─ 5. deploy to GitHub Pages
-            │
-            ▼
-    https://fvinciarelli.github.io/abs
-```
-
-The build takes ~60s. The deploy is instant after that.
-
----
-
-## One-time setup (already done)
-
-These three things were configured once. You don't need to touch them again.
-
-### 1. `next.config.mjs`
+Agregá `basePath` con el nombre del repo y `typescript.ignoreBuildErrors`:
 
 ```js
 const nextConfig = {
-  basePath: '/abs',          // repo name — serves from /abs, not /
-  output: 'export',           // static HTML, no Node server needed
-  images: { unoptimized: true },  // required for static export
-  typescript: { ignoreBuildErrors: true },  // skips pre-existing type issues
+  basePath: '/abs',           // nombre del repo en GitHub
+  pageExtensions: ['tsx', 'ts', 'md', 'mdx'],
+  eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: true },  // ← agregar
+  output: 'export',
+  images: { unoptimized: true }
 };
 ```
 
-If you ever move the site to a custom domain or a user page (`fvinciarelli.github.io`
-instead of a project page), remove `basePath`.
+Si usás un dominio custom (`midominio.com`) en vez de `usuario.github.io/abs`,
+el `basePath` se saca.
 
-### 2. `.github/workflows/deploy-website.yml`
+---
 
-The workflow triggers on push to `main` when `website/**` files change.
-It also has `workflow_dispatch` so you can trigger it manually from the
-GitHub Actions tab.
+## 2. Crear el workflow
 
-### 3. GitHub Pages source
+Archivo: `.github/workflows/deploy-website.yml`
 
-GitHub Pages is set to deploy from **Actions** (not from a branch).
-This was enabled automatically when the workflow first ran because it
-uses `actions/deploy-pages@v4`. If not, go to:
+```yaml
+name: Deploy website to GitHub Pages
 
-```
-Repo → Settings → Pages → Source: "GitHub Actions"
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/deploy-website.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('website/package-lock.json') }}
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
 ```
 
 ---
 
-## Manual trigger
+## 3. Activar GitHub Pages
 
-If you need to redeploy without pushing:
+En el repo: **Settings → Pages → Source: "GitHub Actions"**
 
-1. Go to `https://github.com/fvinciarelli/abs/actions`
-2. Click **Deploy website to GitHub Pages** in the left sidebar
-3. Click **Run workflow** → **Run workflow**
+Si no aparece esa opción, asegurate de que el repo sea público (o tengas GitHub Pro
+para Pages en repo privado).
 
 ---
 
-## Local preview
+## 4. Pushear
+
+```bash
+git add -A && git commit -m "add website deploy workflow" && git push
+```
+
+El build tarda ~60s. Después el sitio queda en:
+
+```
+https://fvinciarelli.github.io/abs
+```
+
+Podés seguir el progreso en la pestaña **Actions** del repo.
+
+---
+
+## Disparo manual
+
+Si necesitás redeployar sin pushear:
+
+1. **Actions → Deploy website to GitHub Pages → Run workflow**
+
+---
+
+## Probar local
 
 ```bash
 cd website
 npm run dev       # http://localhost:3000/abs
 
-# or build and serve the static output:
+# O buildear la versión estática y servirla:
 npm run build
-npx serve out     # http://localhost:3000/abs
+npx serve out
 ```
 
 ---
 
-## Custom domain (optional, future)
+## Dominio custom (opcional, futuro)
 
-If you want to host at `https://abs-lang.dev` or similar:
-
-1. Add a CNAME record pointing to `fvinciarelli.github.io`
-2. Add the domain in `Repo → Settings → Pages → Custom domain`
-3. Remove `basePath: '/abs'` from `next.config.mjs`
-4. Push — GitHub handles the rest, including automatic HTTPS via Let's Encrypt
+1. Agregá un registro CNAME en tu DNS apuntando a `fvinciarelli.github.io`
+2. En **Settings → Pages → Custom domain**, poné tu dominio
+3. Sacá `basePath: '/abs'` de `next.config.mjs`
+4. Pusheá — GitHub genera HTTPS automático con Let's Encrypt
 
 ---
 
-## Troubleshooting
+## Problemas comunes
 
-| Symptom | Fix |
+| Síntoma | Causa probable |
 |---|---|
-| Blank page at `/abs` | The `basePath` is wrong. Check `next.config.mjs`. |
-| 404 on subpages | GitHub Pages doesn't support SPA fallback. Static export handles this — every route is a real `.html` file. Verify `output: 'export'` is set. |
-| Build timeout | First cold build takes ~90s. Subsequent warm builds are faster. If it keeps timing out, increase the job timeout in the workflow. |
-| Mermaid diagrams not rendering | Diagrams render at build time via the `<Mermaid>` MDX component. If they're blank, check the browser console for CSP errors. |
+| Página en blanco en `/abs` | `basePath` mal configurado |
+| 404 en subpáginas | `output: 'export'` no está puesto — cada ruta necesita su `.html` |
+| Build timeout | Primer build frío tarda ~90s. Si falla, subí el timeout del job |
+| Diagramas Mermaid rotos | Error de types preexistente — `ignoreBuildErrors: true` lo saltea |
