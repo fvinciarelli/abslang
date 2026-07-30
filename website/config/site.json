@@ -50,6 +50,7 @@
           { "label": "Manifesto", "href": "/docs/manifesto" },
           { "label": "Examples", "href": "/docs/examples" },
           { "label": "Roadmap", "href": "/docs/roadmap" },
+          { "label": "Deploy", "href": "/docs/deploy" },
           { "label": "Schema", "href": "/docs/schema" }
         ]
       }
