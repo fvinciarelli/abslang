@@ -1,0 +1,58 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: 'Tools & MCP', description: 'Tool interaction — calls, responds, and matching rules.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+ABS models tool interactions through the Execution action category — primarily `calls` and the `with` field for parameters.
+
+## Calling a tool
+
+```yaml
+- actor: assistant
+  action: calls
+  target: Order MCP
+  with:
+    order_id: "{{order_id}}"
+```
+
+- `target` names the tool or system being called.
+- `with` provides the parameters — statically or via `{{variables}}`.
+
+## Tool response matching
+
+The next Behavior after a `calls` typically models the response:
+
+```yaml
+- actor: Order MCP
+  action: responds
+  content:
+    status: "shipped"
+    tracking_number: "1Z999AA10123456784"
+  capture:
+    tracking: "{{content.tracking_number}}"
+```
+
+Here `actor` is the tool itself, `action: responds` indicates the tool returned a result, and `capture` saves values for later use.
+
+## MCP compatibility
+
+ABS is protocol-agnostic, but the `calls` / `with` / `responds` pattern maps naturally to MCP (Model Context Protocol):
+
+- `calls` → MCP tool invocation
+- `with` → MCP tool parameters
+- `responds` → MCP tool result
+
+The same pattern works for REST APIs, GraphQL, function calling, or plugin systems.
+
+## Matching rules (provisional)
+
+The exact matching rules for tool parameters and responses are part of the upcoming Tool Interaction Specification. Key questions being worked on:
+
+- Should `with` match exactly, or allow subset matching?
+- How to handle tool calls where parameter order doesn't matter?
+- Should there be a `calls_any` wildcard?
+
+See the [Roadmap](/docs/roadmap) for status.
+
+</DocsLayout>

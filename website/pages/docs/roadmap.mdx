@@ -1,0 +1,69 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: 'Roadmap', description: 'Planned features and open design questions for ABS.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+## Closed in v0.1
+
+The conceptual core is stable:
+
+- Scope · Session · Behavior · Actor · Action · Target · Content
+- Variables · Capture · Runtime bindings
+- Evaluations · Step-level and session-level
+- Vocabulary · Four action categories
+- Sequencing · Ordered behaviors
+- Alternate flows as separate Sessions
+
+## In progress for v0.2
+
+### Session composition
+
+Fragments, `include` directives, reusable behavior blocks. The concept is described in [Composition](/docs/composition). The exact syntax and resolution semantics are being formalized.
+
+### Tool Interaction Specification
+
+Formal matching rules for `with` parameters (exact vs. subset vs. schema-based), tool response matching, wildcard patterns like `calls_any`. Currently described provisionally in [Tools & MCP](/docs/tools).
+
+### Variable/Context Specification
+
+Scope rules for captured variables across fragment boundaries, context injection, and runtime binding from structured datasets.
+
+### Official JSON Schema
+
+A normative JSON Schema for v0.1 document validation. A draft exists in the repository at `schema/abs.schema.json`. Formal publication at `abs-lang.org/schema/v0.1/abs.schema.json` is pending.
+
+### Parallel construct
+
+A `parallel:` block for modeling concurrent behaviors — e.g., an agent calling two tools at once. Currently, Behaviors are strictly ordered.
+
+## Under discussion
+
+### UI Authoring Model
+
+How to model UI interactions in ABS beyond the basic Interaction actions (`selects`, `uploads`, `approves`). Possible directions include screenshots, DOM selectors, or accessibility-tree-based selectors.
+
+### Streaming and partial responses
+
+Agents increasingly stream responses token-by-token. Should ABS model partial responses, or only final outputs?
+
+### Agent-to-agent protocols
+
+ABS currently models user↔agent and agent↔tool interactions. Multi-agent scenarios (agent delegates to sub-agent) need further work.
+
+## How to contribute
+
+ABS is a draft standard. Issues and proposals should reference which document and section they affect. Open questions are tracked as GitHub issues.
+
+[View open issues →](https://github.com/fvinciarelli/abs/issues)
+
+## Version timeline
+
+| Version | Status | Key changes |
+|---|---|---|
+| v0.1 | **Current** — public review | Core model, vocabulary, evaluations, sequencing |
+| v0.2 | Planned | Composition, Tool Interaction Spec, JSON Schema |
+| v0.3 | Planned | Parallel, streaming, multi-agent |
+| v1.0 | Target | Stable, ratified standard |
+
+</DocsLayout>

@@ -1,0 +1,51 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: 'Composition', description: 'Fragments and reusable Behaviors across sessions.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+Composition lets you reuse behavior fragments across multiple sessions, reducing duplication and making specs easier to maintain.
+
+## Motivation
+
+Many sessions share common steps. A "user authenticates" sequence, a "check for errors" evaluation block, or a "handoff to human" pattern might appear in dozens of sessions. Copy-pasting those steps creates maintenance burden — change the pattern once, and every copy needs updating.
+
+## Reusable fragments
+
+A fragment is a standalone `.abs.yaml` file containing a list of Behaviors:
+
+```yaml
+# fragments/auth.abs.yaml
+fragment: User authentication
+behaviors:
+  - actor: user
+    action: says
+    content: "I need to log in"
+  - actor: assistant
+    action: asks
+    content: "What is your account ID?"
+```
+
+## Including fragments
+
+A session can include a fragment:
+
+```yaml
+session: Order status (authenticated)
+behaviors:
+  - include: fragments/auth.abs.yaml
+  - actor: user
+    action: says
+    content: "Where is my order {{order_id}}?"
+  - actor: assistant
+    action: calls
+    target: Order MCP
+```
+
+The `include` directive is expanded at parse time. The final trace is as if the Behaviors had been written inline.
+
+## Status
+
+Fragment composition is described conceptually in v0.1. The exact `include` syntax and resolution rules are being formalized for v0.2. See the [Roadmap](/docs/roadmap) for details.
+
+</DocsLayout>

@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-white text-gray-900 antialiased;
+  }
+
+  .dark body {
+    @apply bg-gray-900 text-gray-100;
+  }
+}
+
+@layer components {
+  /* Docs sidebar link */
+  .docs-link {
+    @apply block px-3 py-1.5 text-sm text-gray-600 hover:text-primary-600 rounded-md transition-colors duration-150;
+  }
+
+  .docs-link-active {
+    @apply block px-3 py-1.5 text-sm text-primary-700 bg-primary-50 font-medium rounded-md;
+  }
+
+  .docs-link-heading {
+    @apply block px-3 pt-4 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider;
+  }
+
+  /* Code blocks */
+  .code-block {
+    @apply bg-gray-900 text-gray-100 rounded-lg p-4 overflow-x-auto text-sm font-mono;
+  }
+}
+
+@layer utilities {
+  .scroll-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scroll-none::-webkit-scrollbar {
+    display: none;
+  }
+}

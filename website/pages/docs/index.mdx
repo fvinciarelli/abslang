@@ -1,0 +1,49 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: 'ABS Documentation', description: 'Learn how to use the Agent Behavior Specification to describe, test, and version agent behavior.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+ABS plays a role for agent behavior similar to what OpenAPI plays for HTTP APIs and AsyncAPI for event-driven systems: **a shared contract** that developers, QA, product owners, and tooling can all read and act on.
+
+## Quick example
+
+```yaml
+session: Order status
+behaviors:
+  - actor: user
+    action: says
+    content: "Where is my order?"
+  - actor: assistant
+    action: calls
+    target: Order MCP
+  - actor: assistant
+    action: informs
+    content: "Your order is on the way"
+```
+
+## How the docs are organized
+
+The documentation is split into several sections:
+
+### Getting started
+
+New to ABS? Start with the [Quick Example](/docs/quick-example), then read the [Installation guide](/docs/installation) to set up the CLI and run your first session.
+
+### Core specification
+
+The [Specification v0.1](/docs/specification) is the normative reference. It defines document format, required and optional fields, and conformance rules. Understanding the [Core Model](/docs/core-model) (Session, Behavior, Actor, Action) is key to reading and writing ABS documents.
+
+### Guides
+
+Practical guides for [composing sessions](/docs/composition), working with [tools and MCP](/docs/tools), using the [CLI](/docs/cli), and executing specs against real agents with the [Runner](/docs/runner).
+
+### Resources
+
+The [Manifesto](/docs/manifesto) explains why ABS exists. [Examples](/docs/examples) provide worked, narrated sessions. The [Roadmap](/docs/roadmap) shows what's next.
+
+## Status
+
+**v0.1 — draft, open for review.** The conceptual core is closed (Session, Behavior, Actor, Action, Target, Content, Variables, Evaluations). Formal sub-specifications are in progress. See [ROADMAP.md](https://github.com/fvinciarelli/abs/blob/main/ROADMAP.md).
+
+</DocsLayout>

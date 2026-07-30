@@ -1,0 +1,63 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: 'Installation', description: 'Set up the ABS CLI and run your first session.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+The ABS CLI provides commands to initialize, run, and report on ABS sessions.
+
+## Prerequisites
+
+- **Node.js 18+** or **Python 3.11+**
+- A package manager: npm, yarn, pnpm, or pip
+
+## Install via npm
+
+```bash
+npm install -g abs-cli
+```
+
+Verify the installation:
+
+```bash
+abs --version
+# abs v0.1.0
+```
+
+## Install via pip
+
+```bash
+pip install abs-cli
+```
+
+## Initialize a new project
+
+```bash
+abs init my-agent-tests
+cd my-agent-tests
+```
+
+This creates:
+
+```
+my-agent-tests/
+├── abs.config.yaml    # Configuration
+├── sessions/           # Your .abs.yaml files go here
+└── README.md
+```
+
+## Run a session
+
+```bash
+abs run sessions/order-status.abs.yaml
+```
+
+For more details on the CLI, see the [CLI Reference](/docs/cli).
+
+## Next steps
+
+- [Quick Example](/docs/quick-example) — a 5-minute tour
+- [CLI Reference](/docs/cli) — full command documentation
+- [Runner](/docs/runner) — executing sessions against real agents
+
+</DocsLayout>

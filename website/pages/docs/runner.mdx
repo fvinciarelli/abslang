@@ -1,0 +1,74 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: 'Runner', description: 'Executing ABS sessions against a real agent.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+The Runner is the component that takes an ABS document and executes it against a real agent, capturing the trace and evaluating it against the spec.
+
+## Architecture
+
+```
+ABS document → Runner → Agent under test → Trace → Evaluations → Report
+```
+
+1. **Parse** the ABS document into a sequence of expected Behaviors.
+2. **Execute** by driving the agent — sending user messages, observing responses, detecting tool calls.
+3. **Capture** the actual trace (what really happened).
+4. **Evaluate** by comparing expected vs. actual, running all evaluations.
+5. **Report** the results.
+
+## Adapters
+
+The Runner uses adapters to talk to different agent frameworks:
+
+| Adapter | Status |
+|---|---|
+| CLI / stdin-stdout | v0.1 — stable |
+| HTTP / WebSocket | Planned for v0.2 |
+| LangChain callback | Community interest |
+| MCP-native | Planned |
+
+## Running a session
+
+```bash
+# Against a local CLI agent
+abs run session.abs.yaml --adapter cli --command "./my-agent"
+
+# Against an HTTP endpoint
+abs run session.abs.yaml --adapter http --endpoint "http://localhost:8080/agent"
+```
+
+## The trace
+
+After execution, the Runner produces a **trace** — the actual sequence of observed Behaviors:
+
+```yaml
+# trace.abs.yaml (generated)
+session: Order status [TRACE]
+behaviors:
+  - actor: user
+    action: says
+    content: "Where is my order?"
+  - actor: assistant
+    action: calls
+    target: Order MCP
+    with:
+      order_id: "12345"
+  - actor: Order MCP
+    action: responds
+    content:
+      status: "shipped"
+  - actor: assistant
+    action: informs
+    content: "Your order 12345 is on the way!"
+```
+
+The trace is then compared against the original spec's evaluations.
+
+## See also
+
+- [CLI Reference](/docs/cli) — full command-line reference
+- [Evaluations](/docs/evaluations) — how the evaluation step works
+
+</DocsLayout>

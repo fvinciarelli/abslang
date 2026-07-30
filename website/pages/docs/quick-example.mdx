@@ -1,0 +1,70 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: 'Quick Example', description: 'A 5-minute tour of ABS by example.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+This page walks through a simple ABS document so you can get a feel for the format in under five minutes.
+
+## The scenario
+
+A user asks about their order. The assistant calls an order system and then tells the user what it found.
+
+## Step 1: The session
+
+Every ABS document starts with a `session` name and a `behaviors` list:
+
+```yaml
+session: Order status
+behaviors:
+  - actor: user
+    action: says
+    content: "Where is my order?"
+  - actor: assistant
+    action: calls
+    target: Order MCP
+  - actor: assistant
+    action: informs
+    content: "Your order is on the way"
+```
+
+## Step 2: What each field means
+
+| Field | What it means |
+|---|---|
+| `actor` | Who is acting — `user`, `assistant`, or a named agent. |
+| `action` | What they do — `says`, `calls`, `informs`, etc. See the full [Vocabulary](/docs/vocabulary). |
+| `target` | The system or recipient of the action. |
+| `content` | The message payload or data. |
+
+## Step 3: Adding verification
+
+You can add `evaluations` to any Behavior to check it:
+
+```yaml
+session: Order status
+behaviors:
+  - actor: user
+    action: says
+    content: "Where is my order?"
+  - actor: assistant
+    action: calls
+    target: Order MCP
+    evaluations:
+      - called_tool: Order MCP
+  - actor: assistant
+    action: informs
+    content: "Your order is on the way"
+    evaluations:
+      - contains: "order"
+```
+
+Now the same file that describes behavior can also drive automated tests. That's the core idea of ABS.
+
+## Next steps
+
+- Read the formal [Specification v0.1](/docs/specification)
+- Explore the [Core Model](/docs/core-model) in depth
+- See more [Examples](/docs/examples)
+
+</DocsLayout>

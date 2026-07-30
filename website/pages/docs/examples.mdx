@@ -1,0 +1,102 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: 'Examples', description: 'Worked, narrated examples of ABS sessions.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+Real-world examples of ABS sessions for common agent patterns.
+
+## 1. Customer support — order status
+
+A user checks order status. The assistant calls an MCP tool and reports back.
+
+```yaml
+session: Order status
+behaviors:
+  - actor: user
+    action: says
+    content: "Where is my order #12345?"
+  - actor: assistant
+    action: calls
+    target: Order MCP
+    with:
+      order_id: "12345"
+  - actor: assistant
+    action: informs
+    content: "Your order is on the way — estimated delivery Friday."
+```
+
+## 2. Multi-turn — appointment booking
+
+A conversation that spans several turns, with capture:
+
+```yaml
+session: Book appointment
+behaviors:
+  - actor: user
+    action: says
+    content: "I need to see a doctor"
+  - actor: assistant
+    action: asks
+    content: "What type of appointment do you need?"
+  - actor: user
+    action: says
+    content: "General checkup"
+  - actor: assistant
+    action: shows
+    target: Appointment Options
+    content:
+      - date: "2025-03-15"
+        time: "10:00 AM"
+      - date: "2025-03-15"
+        time: "2:00 PM"
+  - actor: user
+    action: selects
+    target: Appointment Options
+    content: "2025-03-15 10:00 AM"
+    capture:
+      selected_date: "2025-03-15"
+  - actor: assistant
+    action: calls
+    target: Calendar API
+    with:
+      date: "{{selected_date}}"
+      time: "10:00 AM"
+  - actor: assistant
+    action: confirms
+    content: "Your appointment is booked for March 15 at 10:00 AM."
+```
+
+## 3. Hand-off to human
+
+```yaml
+session: Escalation to human
+behaviors:
+  - actor: user
+    action: says
+    content: "I want to speak to a real person"
+  - actor: assistant
+    action: hands_off
+    target: Human Agent
+    content: "User requesting human escalation. Context: billing dispute."
+```
+
+## 4. With evaluations
+
+```yaml
+session: Greeting with verification
+behaviors:
+  - actor: user
+    action: says
+    content: "Hello"
+  - actor: assistant
+    action: says
+    content: "Hi! How can I help you today?"
+    evaluations:
+      - contains: "Hi"
+      - not_contains: "error"
+```
+
+More examples are available in the [repository](https://github.com/fvinciarelli/abs/tree/main/examples).
+
+</DocsLayout>

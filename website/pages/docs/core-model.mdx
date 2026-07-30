@@ -1,0 +1,71 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: 'Core Model', description: 'Session, Behavior, Actor, Action, Target, Content, Variables, and Evaluations.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+The Core Model defines the conceptual building blocks of ABS. It is intentionally abstract — the formal grammar and conformance rules are in the [Specification](/docs/specification).
+
+## Session
+
+A **Session** is the top-level container. It models a single coherent interaction — a conversation, a task execution, a workflow — from start to finish.
+
+- Named with a human-readable `session` field.
+- Contains an ordered list of `behaviors`.
+- May carry session-level `evaluations` that check the whole trace.
+
+## Behavior
+
+A **Behavior** is a single observable action performed by an Actor. The five key fields are:
+
+```
+actor + action + target + content + (capture | with | evaluations)
+```
+
+Not every field applies to every Behavior. A user saying something needs `actor`, `action`, and `content`. An assistant calling a tool needs `actor`, `action`, `target`, and `with`. The combination of fields that makes sense depends on the action category.
+
+## Actor
+
+An **Actor** is who or what performs the Behavior:
+
+| Actor | Description |
+|---|---|
+| `user` | The human user interacting with the agent. |
+| `assistant` | The AI agent under test. |
+| `<any string>` | A named sub-agent, tool, or system component. |
+
+## Action
+
+An **Action** is what the Actor does. ABS defines a standard vocabulary organized by category:
+
+| Category | Actions | Semantic |
+|---|---|---|
+| Communication | `says`, `asks`, `informs`, `shows`, `prompts`, `confirms` | Information exchange between actors. |
+| Execution | `calls`, `submits`, `retrieves`, `stores`, `updates` | Invoking external systems or tools. |
+| Delegation | `hands_off` | Transferring control to another agent or human. |
+| Interaction | `selects`, `uploads`, `approves` | Acting on UI elements. |
+
+The full vocabulary with definitions is in [Vocabulary](/docs/vocabulary).
+
+## Target
+
+**Target** is the object or destination of the action. Its meaning depends on the action category — see the [Specification §4](/docs/specification#4-target-semantics-normative) for the normative rules.
+
+## Content
+
+**Content** is the payload of a Behavior — text, structured data, or displayed information. It can contain `{{variable}}` references.
+
+## Variables
+
+Variables let you capture values at runtime and reuse them later. See [Variables](/docs/variables) for the full rules on capture, reuse, and runtime binding.
+
+## Evaluations
+
+Evaluations make a descriptive spec executable. They can be:
+
+- **Step-level**: attached to a single Behavior, checking it in isolation.
+- **Session-level**: at the top of the document, checking the whole trace (ordering, consistency, invariants).
+
+See [Evaluations](/docs/evaluations) for all evaluator types and semantics.
+
+</DocsLayout>

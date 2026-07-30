@@ -1,0 +1,57 @@
+{
+  "site": {
+    "name": "ABS",
+    "title": "Agent Behavior Specification",
+    "description": "A vendor-neutral, human-readable format for describing the observable behavior of AI agents.",
+    "url": "https://abs-lang.org",
+    "github": "https://github.com/fvinciarelli/abs"
+  },
+  "navigation": {
+    "main": [
+      { "label": "Docs", "href": "/docs" },
+      { "label": "Spec", "href": "/docs/specification" },
+      { "label": "Examples", "href": "/docs/examples" },
+      { "label": "GitHub", "href": "https://github.com/fvinciarelli/abs", "external": true }
+    ]
+  },
+  "docs": {
+    "sidebar": [
+      {
+        "heading": "Getting Started",
+        "items": [
+          { "label": "Introduction", "href": "/docs" },
+          { "label": "Quick Example", "href": "/docs/quick-example" },
+          { "label": "Installation", "href": "/docs/installation" }
+        ]
+      },
+      {
+        "heading": "Core Specification",
+        "items": [
+          { "label": "Specification v0.1", "href": "/docs/specification" },
+          { "label": "Core Model", "href": "/docs/core-model" },
+          { "label": "Vocabulary", "href": "/docs/vocabulary" },
+          { "label": "Variables", "href": "/docs/variables" },
+          { "label": "Evaluations", "href": "/docs/evaluations" }
+        ]
+      },
+      {
+        "heading": "Guides",
+        "items": [
+          { "label": "Composition", "href": "/docs/composition" },
+          { "label": "Tools & MCP", "href": "/docs/tools" },
+          { "label": "Runner", "href": "/docs/runner" },
+          { "label": "CLI Reference", "href": "/docs/cli" }
+        ]
+      },
+      {
+        "heading": "Resources",
+        "items": [
+          { "label": "Manifesto", "href": "/docs/manifesto" },
+          { "label": "Examples", "href": "/docs/examples" },
+          { "label": "Roadmap", "href": "/docs/roadmap" },
+          { "label": "Schema", "href": "/docs/schema" }
+        ]
+      }
+    ]
+  }
+}

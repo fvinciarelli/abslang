@@ -1,0 +1,105 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: 'JSON Schema', description: 'Normative JSON Schema for document validation.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+Every ABS version has a normative JSON Schema. Implementations use it to validate documents before parsing.
+
+## Current schema (v0.1)
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://abs-lang.org/schema/v0.1/abs.schema.json",
+  "title": "ABS Document",
+  "type": "object",
+  "required": ["session", "behaviors"],
+  "properties": {
+    "session": {
+      "type": "string",
+      "description": "Human-readable session name"
+    },
+    "description": {
+      "type": "string"
+    },
+    "abs_version": {
+      "type": "string",
+      "enum": ["0.1"]
+    },
+    "behaviors": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/behavior" }
+    },
+    "evaluations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evaluation" }
+    }
+  },
+  "$defs": {
+    "behavior": {
+      "type": "object",
+      "required": ["actor", "action"],
+      "properties": {
+        "actor": { "type": "string" },
+        "action": { "type": "string" },
+        "target": { "type": "string" },
+        "content": {},
+        "capture": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "with": { "type": "object" },
+        "evaluations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/evaluation" }
+        }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1
+    }
+  }
+}
+```
+
+## Schema locations
+
+```
+https://abs-lang.org/schema/v0.1/abs.schema.json
+https://abs-lang.org/schema/v0.2/abs.schema.json  (future)
+```
+
+## Using the schema
+
+### In your ABS document
+
+```yaml
+# yaml-language-server: $schema=https://abs-lang.org/schema/v0.1/abs.schema.json
+session: My session
+behaviors:
+  - actor: user
+    action: says
+    content: "Hello"
+```
+
+### Programmatic validation
+
+```javascript
+import Ajv from 'ajv';
+const schema = await fetch('https://abs-lang.org/schema/v0.1/abs.schema.json').then(r => r.json());
+const ajv = new Ajv();
+const validate = ajv.compile(schema);
+if (!validate(absDocument)) {
+  console.error(validate.errors);
+}
+```
+
+## See also
+
+- [Specification v0.1](/docs/specification) — the normative spec
+- [schema/abs.schema.json](https://github.com/fvinciarelli/abs/blob/main/schema/abs.schema.json) — source in the repository
+
+</DocsLayout>

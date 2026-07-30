@@ -1,0 +1,9 @@
+# ABS website
+
+node_modules/
+.next/
+out/
+dist/
+.env
+.env.local
+.env.*.local

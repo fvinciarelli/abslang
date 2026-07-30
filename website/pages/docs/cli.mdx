@@ -1,0 +1,94 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: 'CLI Reference', description: 'Command-line interface — init, run, report, and validate.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+The ABS CLI provides a unified interface for creating, running, and reporting on ABS sessions.
+
+## Commands
+
+### `abs init`
+
+Initialize a new ABS project:
+
+```bash
+abs init [directory]
+
+# Options
+#   --template <name>    Use a starter template
+#   --python             Set up for Python runner
+#   --typescript         Set up for TypeScript runner (default)
+```
+
+Creates:
+```
+<directory>/
+├── abs.config.yaml
+├── sessions/
+└── README.md
+```
+
+### `abs run`
+
+Execute one or more sessions against an agent:
+
+```bash
+abs run <file.abs.yaml...>
+
+# Options
+#   --adapter <name>     Adapter to use (cli, http)
+#   --command <cmd>      Command for CLI adapter
+#   --endpoint <url>     URL for HTTP adapter
+#   --var <key=value>    Runtime variable binding (repeatable)
+#   --dataset <file>     CSV/JSON dataset for parameterized runs
+#   --parallel <n>       Run N sessions in parallel
+#   --timeout <ms>       Per-session timeout
+```
+
+### `abs report`
+
+Generate a report from a trace:
+
+```bash
+abs report <trace.abs.yaml>
+
+# Options
+#   --format <fmt>       Output format (terminal, json, html, junit)
+#   --output <file>      Write to file instead of stdout
+```
+
+### `abs validate`
+
+Validate an ABS document against the JSON Schema:
+
+```bash
+abs validate <file.abs.yaml>
+
+# Options
+#   --schema <version>   Schema version (default: declared abs_version or latest)
+```
+
+## Configuration file
+
+`abs.config.yaml`:
+
+```yaml
+abs_version: "0.1"
+default_adapter: cli
+default_command: "./my-agent"
+timeout: 30000
+variables:
+  base_url: "http://localhost:8080"
+```
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | All evaluations passed. |
+| 1 | One or more evaluations failed. |
+| 2 | Parse or execution error. |
+| 3 | Invalid arguments or configuration. |
+
+</DocsLayout>

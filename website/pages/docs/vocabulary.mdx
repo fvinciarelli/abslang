@@ -1,0 +1,72 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: 'Vocabulary', description: 'Standard action vocabulary and extension mechanism.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+Every Behavior in ABS carries an `action` field. The action determines which category the Behavior belongs to and, by extension, how `target`, `content`, and `with` should be interpreted.
+
+## Action categories
+
+### Communication
+
+Information exchange between actors. These actions primarily use `content`:
+
+| Action | Meaning |
+|---|---|
+| `says` | Actor sends a message. |
+| `asks` | Actor requests information. |
+| `informs` | Actor provides information proactively. |
+| `shows` | Actor displays information visually. |
+| `prompts` | Actor presents a prompt requiring a response. |
+| `confirms` | Actor asks for confirmation. |
+
+### Execution
+
+Invoking external systems, tools, or APIs. The `target` names the system; `with` carries parameters:
+
+| Action | Meaning |
+|---|---|
+| `calls` | Invoke a tool, API, or function. |
+| `submits` | Submit data to an external system. |
+| `retrieves` | Fetch data from a system. |
+| `stores` | Persist data to a system. |
+| `updates` | Modify existing data in a system. |
+
+### Delegation
+
+Transferring control:
+
+| Action | Meaning |
+|---|---|
+| `hands_off` | Transfer control to another agent or human. |
+
+### Interaction
+
+Acting on UI elements:
+
+| Action | Meaning |
+|---|---|
+| `selects` | Choose an item from a set. |
+| `uploads` | Upload a file through a UI. |
+| `approves` | Approve or confirm a UI action. |
+
+## Extending the vocabulary
+
+The vocabulary above is a starting point, not a closed set. To add a custom action:
+
+1. Declare which category it belongs to (so `target` semantics are unambiguous).
+2. Document its meaning and expected fields.
+3. If your tooling uses a JSON Schema, register it in the schema's action enum.
+
+A custom action follows the same five-field Behavior shape as any standard action.
+
+## Design rationale
+
+Keeping the action vocabulary small and category-based means:
+
+- **Parsers don't need to know every action.** They resolve `target` from the category alone.
+- **Extensions are forward-compatible.** Adding a new action to the Communication category doesn't break existing documents.
+- **The spec stays readable.** A product owner can glance at `action: calls` and know what's happening.
+
+</DocsLayout>

@@ -1,0 +1,59 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: 'Variables', description: 'Capture, reuse, and runtime binding of values in ABS sessions.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+Variables let you write a session once and run it with many different concrete values. They also allow later Behaviors to reference data captured from earlier ones.
+
+## Capturing values
+
+Use `capture:` on any Behavior to name a value you want to save:
+
+```yaml
+- actor: assistant
+  action: calls
+  target: Order MCP
+  capture:
+    order_id: "{{response.body.id}}"
+```
+
+The capture key (`order_id`) becomes available as `{{order_id}}` for all subsequent Behaviors in the same Session.
+
+## Referencing captured values
+
+```yaml
+- actor: assistant
+  action: informs
+  content: "Your order {{order_id}} is on the way."
+```
+
+## Runtime bindings
+
+Values can also be provided at execution time — via dataset row, CLI flag, or environment variable:
+
+```bash
+abs run session.abs.yaml --var user_name="Alice"
+```
+
+```yaml
+session: Greeting
+behaviors:
+  - actor: user
+    action: says
+    content: "Hi, I'm {{user_name}}"
+```
+
+## Resolution order
+
+When resolving `{{variable}}`, implementations MUST follow this precedence:
+
+1. **Captured value** — nearest prior `capture:` of that name in the same Session.
+2. **Runtime binding** — provided at execution time.
+3. **Error** — if no resolution source exists.
+
+## Design rationale
+
+Placeholders without runtime bindings are a feature, not a bug. A session with `{{user_name}}` is a template — it describes the shape of an interaction without committing to concrete values. The same session can be run against a dataset of 100 user names, or with a different value each time via CLI.
+
+</DocsLayout>
