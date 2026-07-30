@@ -50,7 +50,7 @@
 | Component | TypeScript | Python |
 |---|---|---|
 | Parser (YAML, multi-doc, fragments, variables) | ✅ | ✅ |
-| JSON Schema validation (Ajv) | ✅ | — (structural only) |
+| JSON Schema validation | ✅ | ✅ |
 | Runner (OpenAI, Claude, Gemini adapters) | ✅ | ✅ |
 | All step-level evaluators | ✅ | ✅ |
 | All chain evaluators | ✅ | ✅ |
@@ -60,7 +60,9 @@
 | Table formatter | ✅ | ✅ |
 | JSON/JUnit output | ✅ | ✅ |
 | Dataset loading (JSONL/JSON) | ✅ | ✅ |
-| Test suite | ✅ | — |
+| Test suite | ✅ | ✅ |
+| E2E test suite | ✅ | — |
+| VSCode extension | ✅ | — |
 
 ## How to propose a change
 

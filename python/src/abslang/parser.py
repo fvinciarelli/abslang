@@ -9,6 +9,8 @@ from typing import Any
 
 import yaml
 
+from .schema_validator import validate_document
+
 
 # ── Types ──
 
@@ -60,6 +62,10 @@ def parse_yaml(raw: str) -> list[ABSDocument]:
     for doc in docs:
         data = yaml.safe_load(doc)
         if isinstance(data, dict):
+            # Validate against JSON Schema before converting
+            valid, errors = validate_document(data)
+            if not valid:
+                raise ValueError(f"Invalid ABS document:\n" + "\n".join(errors))
             results.append(_dict_to_document(data))
     return results
 

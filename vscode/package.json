@@ -1,0 +1,123 @@
+{
+  "name": "abs-vscode",
+  "displayName": "ABS — Agent Behavior Specification",
+  "description": "Visual editor and test runner for ABS agent behavior specs",
+  "version": "0.1.0",
+  "publisher": "fvinciarelli",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Testing",
+    "Visualization",
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:yaml",
+    "onCommand:abs.showEditor",
+    "onCommand:abs.run",
+    "onCommand:abs.init"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "abs.showEditor",
+        "title": "ABS: Show Editor",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "abs.run",
+        "title": "ABS: Run Session",
+        "icon": "$(play)"
+      },
+      {
+        "command": "abs.init",
+        "title": "ABS: Init Project"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "abs.run",
+          "when": "resourceExtname == .yaml && resourcePath =~ /abs/",
+          "group": "navigation"
+        },
+        {
+          "command": "abs.showEditor",
+          "when": "resourceExtname == .yaml && resourcePath =~ /abs/",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "abs.run",
+          "when": "resourceExtname == .yaml",
+          "group": "abs"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "abs.run",
+        "key": "ctrl+shift+r",
+        "when": "resourceExtname == .yaml"
+      }
+    ],
+    "configuration": {
+      "title": "ABS",
+      "properties": {
+        "abs.agentUrl": {
+          "type": "string",
+          "default": "http://localhost:8080/chat",
+          "description": "Default agent endpoint URL"
+        },
+        "abs.agentFormat": {
+          "type": "string",
+          "default": "openai",
+          "enum": [
+            "openai",
+            "claude",
+            "gemini",
+            "custom"
+          ],
+          "description": "Agent API format"
+        },
+        "abs.agentAuth": {
+          "type": "string",
+          "default": "none",
+          "enum": [
+            "none",
+            "api_key",
+            "bearer",
+            "oauth2"
+          ],
+          "description": "Agent authentication method"
+        },
+        "abs.agentToken": {
+          "type": "string",
+          "default": "",
+          "description": "Agent API key or token"
+        },
+        "abs.aiEvaluatorApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "AI Evaluator API key for LLM judge"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -watch",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "@types/vscode": "^1.125.0",
+    "typescript": "^5.9.3"
+  },
+  "keywords": [],
+  "author": ""
+}
