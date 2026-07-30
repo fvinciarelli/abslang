@@ -8,9 +8,17 @@ The Runner is the component that takes an ABS document and executes it against a
 
 ## Architecture
 
-```
-ABS document → Runner → Agent under test → Trace → Evaluations → Report
-```
+<Mermaid chart={`
+flowchart LR
+    A[ABS Document] --> B[Runner]
+    B --> C[Agent under test]
+    C --> D[Trace]
+    D --> E[Evaluations]
+    E --> F[Report]
+    
+    style A fill:#e0e7ff,stroke:#6366f1
+    style F fill:#d1fae5,stroke:#10b981
+`} />
 
 1. **Parse** the ABS document into a sequence of expected Behaviors.
 2. **Execute** by driving the agent — sending user messages, observing responses, detecting tool calls.

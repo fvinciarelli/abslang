@@ -8,6 +8,25 @@ ABS does not have two modes with two syntaxes. A document with no `evaluations` 
 
 ## Two levels
 
+<Mermaid chart={`
+flowchart TB
+    subgraph Session["Session (whole trace)"]
+        direction LR
+        B1[Behavior 1]
+        B2[Behavior 2]
+        B3[Behavior 3]
+    end
+
+    B1 -.- E1["Step-level<br/>contains, exact_match"]
+    B2 -.- E2["Step-level<br/>tool_call, schema"]
+    B3 -.- E3["Step-level<br/>llm_judge"]
+
+    Session --> Chain["Session-level<br/>sequence, never, variable_consistency"]
+
+    style Session fill:#e0e7ff,stroke:#6366f1
+    style Chain fill:#fae8ff,stroke:#d946ef
+`} />
+
 **Step-level** evaluations attach to a single Behavior and check that one observed step is correct in isolation.
 
 **Session-level (chain)** evaluations attach to the Session as a whole and check properties of the entire observed trace: ordering, consistency, invariants.

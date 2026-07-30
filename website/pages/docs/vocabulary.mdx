@@ -6,6 +6,33 @@ export const frontmatter = { title: 'Vocabulary', description: 'Standard action 
 
 Every Behavior in ABS carries an `action` field. The action determines which category the Behavior belongs to and, by extension, how `target`, `content`, and `with` should be interpreted.
 
+<Mermaid chart={`
+flowchart LR
+    subgraph Comm["💬 Communication"]
+        says -.- asks -.- informs -.- shows
+    end
+    subgraph Exec["⚙️ Execution"]
+        calls -.- submits -.- retrieves
+    end
+    subgraph Deleg["🤝 Delegation"]
+        hands_off
+    end
+    subgraph Inter["🖱️ Interaction"]
+        selects -.- uploads -.- approves
+    end
+
+    Action["action"] --> Comm
+    Action --> Exec
+    Action --> Deleg
+    Action --> Inter
+
+    style Action fill:#6366f1,color:#fff
+    style Comm fill:#d1fae5,stroke:#10b981
+    style Exec fill:#e0e7ff,stroke:#6366f1
+    style Deleg fill:#fef3c7,stroke:#f59e0b
+    style Inter fill:#fae8ff,stroke:#d946ef
+`} />
+
 ## Action categories
 
 ### Communication

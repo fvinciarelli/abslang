@@ -6,6 +6,18 @@ export const frontmatter = { title: 'Core Model', description: 'Session, Behavio
 
 The Core Model defines the conceptual building blocks of ABS. It is intentionally abstract — the formal grammar and conformance rules are in the [Specification](/docs/specification).
 
+<Mermaid chart={`
+sequenceDiagram
+    actor User
+    participant Assistant
+    participant Tool as Order MCP
+
+    User->>Assistant: says "Where is my order?"
+    Assistant->>Tool: calls with orderId
+    Tool-->>Assistant: responds { status, tracking }
+    Assistant->>User: informs "Your order is on the way"
+`} />
+
 ## Session
 
 A **Session** is the top-level container. It models a single coherent interaction — a conversation, a task execution, a workflow — from start to finish.

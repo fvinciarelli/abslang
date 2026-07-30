@@ -6,6 +6,21 @@ export const frontmatter = { title: 'Tools & MCP', description: 'Tool interactio
 
 A user sees a conversation. A tester sees the full round-trip: the assistant deciding to call a tool, what parameters it passes, what comes back, and what the assistant says about it afterward. ABS makes every step of that round-trip assertable.
 
+<Mermaid chart={`
+sequenceDiagram
+    participant Test as ABS Runner
+    actor User
+    actor Assistant
+    participant Tool as Order MCP
+
+    Test->>User: sends "Where is order #12345?"
+    User->>Assistant: says "Where is order #12345?"
+    Assistant->>Tool: calls { orderId: "12345" }
+    Tool-->>Assistant: responds { status: "shipped" }
+    Assistant->>User: informs "Your order is on the way"
+    Test->>Test: evaluate: tool_call ✓, contains ✓
+`} />
+
 ## The tool round-trip
 
 A tool call is two Behaviors, not one:
