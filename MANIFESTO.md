@@ -33,4 +33,4 @@ Gherkin (Given/When/Then) already solved "human-readable behavioral spec" for so
 
 ## Status
 
-v0.1 — the conceptual core is closed (Session, Behavior, Actor, Action, Target, Content, Variables, Evaluations). Formal sub-specifications are in progress. See [ROADMAP.md](./ROADMAP.md).
+v0.1 — the conceptual core is closed (Session, Behavior, Actor, Action, Target, Content, Variables, Evaluations, Fragments, Tool Interaction, JSON Schema). Implementations in TypeScript and Python, plus a React UI editor and a Next.js docs site. See [ROADMAP.md](./ROADMAP.md) for open design questions deferred to v0.2+.

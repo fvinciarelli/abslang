@@ -555,7 +555,7 @@ abs-quality-gate:
   stage: test
   image: python:3.12
   before_script:
-    - pip install abs-lang
+    - pip install abs
   script:
     - |
       abs run ${options.session} \\
@@ -597,7 +597,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install ABS
-        run: pip install abs-lang
+        run: pip install abs
 
       - name: Run ABS evaluations
         env:

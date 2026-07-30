@@ -126,8 +126,8 @@ Documents SHOULD declare `abs_version: "0.1"`. This becomes REQUIRED in v0.2. Im
 The normative JSON Schema for each version is published at:
 
 ```
-https://abs-lang.org/schema/v0.1/abs.schema.json
-https://abs-lang.org/schema/v0.2/abs.schema.json
+https://github.com/fvinciarelli/abs/blob/main/schema/abs.schema.json
+(versioned URI pattern TBD for v0.2+)
 ```
 
 Implementations SHOULD validate documents against the schema matching their declared `abs_version`. If no `abs_version` is declared, implementations SHOULD assume the latest stable version they support, and SHOULD emit a warning.

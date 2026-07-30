@@ -44,17 +44,28 @@ export default function Hero() {
               <span className="ml-2 text-xs text-gray-400 font-mono">session.abs.yaml</span>
             </div>
             <pre className="p-4 text-sm text-gray-200 font-mono leading-relaxed overflow-x-auto">
-              <code>{`<span class="text-primary-400">session</span>: <span class="text-green-400">Order status</span>
+              <code>{`<span class="text-primary-400">session</span>: <span class="text-green-400">Refund request — approved</span>
 <span class="text-primary-400">behaviors</span>:
   - <span class="text-primary-400">actor</span>: <span class="text-green-400">user</span>
     <span class="text-primary-400">action</span>: <span class="text-green-400">says</span>
-    <span class="text-primary-400">content</span>: <span class="text-green-400">"Where is my order?"</span>
+    <span class="text-primary-400">content</span>: <span class="text-green-400">"I want to return order #8291, it arrived damaged"</span>
+  - <span class="text-primary-400">actor</span>: <span class="text-green-400">assistant</span>
+    <span class="text-primary-400">action</span>: <span class="text-green-400">asks</span>
+    <span class="text-primary-400">content</span>: <span class="text-green-400">"Can you confirm your name and order date?"</span>
+    <span class="text-primary-400">evaluations</span>:
+      - <span class="text-primary-400">type</span>: <span class="text-green-400">llm_judge</span>
+        <span class="text-primary-400">criteria</span>: <span class="text-green-400">|</span>
+          <span class="text-green-400">1. Shows empathy</span>
+          <span class="text-green-400">2. References order #8291</span>
+          <span class="text-green-400">3. Asks for verification</span>
   - <span class="text-primary-400">actor</span>: <span class="text-green-400">assistant</span>
     <span class="text-primary-400">action</span>: <span class="text-green-400">calls</span>
-    <span class="text-primary-400">target</span>: <span class="text-green-400">Order MCP</span>
-  - <span class="text-primary-400">actor</span>: <span class="text-green-400">assistant</span>
-    <span class="text-primary-400">action</span>: <span class="text-green-400">informs</span>
-    <span class="text-primary-400">content</span>: <span class="text-green-400">"Your order is on the way"</span>`}</code>
+    <span class="text-primary-400">target</span>: <span class="text-green-400">Orders API</span>
+<span class="text-gray-500">  # ... tool round-trips, chain evaluations, variable checks</span>
+<span class="text-primary-400">evaluations</span>:
+  - <span class="text-primary-400">type</span>: <span class="text-green-400">sequence</span>
+  - <span class="text-primary-400">type</span>: <span class="text-green-400">variable_consistency</span>
+  - <span class="text-primary-400">type</span>: <span class="text-green-400">never</span>`}</code>
             </pre>
           </div>
 

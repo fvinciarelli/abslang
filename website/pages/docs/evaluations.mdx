@@ -32,36 +32,65 @@ flowchart TB
 **Session-level (chain)** evaluations attach to the Session as a whole and check properties of the entire observed trace: ordering, consistency, invariants.
 
 ```yaml
-session: Order status requires order number
+session: Refund request — approved
 behaviors:
   - actor: user
     action: says
-    content: "Where is my order?"
+    content: "I want to return order #8291, it arrived damaged"
+
   - actor: assistant
     action: asks
-    content: "Please provide your order number"
+    content: "I'm sorry about that. Can you confirm your name and order date?"
+    evaluations:
+      - type: llm_judge
+        criteria: |
+          1. Shows empathy for the damaged item
+          2. References the order number #8291
+          3. Asks for verification info before taking action
+
   - actor: user
     action: says
-    content: "12345"
+    content: "Franco Vinciarelli, ordered last Tuesday"
     capture:
-      orderId: "12345"
+      customerName: "Franco Vinciarelli"
+
   - actor: assistant
     action: calls
-    target: Order MCP
-    with:
-      orderId: "{{orderId}}"
+    target: Orders API
+  - actor: tool
+    action: responds
+    target: Orders API
+  - actor: assistant
+    action: calls
+    target: Refunds API
+  - actor: tool
+    action: responds
+    target: Refunds API
+
   - actor: assistant
     action: informs
-    content: "Your order is on the way"
+    content: "Refund of €47.50 processed, Franco. Refund ID: R-5512."
+    capture:
+      refundId: "R-5512"
+    evaluations:
+      - type: contains
+        value: "R-5512"
+      - type: llm_judge
+        criteria: |
+          1. States refund amount and timeline
+          2. Provides refund reference
+          3. Uses customer's name
+          4. Reassuring tone, no upsells
 
 evaluations:
   - type: sequence
     order:
       - { actor: assistant, action: asks }
-      - { actor: assistant, action: calls, target: "Order MCP" }
+      - { actor: assistant, action: calls, target: "Orders API" }
+      - { actor: assistant, action: calls, target: "Refunds API" }
       - { actor: assistant, action: informs }
   - type: variable_consistency
-    variable: orderId
+    variable: refundId
   - type: never
     match: { actor: assistant, action: hands_off }
 ```

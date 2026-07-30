@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://abs-lang.org/schema/v0.1/abs.schema.json",
+  "$id": "https://github.com/fvinciarelli/abs/blob/main/schema/abs.schema.json",
   "title": "ABS Document v0.1",
   "description": "Normative JSON Schema for Agent Behavior Specification v0.1 documents. A document that passes this schema is syntactically valid ABS v0.1. Semantic rules (variable resolution, ordering, target interpretation) are defined in SPECIFICATION.md and are not enforced by this schema.",
   "type": "object",

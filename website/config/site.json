@@ -3,7 +3,7 @@
     "name": "ABS",
     "title": "Agent Behavior Specification",
     "description": "A vendor-neutral, human-readable format for describing the observable behavior of AI agents.",
-    "url": "https://abs-lang.org",
+    "url": "https://github.com/fvinciarelli/abs",
     "github": "https://github.com/fvinciarelli/abs"
   },
   "navigation": {
@@ -37,6 +37,7 @@
       {
         "heading": "Guides",
         "items": [
+          { "label": "Patterns", "href": "/docs/patterns" },
           { "label": "Composition", "href": "/docs/composition" },
           { "label": "Tools & MCP", "href": "/docs/tools" },
           { "label": "Runner", "href": "/docs/runner" },

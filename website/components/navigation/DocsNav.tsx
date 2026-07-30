@@ -37,7 +37,7 @@ export default function DocsNav() {
         {/* Version badge */}
         <div className="mt-6 pt-4 border-t border-gray-200">
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
-            v0.1 — Draft
+            v0.1
           </span>
         </div>
       </div>

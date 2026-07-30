@@ -242,7 +242,7 @@ abs login
 
 Other evaluator providers (Azure AI, LangSmith, Promptfoo, Galileo, Arize) can ship adapters that implement the same interface. ABS doesn't care which one you use — it just calls `adapter.evaluate(trace, rule)` and expects an `EvalResult` back.
 
-For the full evaluator landscape, see [EVALUATORS.md](./EVALUATORS.md).
+For the full evaluator type reference, see [EVALUATIONS.md](./EVALUATIONS.md).
 
 ---
 

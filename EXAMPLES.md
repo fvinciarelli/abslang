@@ -2,9 +2,109 @@
 
 Runnable versions of every example below live under [examples/](./examples/) and have been validated to parse as YAML.
 
-## 1. Order status (happy path)
+## 1. Refund request — full workflow with evaluations
 
-The simplest possible Session: user asks, assistant calls a tool, assistant informs. Note that the tool's response is its own Behavior — this is what makes the payload assertable independently of what the assistant later says about it.
+A customer returns a damaged item. The agent verifies eligibility across two API calls, processes the refund, and confirms. This is the showcase example: step-level LLM judge with multi-criteria rubrics, chain sequence verification, variable capture and consistency, and two complete tool round-trips — all in one file.
+
+```yaml
+session: Refund request — approved
+description: |
+  Customer returns a damaged item. Agent verifies eligibility,
+  processes the refund, and confirms — with evaluations at every step.
+behaviors:
+  - actor: user
+    action: says
+    content: "I want to return order #8291, it arrived damaged"
+
+  - actor: assistant
+    action: asks
+    content: "I'm sorry about that. Can you confirm your name and order date?"
+    evaluations:
+      - type: llm_judge
+        criteria: |
+          1. Shows empathy for the damaged item
+          2. References the order number #8291
+          3. Asks for verification info before taking action
+
+  - actor: user
+    action: says
+    content: "Franco Vinciarelli, ordered last Tuesday"
+    capture:
+      customerName: "Franco Vinciarelli"
+
+  - actor: assistant
+    action: calls
+    target: Orders API
+    with:
+      orderId: "8291"
+
+  - actor: tool
+    action: responds
+    target: Orders API
+    content:
+      orderId: "8291"
+      status: "delivered"
+      eligibleForRefund: true
+
+  - actor: assistant
+    action: calls
+    target: Refunds API
+    with:
+      orderId: "8291"
+      reason: "damaged"
+
+  - actor: tool
+    action: responds
+    target: Refunds API
+    content:
+      refundId: "R-5512"
+      amount: 47.50
+      status: "processed"
+
+  - actor: assistant
+    action: informs
+    content: "Refund of €47.50 processed, Franco. You'll receive it in 3-5 days. Your refund ID is R-5512."
+    capture:
+      refundId: "R-5512"
+    evaluations:
+      - type: contains
+        value: "R-5512"
+      - type: llm_judge
+        criteria: |
+          1. States the refund amount (€47.50) and timeline (3-5 days)
+          2. Provides the refund reference R-5512
+          3. Uses the customer's name (Franco)
+          4. Reassuring tone — no upsells, no deflections
+
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: asks }
+      - { actor: assistant, action: calls, target: "Orders API" }
+      - { actor: assistant, action: calls, target: "Refunds API" }
+      - { actor: assistant, action: informs }
+  - type: variable_consistency
+    variable: refundId
+  - type: never
+    match: { actor: assistant, action: hands_off }
+```
+
+### What this example shows
+
+| Feature | Where |
+|---|---|
+| Step-level evaluations | `llm_judge` with 3–4 criteria on the `asks` and `informs` steps |
+| Chain evaluation | `sequence` verifies the 4 assistant actions happen in exact order |
+| Variable capture + consistency | `customerName` and `refundId` captured; `variable_consistency` ensures `refundId` never drifts |
+| Tool round-trips | Two `calls` → `responds` pairs, each independently assertable |
+| Invariant guard | `never hands_off` — the agent must resolve, not escalate |
+| Multi-criteria LLM judge | Empathy, accuracy, tone, and omissions checked in one rubric |
+
+See [examples/refund-request.yaml](./examples/refund-request.yaml).
+
+## 2. Order status (minimal intro)
+
+The simplest possible Session: user asks, assistant calls a tool, assistant informs. Good for understanding the basic format, but real sessions use evaluations, variables, and chain checks like the refund example above.
 
 ```yaml
 session: Order status

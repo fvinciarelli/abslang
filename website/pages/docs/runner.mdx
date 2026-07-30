@@ -53,23 +53,43 @@ After execution, the Runner produces a **trace** — the actual sequence of obse
 
 ```yaml
 # trace.abs.yaml (generated)
-session: Order status [TRACE]
+session: Refund request — approved [TRACE]
 behaviors:
   - actor: user
     action: says
-    content: "Where is my order?"
+    content: "I want to return order #8291, it arrived damaged"
+  - actor: assistant
+    action: asks
+    content: "I'm sorry about that. Can you confirm your name and order date?"
+  - actor: user
+    action: says
+    content: "Franco Vinciarelli, ordered last Tuesday"
   - actor: assistant
     action: calls
-    target: Order MCP
+    target: Orders API
     with:
-      order_id: "12345"
-  - actor: Order MCP
+      orderId: "8291"
+  - actor: Orders API
     action: responds
     content:
-      status: "shipped"
+      orderId: "8291"
+      status: "delivered"
+      eligibleForRefund: true
+  - actor: assistant
+    action: calls
+    target: Refunds API
+    with:
+      orderId: "8291"
+      reason: "damaged"
+  - actor: Refunds API
+    action: responds
+    content:
+      refundId: "R-5512"
+      amount: 47.50
+      status: "processed"
   - actor: assistant
     action: informs
-    content: "Your order 12345 is on the way!"
+    content: "Refund of €47.50 processed, Franco. You'll receive it in 3-5 days. Your refund ID is R-5512."
 ```
 
 The trace is then compared against the original spec's evaluations.

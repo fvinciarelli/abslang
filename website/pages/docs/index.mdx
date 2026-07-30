@@ -9,18 +9,63 @@ ABS plays a role for agent behavior similar to what OpenAPI plays for HTTP APIs 
 ## Quick example
 
 ```yaml
-session: Order status
+session: Refund request — approved
 behaviors:
   - actor: user
     action: says
-    content: "Where is my order?"
+    content: "I want to return order #8291, it arrived damaged"
+  - actor: assistant
+    action: asks
+    content: "I'm sorry about that. Can you confirm your name and order date?"
+    evaluations:
+      - type: llm_judge
+        criteria: |
+          1. Shows empathy for the damaged item
+          2. References the order number #8291
+          3. Asks for verification info before taking action
+  - actor: user
+    action: says
+    content: "Franco Vinciarelli, ordered last Tuesday"
+    capture:
+      customerName: "Franco Vinciarelli"
   - actor: assistant
     action: calls
-    target: Order MCP
+    target: Orders API
+  - actor: tool
+    action: responds
+    target: Orders API
+  - actor: assistant
+    action: calls
+    target: Refunds API
+  - actor: tool
+    action: responds
+    target: Refunds API
   - actor: assistant
     action: informs
-    content: "Your order is on the way"
+    content: "Refund of €47.50 processed, Franco. Refund ID: R-5512."
+    evaluations:
+      - type: contains
+        value: "R-5512"
+      - type: llm_judge
+        criteria: |
+          1. States refund amount and timeline
+          2. Provides refund reference
+          3. Uses customer's name
+          4. Reassuring tone, no upsells
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: asks }
+      - { actor: assistant, action: calls, target: "Orders API" }
+      - { actor: assistant, action: calls, target: "Refunds API" }
+      - { actor: assistant, action: informs }
+  - type: variable_consistency
+    variable: refundId
+  - type: never
+    match: { actor: assistant, action: hands_off }
 ```
+
+This single file describes a full refund workflow — two API calls, tool round-trips, LLM judge evaluations with multi-criteria rubrics, variable capture, chain sequence verification, and invariant guards.
 
 ## How the docs are organized
 
@@ -36,7 +81,7 @@ The [Specification v0.1](/docs/specification) is the normative reference. It def
 
 ### Guides
 
-Practical guides for [composing sessions](/docs/composition), working with [tools and MCP](/docs/tools), using the [CLI](/docs/cli), and executing specs against real agents with the [Runner](/docs/runner).
+Practical guides for modeling real behaviors with [Patterns](/docs/patterns), [composing sessions](/docs/composition), working with [tools and MCP](/docs/tools), using the [CLI](/docs/cli), and executing specs against real agents with the [Runner](/docs/runner).
 
 ### Resources
 
@@ -44,6 +89,6 @@ The [Manifesto](/docs/manifesto) explains why ABS exists. [Examples](/docs/examp
 
 ## Status
 
-**v0.1 — draft, open for review.** The conceptual core is closed (Session, Behavior, Actor, Action, Target, Content, Variables, Evaluations). Formal sub-specifications are in progress. See [ROADMAP.md](https://github.com/fvinciarelli/abs/blob/main/ROADMAP.md).
+**v0.1** — the conceptual core is closed. Implementations in TypeScript and Python, plus a React UI editor and this docs site. See the [Roadmap](/docs/roadmap) for open design questions deferred to v0.2+.
 
 </DocsLayout>

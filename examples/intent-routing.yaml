@@ -1,0 +1,99 @@
+# Intent routing with hand-off to a specialist agent.
+# Alternate paths (routing to a different specialist, or escalating
+# to a human) would be separate Sessions following the same pattern —
+# this is the v0.1 way to handle bifurcations.
+
+session: Intent routing — damaged item → refund
+description: >
+  User reports a damaged item. Triage detects refund intent,
+  hands off to Refunds Agent who verifies and processes the return.
+behaviors:
+  # ── Triage ──
+  - actor: user
+    action: says
+    content: "I received a damaged item, I want my money back. Order #8291."
+    capture:
+      orderId: "8291"
+
+  - actor: assistant
+    action: clarifies
+    content: "I understand — you want to return order #8291 because it arrived damaged. Let me connect you with our refunds specialist."
+    evaluations:
+      - type: llm_judge
+        criteria: |
+          1. Identifies the request as a refund, not a general inquiry
+          2. References the order number #8291
+          3. States they are routing to the refunds specialist specifically
+
+  # ── Hand-off ──
+  - actor: assistant
+    action: hands_off
+    target: Refunds Agent
+    content: "Refund request: order #8291, reason: damaged"
+    evaluations:
+      - type: llm_judge
+        criteria: |
+          1. Hands off to Refunds Agent — not Orders, not Human
+          2. Passes both order number and reason in the hand-off context
+
+  # ── Specialist resolves ──
+  - actor: assistant
+    action: greets
+    content: "Hi, I'm the refunds specialist. I've pulled up order #8291 — confirmed it was delivered damaged. Let me process your return now."
+    evaluations:
+      - type: llm_judge
+        criteria: |
+          1. Introduces as refunds specialist (new agent identity)
+          2. Confirms the damage and order number
+          3. Takes ownership of the resolution
+
+  - actor: assistant
+    action: calls
+    target: Refunds API
+    with:
+      orderId: "{{orderId}}"
+      reason: "damaged"
+
+  - actor: tool
+    action: responds
+    target: Refunds API
+    content:
+      refundId: "R-5512"
+      amount: 47.50
+      status: "approved"
+
+  - actor: assistant
+    action: informs
+    content: "Refund of €47.50 approved, Franco. You'll receive it in 3-5 days. Reference: R-5512."
+    capture:
+      refundId: "R-5512"
+    evaluations:
+      - type: contains
+        value: "R-5512"
+      - type: llm_judge
+        criteria: |
+          1. States the refund amount and timeline clearly
+          2. Provides the refund reference R-5512
+          3. Reassuring tone, no upsells
+
+# ── Chain: the full trace across the hand-off boundary ──
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: clarifies }
+      - { actor: assistant, action: hands_off, target: "Refunds Agent" }
+      - { actor: assistant, action: greets }
+      - { actor: assistant, action: calls, target: "Refunds API" }
+      - { actor: assistant, action: informs }
+
+  # Routing guards: this path must NOT have gone elsewhere
+  - type: never
+    match: { actor: assistant, action: hands_off, target: "Human Agent" }
+
+  # The refund ID must be consistent everywhere it appears
+  - type: variable_consistency
+    variable: refundId
+
+# Alternate paths (not shown — each would be its own Session):
+#   - "Where is my order?" → hands_off to Orders Agent → order lookup
+#   - "My account was hacked!" → hands_off to Human Agent → no automation

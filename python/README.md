@@ -5,7 +5,7 @@
 ## Install
 
 ```bash
-pip install abs-lang
+pip install abs
 ```
 
 ## Quick start

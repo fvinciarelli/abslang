@@ -1,0 +1,274 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: 'Patterns', description: 'How to model real agent behaviors with ABS — recipes, not reference.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+The spec tells you what's valid. This page tells you how to combine those pieces to model the things you actually need: routing, round-trips, multi-step verification, escalation guards.
+
+## 1. Intent routing + hand-off
+
+**The problem:** one entry point (a triage agent) routes to multiple specialist agents. A refund goes to Refunds, an order question goes to Orders, a security issue goes to a human.
+
+**The v0.1 solution:** one Session per branch. v0.1 does not model branching inside a Session — a Session describes exactly one trace.
+
+### Write one branch fully, then the others
+
+Start with the happy path for one destination:
+
+```yaml
+session: Intent routing — damaged item → refund
+behaviors:
+  - actor: user
+    action: says
+    content: "I received a damaged item. Order #8291."
+
+  - actor: assistant          # ← triage clarifies intent
+    action: clarifies
+    content: "I understand — you want to return #8291. Connecting you to refunds."
+
+  - actor: assistant          # ← hands off to specialist
+    action: hands_off
+    target: Refunds Agent
+    content: "Refund request: #8291, reason: damaged"
+
+  - actor: assistant          # ← specialist takes over
+    action: greets
+    content: "Hi, I'm the refunds specialist. Processing your return now."
+
+  - actor: assistant
+    action: calls
+    target: Refunds API
+    # ...
+
+  - actor: assistant
+    action: informs
+    content: "Refund approved. €47.50 in 3-5 days. Reference: R-5512."
+```
+
+The `sequence` evaluator checks the full trace across the hand-off boundary. `never` acts as a routing guard:
+
+```yaml
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: clarifies }
+      - { actor: assistant, action: hands_off, target: "Refunds Agent" }
+      - { actor: assistant, action: greets }
+      - { actor: assistant, action: calls, target: "Refunds API" }
+      - { actor: assistant, action: informs }
+
+  - type: never
+    match: { actor: assistant, action: hands_off, target: "Human Agent" }
+```
+
+The `sequence` doesn't care that `greets` comes from a different agent instance than `clarifies` — ABS tracks `actor` and `action`, not agent identity.
+
+### Add step-level evaluations on the decision points
+
+The two highest-risk steps are the triage and the hand-off:
+
+```yaml
+- actor: assistant
+  action: clarifies
+  evaluations:
+    - type: llm_judge
+      criteria: |
+        1. Identifies the request as a refund, not a general inquiry
+        2. References the order number
+        3. States they are routing to refunds specifically
+
+- actor: assistant
+  action: hands_off
+  target: Refunds Agent
+  evaluations:
+    - type: llm_judge
+      criteria: |
+        1. Hands off to Refunds Agent — not Orders, not Human
+        2. Passes order number and reason in the hand-off context
+```
+
+### The other branches
+
+Each branch is its own Session. Same structure, different `sequence` and `never` guards. See the [full example on GitHub](https://github.com/fvinciarelli/abs/blob/main/examples/intent-routing.yaml).
+
+<Mermaid chart={`
+sequenceDiagram
+    actor User
+    participant Triage
+    participant Refunds Agent
+    participant Refunds API
+
+    User->>Triage: says "I received a damaged item. Order #8291."
+    Triage->>User: clarifies — detected refund intent, routing to refunds
+    Triage->>Refunds Agent: hands_off — "Refund request: #8291, reason: damaged"
+    Refunds Agent->>User: greets — "I'm the refunds specialist. Processing your return."
+    Refunds Agent->>Refunds API: calls — process refund #8291
+    Refunds API-->>Refunds Agent: responds — R-5512, €47.50, approved
+    Refunds Agent->>User: informs — "Refund approved. €47.50 in 3-5 days."
+`} />
+
+### Anti-pattern: branching inside a Session
+
+```yaml
+# ❌ Don't do this — v0.1 has no branching syntax
+behaviors:
+  - actor: assistant
+    action: hands_off
+    target: Refunds Agent    # or Orders? or Human?
+```
+
+A Session is one trace. If the agent could go to 3 places, write 3 Sessions (SPECIFICATION.md §7).
+
+---
+
+## 2. Tool round-trips
+
+Three Behaviors, each evaluated independently:
+
+```yaml
+# 1. The assistant calls the tool — check the parameters
+- actor: assistant
+  action: calls
+  target: Orders API
+  with:
+    orderId: "8291"
+
+# 2. The tool responds — check the payload
+- actor: tool
+  action: responds
+  target: Orders API
+  content:
+    orderId: "8291"
+    status: "in_transit"
+  evaluations:
+    - type: schema
+      schema:
+        type: object
+        required: [orderId, status]
+
+# 3. The assistant tells the user — check the communication
+- actor: assistant
+  action: informs
+  content: "Your order is on its way"
+  evaluations:
+    - type: contains
+      value: "on its way"
+```
+
+The split makes both the raw payload and the assistant's paraphrasing separately assertable. The assistant might say "your order shipped" when the API returned `status: "pending"` — with separate Behaviors you catch both.
+
+### `with` vs `with_only`
+
+- **`with`** — partial match. Extra params OK. Use when the agent may add contextual fields.
+- **`with_only`** — strict match. No extra keys. Use for security-critical calls.
+
+See [Tools & MCP](/docs/tools) for the full rules.
+
+---
+
+## 3. Multi-step verification
+
+Capture early, verify late. Hard facts with `contains`, soft qualities with `llm_judge`, safety net with `variable_consistency`.
+
+```yaml
+behaviors:
+  - actor: user
+    action: says
+    content: "Franco Vinciarelli, order #8291"
+    capture:
+      customerName: "Franco Vinciarelli"
+      orderId: "8291"
+
+  # ... agent does its job ...
+
+  - actor: assistant
+    action: informs
+    content: "Refund of €47.50 processed, Franco. Reference: R-5512."
+    capture:
+      refundId: "R-5512"
+    evaluations:
+      - type: contains
+        value: "R-5512"           # hard fact
+      - type: llm_judge
+        criteria: |               # soft qualities
+          1. States amount and timeline
+          2. Provides refund reference
+          3. Uses the customer's name
+          4. Reassuring tone, no upsells
+
+evaluations:
+  - type: variable_consistency
+    variable: refundId           # safety net against ID drift
+```
+
+---
+
+## 4. Missing information flow
+
+The agent must ask before it can proceed. Model the ask-capture-reuse cycle:
+
+```yaml
+session: Order status — missing order number
+behaviors:
+  - actor: user
+    action: says
+    content: "Where is my order?"
+
+  - actor: assistant
+    action: asks
+    content: "Please provide your order number"
+
+  - actor: user
+    action: says
+    content: "8291"
+    capture:
+      orderId: "8291"
+
+  - actor: assistant
+    action: calls
+    target: Orders API
+    with:
+      orderId: "{{orderId}}"
+
+  - actor: assistant
+    action: informs
+    content: "Your order is on its way"
+
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: asks }
+      - { actor: assistant, action: calls }
+      - { actor: assistant, action: informs }
+```
+
+The `sequence` tests what matters: the agent asked before calling. Without this, a lazy agent could skip asking and hallucinate the order number.
+
+---
+
+## 5. Escalation guard
+
+A two-line safety net that catches routing failures:
+
+```yaml
+# Auto-resolution flow: must NOT escalate
+evaluations:
+  - type: never
+    match: { actor: assistant, action: hands_off, target: "Human Agent" }
+
+# Human-only flow: must NOT call tools
+evaluations:
+  - type: never
+    match: { actor: assistant, action: calls }
+```
+
+---
+
+## What's not covered here
+
+- **Parallel tool calls.** v0.1 is strictly linear. Parallelism is on the [Roadmap](/docs/roadmap) for v0.2+.
+- **Parameterized fragments.** `{{variables}}` work inside fragments today but can't easily adapt content across sessions without dataset bindings. Deferred to v0.2+.
+- **Cross-session variables.** Variables are scoped to one Session. No shared state across Sessions in v0.1.
+
+</DocsLayout>

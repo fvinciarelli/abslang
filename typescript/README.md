@@ -5,7 +5,7 @@
 ## Install
 
 ```bash
-npm install -g abs-lang
+npm install -g abs
 ```
 
 ## Quick start
@@ -37,7 +37,7 @@ abs run examples/order-status.yaml --agent http://localhost:8080/chat
 ## Library usage
 
 ```typescript
-import { parse, run } from 'abs-lang';
+import { parse, run } from 'abs';
 
 const session = parse('session.abs.yaml');
 const result = await run(session, {

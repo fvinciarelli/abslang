@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "abs-lang"
+name = "abs"
 version = "0.1.0"
 description = "Agent Behavior Specification — describe, run, and evaluate AI agent interactions from the command line"
 requires-python = ">=3.10"
