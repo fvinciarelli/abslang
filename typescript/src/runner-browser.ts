@@ -85,7 +85,7 @@ async function openaiAdapter(
     throw new Error(`Agent returned ${resp.status}: ${text.substring(0, 200)}`);
   }
 
-  const data = await resp.json();
+  const data = await resp.json() as any;
   const choice = data.choices?.[0]?.message;
 
   if (!choice) {

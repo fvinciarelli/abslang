@@ -10,7 +10,121 @@
 
 **Session-level (chain) evaluations** attach to the Session as a whole and check properties of the entire observed trace: relative ordering between steps, values staying consistent across steps, things that must never happen anywhere, things that must eventually happen. This is the part that's hard to do by hand once a Session has more than a few steps, and it's the primary reason `evaluations` exists as a first-class citizen of the format rather than being left entirely to an external test framework.
 
+## Common evaluation fields
+
+Every evaluator type accepts these optional fields in addition to its type-specific ones:
+
+| Field | Type | Description |
+|---|---|---|
+| `threshold` | number (0–1) | Minimum score for this evaluation to pass. Default: `0.5`. Applies to evaluators that produce a score: `llm_judge`, `groundedness`, `bias`, `toxicity`, `custom`, and composition types (`all_of`, `any_of`, `none_of`). Non-scoring evaluators (`contains`, `exact_match`, `sequence`, etc.) ignore it. |
+| `adapter` | string | Which LLM judge provider to use. Agnostic identifier — e.g. `aievaluator`, `azure`, `openai`, `vertexai`. The runner maps this to a configured adapter at execution time. If omitted, the runner uses its default adapter. |
+| `dataset` | string, array, or object | Reference data passed to the evaluator. Can be: a UUID string referencing an external dataset registry, an inline array of objects (`[{context: ..., response: ...}]`), or a JSONL string. The adapter decides how to use it. |
+| `prompt` | string | Custom prompt template for evaluators that call an LLM. Variables like `{{criteria}}`, `{{context}}`, `{{response}}` are interpolated by the adapter before sending to the judge. |
+
+### Threshold on composition types
+
+When `threshold` is set on `all_of`, `any_of`, or `none_of`, it applies to the **average score** of all sub-evaluations:
+
 ```yaml
+evaluations:
+  - type: all_of
+    threshold: 0.8
+    evaluations:
+      - type: contains
+        value: "R-5512"           # score: 1.0
+      - type: llm_judge
+        criteria: "Friendly tone"  # score: 0.72
+      # Average: 0.86 → passes (0.86 >= 0.8)
+```
+
+Without a group threshold, `all_of` requires every sub-evaluation to pass individually. With a group threshold, individual failures can be compensated by strong scores elsewhere — useful when no single criterion is critical but the overall quality matters.
+
+### Example with all common fields
+
+```yaml
+evaluations:
+  - type: llm_judge
+    criteria: "Response is clear and helpful"
+    threshold: 0.75
+    adapter: azure
+    prompt: |
+      Rate the following response on clarity and helpfulness (1-10):
+      Response: {{response}}
+      Criteria: {{criteria}}
+
+  - type: groundedness
+    context: "The refund policy allows returns within 30 days."
+    threshold: 0.8
+    dataset: "ds_groundedness_production"
+```
+
+## LLM judge evaluator types
+
+These evaluators use an LLM to assess the agent's output. They all accept `threshold`, `adapter`, `dataset`, and `prompt` in addition to their specific fields.
+
+### `llm_judge`
+
+General-purpose LLM evaluation against a natural-language rubric.
+
+```yaml
+evaluations:
+  - type: llm_judge
+    criteria: "Response clearly states the order is in transit, in a friendly tone, without inventing a delivery date."
+    threshold: 0.7
+```
+
+### `groundedness`
+
+Checks whether the agent's response is grounded in provided context — i.e., doesn't make up facts not present in the source material.
+
+```yaml
+evaluations:
+  - type: groundedness
+    context: "Tool response: { status: shipped, eta: 2026-08-03 }"
+    threshold: 0.8
+```
+
+If `context` is omitted, the adapter uses the trace up to that point as context.
+
+### `bias`
+
+Checks for bias in the agent's response across specified categories.
+
+```yaml
+evaluations:
+  - type: bias
+    categories: ["gender", "race", "age"]
+    threshold: 0.1    # scores near 0 = less bias (lower is better)
+```
+
+If `categories` is omitted, checks all standard bias categories.
+
+### `toxicity`
+
+Checks for toxic content in the agent's response.
+
+```yaml
+evaluations:
+  - type: toxicity
+    categories: ["hate", "harassment", "violence"]
+    threshold: 0.05   # scores near 0 = less toxic (lower is better)
+```
+
+If `categories` is omitted, checks all standard toxicity categories.
+
+### `custom`
+
+Escape hatch for evaluators not covered above. The `id` identifies the evaluator implementation. Use `prompt` to pass a custom prompt template.
+
+```yaml
+evaluations:
+  - type: custom
+    id: my-org.sentiment-positive
+    prompt: "Is this response cheerful and enthusiastic? Reply YES/NO."
+    threshold: 0.5
+```
+
+All LLM judge evaluators share the same adapter interface:
 session: Order status requires order number
 behaviors:
   - actor: user
@@ -101,22 +215,6 @@ evaluations:
     with:
       orderId: "{{orderId}}"
     ordered: true
-```
-
-### `llm_judge`
-Delegates the judgment to an LLM against a natural-language rubric. Intentionally coarse in v0.1 — no standardized scoring scale or calibration method is defined yet.
-```yaml
-evaluations:
-  - type: llm_judge
-    criteria: "Response clearly states the order is in transit, in a friendly tone, without inventing a delivery date."
-```
-
-### `custom`
-Escape hatch for evaluators not covered above. Implementations define their own `id` namespace.
-```yaml
-evaluations:
-  - type: custom
-    id: my-org.sentiment-positive
 ```
 
 ## Session-level (chain) evaluator types
@@ -212,9 +310,6 @@ Note that listing multiple evaluations directly under a Behavior's `evaluations:
       blocking: true
 ```
 
-## Open questions (deferred to the formal Evaluation Specification)
+## Open questions
 
-- How are `llm_judge` results calibrated or made reproducible across model versions?
-- Should the selector used by chain evaluators support partial/regex matching on `target`, or only exact equality as in v0.1?
-- Precise algorithm for propagating `inconclusive` status through a chain of variable dependencies — v0.1 states the intent, not a formal algorithm.
-- Whether Session-level `evaluations` should be able to reference a specific Behavior by an explicit `id:` field (rather than only by selector) once real documents show selectors are ambiguous in practice.
+- Whether the Sression-level `evaluations` should be able to reference a specific Behavior by an explicit `id:` field (rather than only by selector) once real documents show selectors are ambiguous in practice.

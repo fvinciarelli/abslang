@@ -121,14 +121,32 @@
         "type": {
           "type": "string",
           "enum": [
-            "exact_match", "contains", "regex", "schema", "tool_call", "llm_judge", "custom",
+            "exact_match", "contains", "regex", "schema", "tool_call", "llm_judge",
+            "groundedness", "bias", "toxicity", "custom",
             "sequence", "eventually", "never", "count", "within", "variable_consistency",
             "all_of", "any_of", "none_of"
           ]
         },
         "blocking": {
           "type": "boolean",
-          "description": "If true, failure of this evaluation marks downstream dependent evaluations as inconclusive rather than failed. See EVALUATIONS.md, 'Failure semantics'."
+          "description": "If true, failure of this evaluation marks downstream dependent evaluations as inconclusive rather than failed."
+        },
+        "threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Minimum score for this evaluation to pass. Defaults to 0.5. Applies to evaluators that produce a score (llm_judge, groundedness, bias, toxicity, custom, and composition types)."
+        },
+        "adapter": {
+          "type": "string",
+          "description": "Which LLM judge provider to use (e.g. aievaluator, azure, openai, vertexai). Agnostic — the runner maps this to a configured adapter at execution time."
+        },
+        "dataset": {
+          "description": "Reference data for the evaluator. Can be a UUID string referencing an external dataset registry, an inline array of objects, or a JSONL string."
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Custom prompt template for the evaluator. Variables like {{criteria}}, {{context}}, {{response}} are interpolated by the adapter."
         }
       },
       "allOf": [
@@ -146,6 +164,9 @@
           { "$ref": "#/definitions/evalSchema" },
           { "$ref": "#/definitions/evalToolCall" },
           { "$ref": "#/definitions/evalLlmJudge" },
+          { "$ref": "#/definitions/evalGroundedness" },
+          { "$ref": "#/definitions/evalBias" },
+          { "$ref": "#/definitions/evalToxicity" },
           { "$ref": "#/definitions/evalCustom" },
           { "$ref": "#/definitions/evalSequence" },
           { "$ref": "#/definitions/evalEventually" },
@@ -205,6 +226,38 @@
         "criteria": { "type": "string", "description": "Natural-language rubric for the LLM judge." }
       },
       "required": ["criteria"]
+    },
+
+    "evalGroundedness": {
+      "properties": {
+        "type": { "const": "groundedness" },
+        "context": { "type": "string", "description": "Context or source material to check the response against." },
+        "criteria": { "type": "string", "description": "Optional custom rubric. If omitted, uses a default groundedness prompt." }
+      }
+    },
+
+    "evalBias": {
+      "properties": {
+        "type": { "const": "bias" },
+        "categories": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Bias categories to check (e.g. gender, race, age). If omitted, checks all categories."
+        },
+        "criteria": { "type": "string", "description": "Optional custom rubric." }
+      }
+    },
+
+    "evalToxicity": {
+      "properties": {
+        "type": { "const": "toxicity" },
+        "categories": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Toxicity categories (e.g. hate, harassment, violence). If omitted, checks all."
+        },
+        "criteria": { "type": "string", "description": "Optional custom rubric." }
+      }
     },
 
     "evalCustom": {

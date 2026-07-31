@@ -329,8 +329,17 @@ def evaluate_step(
         return EvalResult(type="tool_call", passed=True, score=1.0, reason="Tool call validated", blocking=blocking)
     elif etype == "llm_judge":
         return EvalResult(type="llm_judge", passed=False, score=0.0,
-                          reason="No LLM judge adapter registered. Use --adapter llm_judge=aievaluator or set AIEVALUATOR_API_KEY.",
+                          reason="No LLM judge adapter registered. Use --adapter llm_judge=<provider>.",
                           blocking=blocking)
+    elif etype == "groundedness":
+        return EvalResult(type="groundedness", passed=False, score=0.0,
+                          reason="No groundedness adapter registered.", blocking=blocking)
+    elif etype == "bias":
+        return EvalResult(type="bias", passed=False, score=0.0,
+                          reason="No bias adapter registered.", blocking=blocking)
+    elif etype == "toxicity":
+        return EvalResult(type="toxicity", passed=False, score=0.0,
+                          reason="No toxicity adapter registered.", blocking=blocking)
     elif etype in ("all_of", "any_of", "none_of"):
         return _evaluate_composition(trace, evaluation, behaviors)
     else:
@@ -345,6 +354,15 @@ def evaluate_step(
 
 def _with_blocking(result: EvalResult, blocking: bool) -> EvalResult:
     result.blocking = blocking
+    return result
+
+
+def apply_threshold(result: EvalResult, evaluation: dict[str, Any]) -> EvalResult:
+    """Apply threshold from evaluation config to a result. Called by the runner."""
+    threshold = evaluation.get("threshold")
+    if threshold is not None and result.score < threshold:
+        result.passed = False
+        result.reason = f"{result.reason} (score {result.score} < threshold {threshold})"
     return result
 
 
@@ -365,11 +383,12 @@ def _evaluate_composition(
     else:
         passed = False
 
+    avg_score = sum(r.score for r in results) / len(results) if results else 0.0
     return EvalResult(
         type=rule["type"],
         passed=passed,
-        score=1.0 if passed else 0.0,
-        reason=f"{sum(1 for r in results if r.passed)}/{len(results)} sub-evaluations passed",
+        score=avg_score,
+        reason=f"{sum(1 for r in results if r.passed)}/{len(results)} sub-evaluations passed (avg score: {avg_score:.2f})",
     )
 
 

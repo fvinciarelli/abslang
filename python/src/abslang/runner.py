@@ -11,6 +11,7 @@ from .evaluators import (
     ObservedStep,
     EvalResult,
     evaluate_step,
+    apply_threshold,
     evaluate_with_adapter,
     matches_selector,
 )
@@ -348,10 +349,10 @@ async def run(session: NormalizedSession, agent_config: AgentConfig) -> RunResul
                         rule["type"], trace, rule,
                     )
                     if adapter_result is not None:
-                        eval_results.append(adapter_result)
+                        eval_results.append(apply_threshold(adapter_result, rule))
                     else:
                         eval_results.append(
-                            evaluate_step(match_observed, rule, session.behaviors, trace)
+                            apply_threshold(evaluate_step(match_observed, rule, session.behaviors, trace), rule)
                         )
 
             step_results.append(StepResult(
@@ -368,10 +369,10 @@ async def run(session: NormalizedSession, agent_config: AgentConfig) -> RunResul
         for rule in session.evaluations:
             adapter_result = await evaluate_with_adapter(rule["type"], trace, rule)
             if adapter_result is not None:
-                chain_evals.append(adapter_result)
+                chain_evals.append(apply_threshold(adapter_result, rule))
             else:
                 chain_evals.append(
-                    evaluate_step(None, rule, session.behaviors, trace)
+                    apply_threshold(evaluate_step(None, rule, session.behaviors, trace), rule)
                 )
 
     all_evals = [e for s in step_results for e in s.evaluations] + chain_evals

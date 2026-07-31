@@ -316,6 +316,20 @@ export function variableConsistency(
   };
 }
 
+// ── Apply threshold ──
+
+function applyThreshold(result: EvalResult, evaluation: any): EvalResult {
+  const threshold = evaluation.threshold;
+  if (threshold !== undefined && result.score < threshold) {
+    return {
+      ...result,
+      passed: false,
+      reason: `${result.reason} (score ${result.score} < threshold ${threshold})`,
+    };
+  }
+  return result;
+}
+
 // ── Step-level evaluator dispatch ──
 
 export function evaluateStep(
@@ -336,28 +350,31 @@ export function evaluateStep(
     case "schema":
       return { ...schema(observed?.content, evaluation), blocking };
     case "sequence":
-      return { ...sequence(trace, evaluation), blocking };
+      return applyThreshold({ ...sequence(trace, evaluation), blocking }, evaluation);
     case "eventually":
-      return { ...eventually(trace, evaluation), blocking };
+      return applyThreshold({ ...eventually(trace, evaluation), blocking }, evaluation);
     case "never":
-      return { ...never(trace, evaluation), blocking };
+      return applyThreshold({ ...never(trace, evaluation), blocking }, evaluation);
     case "count":
-      return { ...count(trace, evaluation), blocking };
+      return applyThreshold({ ...count(trace, evaluation), blocking }, evaluation);
     case "within":
-      return { ...within(trace, evaluation), blocking };
+      return applyThreshold({ ...within(trace, evaluation), blocking }, evaluation);
     case "variable_consistency":
-      return { ...variableConsistency(trace, behaviors, evaluation), blocking };
+      return applyThreshold({ ...variableConsistency(trace, behaviors, evaluation), blocking }, evaluation);
     case "tool_call":
-      // Tool call already matched by step matching (target/with).
-      // Evaluator checks extra properties like ordered.
-      return { type: "tool_call", passed: true, score: 1, reason: "Tool call validated", blocking };
+      return applyThreshold({ type: "tool_call", passed: true, score: 1, reason: "Tool call validated", blocking }, evaluation);
     case "llm_judge":
-      // Should be handled by adapter — if we get here, no adapter was registered
-      return { type: "llm_judge", passed: false, score: 0, reason: "No LLM judge adapter registered. Use --adapter llm_judge=aievaluator or set AIEVALUATOR_API_KEY.", blocking };
+      return applyThreshold({ type: "llm_judge", passed: false, score: 0, reason: "No LLM judge adapter registered. Use --adapter llm_judge=<provider>.", blocking }, evaluation);
+    case "groundedness":
+      return applyThreshold({ type: "groundedness", passed: false, score: 0, reason: "No groundedness adapter registered.", blocking }, evaluation);
+    case "bias":
+      return applyThreshold({ type: "bias", passed: false, score: 0, reason: "No bias adapter registered.", blocking }, evaluation);
+    case "toxicity":
+      return applyThreshold({ type: "toxicity", passed: false, score: 0, reason: "No toxicity adapter registered.", blocking }, evaluation);
     case "all_of":
     case "any_of":
     case "none_of":
-      return evaluateComposition(trace, evaluation, behaviors);
+      return applyThreshold(evaluateComposition(trace, evaluation, behaviors), evaluation);
     default:
       return {
         type: evaluation.type,
@@ -379,6 +396,10 @@ function evaluateComposition(
   );
 
   let passed: boolean;
+  const avgScore = results.length > 0
+    ? results.reduce((sum: number, r: EvalResult) => sum + r.score, 0) / results.length
+    : 0;
+
   switch (rule.type) {
     case "all_of":
       passed = results.every((r: EvalResult) => r.passed);
@@ -396,8 +417,8 @@ function evaluateComposition(
   return {
     type: rule.type,
     passed,
-    score: passed ? 1 : 0,
-    reason: `${results.filter((r: EvalResult) => r.passed).length}/${results.length} sub-evaluations passed`,
+    score: avgScore,
+    reason: `${results.filter((r: EvalResult) => r.passed).length}/${results.length} sub-evaluations passed (avg score: ${avgScore.toFixed(2)})`,
   };
 }
 

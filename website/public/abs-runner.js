@@ -3368,6 +3368,17 @@ function variableConsistency(trace, behaviors, rule) {
     reason: consistent ? `Variable "${rule.variable}" consistent across ${values.length} captures` : `Variable "${rule.variable}" has inconsistent values: ${values.map((v) => JSON.stringify(v)).join(", ")}`
   };
 }
+function applyThreshold(result, evaluation) {
+  const threshold = evaluation.threshold;
+  if (threshold !== void 0 && result.score < threshold) {
+    return {
+      ...result,
+      passed: false,
+      reason: `${result.reason} (score ${result.score} < threshold ${threshold})`
+    };
+  }
+  return result;
+}
 function evaluateStep(observed, evaluation, behaviors, trace) {
   const blocking = evaluation.blocking === true;
   switch (evaluation.type) {
@@ -3380,25 +3391,31 @@ function evaluateStep(observed, evaluation, behaviors, trace) {
     case "schema":
       return { ...schema2(observed?.content, evaluation), blocking };
     case "sequence":
-      return { ...sequence(trace, evaluation), blocking };
+      return applyThreshold({ ...sequence(trace, evaluation), blocking }, evaluation);
     case "eventually":
-      return { ...eventually(trace, evaluation), blocking };
+      return applyThreshold({ ...eventually(trace, evaluation), blocking }, evaluation);
     case "never":
-      return { ...never(trace, evaluation), blocking };
+      return applyThreshold({ ...never(trace, evaluation), blocking }, evaluation);
     case "count":
-      return { ...count(trace, evaluation), blocking };
+      return applyThreshold({ ...count(trace, evaluation), blocking }, evaluation);
     case "within":
-      return { ...within(trace, evaluation), blocking };
+      return applyThreshold({ ...within(trace, evaluation), blocking }, evaluation);
     case "variable_consistency":
-      return { ...variableConsistency(trace, behaviors, evaluation), blocking };
+      return applyThreshold({ ...variableConsistency(trace, behaviors, evaluation), blocking }, evaluation);
     case "tool_call":
-      return { type: "tool_call", passed: true, score: 1, reason: "Tool call validated", blocking };
+      return applyThreshold({ type: "tool_call", passed: true, score: 1, reason: "Tool call validated", blocking }, evaluation);
     case "llm_judge":
-      return { type: "llm_judge", passed: false, score: 0, reason: "No LLM judge adapter registered. Use --adapter llm_judge=aievaluator or set AIEVALUATOR_API_KEY.", blocking };
+      return applyThreshold({ type: "llm_judge", passed: false, score: 0, reason: "No LLM judge adapter registered. Use --adapter llm_judge=<provider>.", blocking }, evaluation);
+    case "groundedness":
+      return applyThreshold({ type: "groundedness", passed: false, score: 0, reason: "No groundedness adapter registered.", blocking }, evaluation);
+    case "bias":
+      return applyThreshold({ type: "bias", passed: false, score: 0, reason: "No bias adapter registered.", blocking }, evaluation);
+    case "toxicity":
+      return applyThreshold({ type: "toxicity", passed: false, score: 0, reason: "No toxicity adapter registered.", blocking }, evaluation);
     case "all_of":
     case "any_of":
     case "none_of":
-      return evaluateComposition(trace, evaluation, behaviors);
+      return applyThreshold(evaluateComposition(trace, evaluation, behaviors), evaluation);
     default:
       return {
         type: evaluation.type,
@@ -3414,6 +3431,7 @@ function evaluateComposition(trace, rule, behaviors) {
     (e) => evaluateStep(null, e, behaviors, trace)
   );
   let passed;
+  const avgScore = results.length > 0 ? results.reduce((sum, r) => sum + r.score, 0) / results.length : 0;
   switch (rule.type) {
     case "all_of":
       passed = results.every((r) => r.passed);
@@ -3430,8 +3448,8 @@ function evaluateComposition(trace, rule, behaviors) {
   return {
     type: rule.type,
     passed,
-    score: passed ? 1 : 0,
-    reason: `${results.filter((r) => r.passed).length}/${results.length} sub-evaluations passed`
+    score: avgScore,
+    reason: `${results.filter((r) => r.passed).length}/${results.length} sub-evaluations passed (avg score: ${avgScore.toFixed(2)})`
   };
 }
 var adapters = {};
