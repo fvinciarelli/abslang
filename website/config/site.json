@@ -22,6 +22,7 @@
           { "label": "Introduction", "href": "/docs" },
           { "label": "Tutorial (QA)", "href": "/docs/tutorial" },
           { "label": "Guide for POs", "href": "/docs/po-guide" },
+          { "label": "Guide for Devs", "href": "/docs/dev-guide" },
           { "label": "Quick Example", "href": "/docs/quick-example" },
           { "label": "Installation", "href": "/docs/installation" }
         ]
