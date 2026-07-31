@@ -230,35 +230,9 @@ async function runSession() {
   );
   fs.writeFileSync(tmpFile, yaml);
 
-  // Try to find the TypeScript CLI from the mono repo layout
-  const possibleCliPaths = [
-    path.join(
-      vscode.extensions.getExtension("fvinciarelli.abs-vscode")
-        ?.extensionPath || "",
-      "..",
-      "..",
-      "typescript",
-      "dist",
-      "cli.js"
-    ),
-    path.join(
-      vscode.extensions.getExtension("fvinciarelli.abs-vscode")
-        ?.extensionPath || "",
-      "..",
-      "typescript",
-      "dist",
-      "cli.js"
-    ),
-  ];
-
-  const cliPath = possibleCliPaths.find((p) => fs.existsSync(p));
-  if (!cliPath) {
-    vscode.window.showErrorMessage(
-      "Cannot find abs CLI. Ensure the typescript/dist/cli.js is built."
-    );
-    fs.unlinkSync(tmpFile);
-    return;
-  }
+  // Find the bundled CLI relative to the extension
+  const extPath = vscode.extensions.getExtension("fvinciarelli.abs-vscode")?.extensionPath || "";
+  const cliPath = path.join(extPath, "dist", "cli.bundle.js");
 
   try {
     const result = execSync(

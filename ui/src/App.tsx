@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import * as yaml from 'js-yaml';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
@@ -15,6 +15,7 @@ import { AddBehaviorBar } from './components/AddBehaviorBar';
 import { BehaviorFlow } from './components/BehaviorFlow';
 import { BehaviorForm } from './components/BehaviorForm';
 import { YAMLPreview } from './components/YAMLPreview';
+import { RunPanel } from './components/RunPanel';
 import { useSession } from './hooks/useSession';
 import { behaviorToYAML, newId } from './types';
 
@@ -213,6 +214,9 @@ export default function App() {
             />
           </Box>
         </Box>
+
+        {/* Run panel — standalone only */}
+        {!IS_VSCODE && <RunPanel session={s.session} />}
       </Box>
 
       {/* Inspector */}
