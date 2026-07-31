@@ -20,6 +20,7 @@
         "heading": "Getting Started",
         "items": [
           { "label": "Introduction", "href": "/docs" },
+          { "label": "Tutorial", "href": "/docs/tutorial" },
           { "label": "Quick Example", "href": "/docs/quick-example" },
           { "label": "Installation", "href": "/docs/installation" }
         ]

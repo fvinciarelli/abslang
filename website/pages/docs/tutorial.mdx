@@ -1,0 +1,222 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: 'Tutorial', description: 'Aprende ABS en 20 minutos. Guía paso a paso para QA.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+Una guía práctica para aprender ABS desde cero. Si sos QA, esta es tu página.
+
+---
+
+## ¿Qué es ABS y por qué te importa?
+
+Imaginá que un dev te dice *"el bot de devoluciones ya está listo, probalo"*. ¿Cómo sabés si está bien? ¿Hizo todo lo que debía? Hoy probablemente tenés un documento con casos de prueba y hacés todo a mano.
+
+ABS reemplaza eso: **un archivo YAML que describe qué debe hacer el agente, y que se ejecuta como test automático.**
+
+En una sesión de 3 amigos (QA + Dev + PO), este archivo es lo que los tres leen, debaten y firman. Un solo artefacto, tres usos.
+
+---
+
+## Estructura básica
+
+Un archivo ABS describe una conversación:
+
+```yaml
+session: Un usuario pide el estado de su pedido
+behaviors:
+  - actor: user
+    action: says
+    content: "¿Dónde está mi pedido #8291?"
+  - actor: assistant
+    action: calls
+    target: Orders API
+  - actor: assistant
+    action: informs
+    content: "Tu pedido está en camino"
+```
+
+Tres campos por paso: `actor` (quién), `action` (qué hace), `content`/`target` (detalles).
+
+---
+
+## Escribamos una spec: devolución por producto dañado
+
+Historia del PO: *"Un cliente reporta un producto dañado. El bot verifica, procesa la devolución e informa."*
+
+### Paso 1: La conversación
+
+```yaml
+session: Devolución por producto dañado
+behaviors:
+  - actor: user
+    action: says
+    content: "Recibí dañado el pedido #8291, quiero devolverlo"
+
+  - actor: assistant
+    action: asks
+    content: "Lamento lo del daño. ¿Me confirmás tu nombre y fecha del pedido?"
+
+  - actor: user
+    action: says
+    content: "Franco Vinciarelli, lo pedí el martes pasado"
+
+  - actor: assistant
+    action: calls
+    target: Orders API
+    with:
+      orderId: "8291"
+
+  - actor: tool
+    action: responds
+    target: Orders API
+    content:
+      orderId: "8291"
+      status: "delivered"
+      eligibleForRefund: true
+
+  - actor: assistant
+    action: calls
+    target: Refunds API
+    with:
+      orderId: "8291"
+      reason: "damaged"
+
+  - actor: tool
+    action: responds
+    target: Refunds API
+    content:
+      refundId: "R-5512"
+      amount: 47.50
+      status: "processed"
+
+  - actor: assistant
+    action: informs
+    content: "Devolución de €47.50 procesada, Franco. La recibirás en 3-5 días. Referencia: R-5512."
+```
+
+Hasta acá, el PO lo entiende y el dev sabe qué construir.
+
+### Paso 2: Verificaciones en pasos clave
+
+Dos momentos críticos: cuando el bot pide verificación y cuando informa el resultado.
+
+```yaml
+  - actor: assistant
+    action: asks
+    evaluations:
+      - type: llm_judge
+        criteria: |
+          1. Muestra empatía por el producto dañado
+          2. Hace referencia al número de pedido #8291
+          3. Pide datos de verificación antes de actuar
+
+  # ... más adelante ...
+  - actor: assistant
+    action: informs
+    evaluations:
+      - type: contains
+        value: "R-5512"              # hecho concreto
+      - type: llm_judge
+        criteria: |                   # cualidades blandas
+          1. Indica monto y plazo
+          2. Proporciona la referencia
+          3. Usa el nombre del cliente
+          4. Tono tranquilizador, sin upsells
+```
+
+### Paso 3: Verificaciones sobre toda la conversación
+
+```yaml
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: asks }
+      - { actor: assistant, action: calls, target: "Orders API" }
+      - { actor: assistant, action: calls, target: "Refunds API" }
+      - { actor: assistant, action: informs }
+
+  - type: variable_consistency
+    variable: refundId
+
+  - type: never
+    match: { actor: assistant, action: hands_off }
+```
+
+`sequence` verifica orden. `variable_consistency` atrapa IDs que cambian misteriosamente. `never` es un guarda: este flujo no debe escalar a humano.
+
+---
+
+## Cómo se ejecuta
+
+### Navegador
+
+Andá al **[ABS Designer](/abs-designer/)**, pegá tu YAML, poné la URL del agente, ▶ Run.
+
+### Terminal
+
+```bash
+abs run sesion.abs.yaml --agent http://localhost:8080/chat
+```
+
+### VSCode
+
+Abrí `.abs.yaml`, el panel del editor se abre. Editá y ejecutá con ▶ Run.
+
+---
+
+## Vocabulario de acciones
+
+| Categoría | Acciones |
+|---|---|
+| Comunicación | `says`, `asks`, `informs`, `greets`, `clarifies`, `confirms`, `rejects`, `suggests`, `shows` |
+| Ejecución | `calls`, `submits`, `retrieves`, `stores`, `updates` |
+| Interacción | `selects`, `uploads`, `approves` |
+| Delegación | `hands_off` |
+
+---
+
+## Tipos de evaluación
+
+| Evaluador | Para qué |
+|---|---|
+| `contains` | El texto incluye X |
+| `exact_match` | El texto es exactamente X |
+| `regex` | El texto matchea un patrón |
+| `schema` | El payload cumple un JSON Schema |
+| `llm_judge` | Criterios cualitativos (tono, empatía) |
+| `sequence` | Varios pasos en orden |
+| `eventually` | Algo ocurre al menos una vez |
+| `never` | Algo NUNCA ocurre |
+| `count` | Algo ocurre N veces |
+| `within` | Algo ocurre dentro de N pasos de otra cosa |
+| `variable_consistency` | Un valor no cambia durante la sesión |
+
+---
+
+## La sesión de 3 amigos
+
+**15 min — Escribir la secuencia.** Los tres describen la conversación ideal. Sin evaluaciones.
+
+**15 min — Agregar verificaciones.** QA pregunta *"¿qué podría salir mal?"* y *"¿cómo verificamos esto?"*.
+
+**15 min — Verificaciones globales.** *"¿Qué debe ser verdad sobre toda la conversación?"* → sequence, never.
+
+**15 min — Revisar y firmar.** Un archivo. Tres perspectivas. Listo.
+
+---
+
+## Errores comunes
+
+| Error | Corrección |
+|---|---|
+| *"Puse `says` pero era un llamado a API"* | `calls` + `target` para APIs. `says` para hablar. |
+| *"El sequence falla pero los pasos están"* | `sequence` pide orden relativo, no adyacencia. |
+| *"Quiero un IF en la conversación"* | v0.1 no tiene branching. Dos caminos = dos sesiones. |
+| *"Mi llm_judge es inconsistente"* | Criterios vagos → resultados inconsistentes. Sé específico. |
+
+---
+
+👉 El tutorial completo paso a paso está en [TUTORIAL.md](https://github.com/fvinciarelli/abs/blob/main/TUTORIAL.md).
+
+</DocsLayout>
