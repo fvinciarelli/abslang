@@ -20,7 +20,8 @@
         "heading": "Getting Started",
         "items": [
           { "label": "Introduction", "href": "/docs" },
-          { "label": "Tutorial", "href": "/docs/tutorial" },
+          { "label": "Tutorial (QA)", "href": "/docs/tutorial" },
+          { "label": "Guide for POs", "href": "/docs/po-guide" },
           { "label": "Quick Example", "href": "/docs/quick-example" },
           { "label": "Installation", "href": "/docs/installation" }
         ]

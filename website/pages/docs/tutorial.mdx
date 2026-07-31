@@ -1,72 +1,64 @@
 import DocsLayout from '@/components/layout/DocsLayout';
 
-export const frontmatter = { title: 'Tutorial', description: 'Aprende ABS en 20 minutos. Guía paso a paso para QA.' };
+export const frontmatter = { title: 'Tutorial', description: 'Learn ABS in 20 minutes. Step-by-step guide for QA.' };
 
 <DocsLayout frontmatter={frontmatter}>
 
-Una guía práctica para aprender ABS desde cero. Si sos QA, esta es tu página.
+A hands-on guide to ABS from zero. If you're QA, start here.
 
 ---
 
-## ¿Qué es ABS y por qué te importa?
+## What ABS is and why it matters
 
-Imaginá que un dev te dice *"el bot de devoluciones ya está listo, probalo"*. ¿Cómo sabés si está bien? ¿Hizo todo lo que debía? Hoy probablemente tenés un documento con casos de prueba y hacés todo a mano.
+A dev tells you *"the refund bot is ready, test it."* How do you know it's correct? Today you probably have test cases in a doc and you run through them manually. ABS replaces that: **one YAML file that describes behavior and runs as an automated test.**
 
-ABS reemplaza eso: **un archivo YAML que describe qué debe hacer el agente, y que se ejecuta como test automático.**
-
-En una sesión de 3 amigos (QA + Dev + PO), este archivo es lo que los tres leen, debaten y firman. Un solo artefacto, tres usos.
+In a Three Amigos session, this is the artifact QA, Dev, and PO all sign off on.
 
 ---
 
-## Estructura básica
-
-Un archivo ABS describe una conversación:
+## Basic structure
 
 ```yaml
-session: Un usuario pide el estado de su pedido
+session: Customer checks order status
 behaviors:
   - actor: user
     action: says
-    content: "¿Dónde está mi pedido #8291?"
+    content: "Where is my order #8291?"
   - actor: assistant
     action: calls
     target: Orders API
   - actor: assistant
     action: informs
-    content: "Tu pedido está en camino"
+    content: "Your order is on the way"
 ```
 
-Tres campos por paso: `actor` (quién), `action` (qué hace), `content`/`target` (detalles).
+Three fields per step: `actor` (who), `action` (what they do), `content`/`target` (details).
 
 ---
 
-## Escribamos una spec: devolución por producto dañado
+## A real example: refund for damaged item
 
-Historia del PO: *"Un cliente reporta un producto dañado. El bot verifica, procesa la devolución e informa."*
+PO story: *"Customer reports damaged item. Agent verifies, processes refund, informs."*
 
-### Paso 1: La conversación
+### Step 1: The conversation
 
 ```yaml
-session: Devolución por producto dañado
+session: Refund — damaged item
 behaviors:
   - actor: user
     action: says
-    content: "Recibí dañado el pedido #8291, quiero devolverlo"
-
+    content: "I received order #8291 damaged, I want to return it"
   - actor: assistant
     action: asks
-    content: "Lamento lo del daño. ¿Me confirmás tu nombre y fecha del pedido?"
-
+    content: "I'm sorry about the damage. Can you confirm your name and order date?"
   - actor: user
     action: says
-    content: "Franco Vinciarelli, lo pedí el martes pasado"
-
+    content: "Franco Vinciarelli, ordered last Tuesday"
   - actor: assistant
     action: calls
     target: Orders API
     with:
       orderId: "8291"
-
   - actor: tool
     action: responds
     target: Orders API
@@ -74,14 +66,12 @@ behaviors:
       orderId: "8291"
       status: "delivered"
       eligibleForRefund: true
-
   - actor: assistant
     action: calls
     target: Refunds API
     with:
       orderId: "8291"
       reason: "damaged"
-
   - actor: tool
     action: responds
     target: Refunds API
@@ -89,17 +79,16 @@ behaviors:
       refundId: "R-5512"
       amount: 47.50
       status: "processed"
-
   - actor: assistant
     action: informs
-    content: "Devolución de €47.50 procesada, Franco. La recibirás en 3-5 días. Referencia: R-5512."
+    content: "Refund of €47.50 processed, Franco. You'll receive it in 3-5 days. Reference: R-5512."
 ```
 
-Hasta acá, el PO lo entiende y el dev sabe qué construir.
+PO understands it. Dev knows what to build.
 
-### Paso 2: Verificaciones en pasos clave
+### Step 2: Step-level evaluations
 
-Dos momentos críticos: cuando el bot pide verificación y cuando informa el resultado.
+Two critical moments: the agent asks for verification, and the agent delivers the result.
 
 ```yaml
   - actor: assistant
@@ -107,25 +96,24 @@ Dos momentos críticos: cuando el bot pide verificación y cuando informa el res
     evaluations:
       - type: llm_judge
         criteria: |
-          1. Muestra empatía por el producto dañado
-          2. Hace referencia al número de pedido #8291
-          3. Pide datos de verificación antes de actuar
+          1. Shows empathy for the damaged item
+          2. References the order number #8291
+          3. Asks for verification info before taking action
 
-  # ... más adelante ...
   - actor: assistant
     action: informs
     evaluations:
       - type: contains
-        value: "R-5512"              # hecho concreto
+        value: "R-5512"              # hard fact
       - type: llm_judge
-        criteria: |                   # cualidades blandas
-          1. Indica monto y plazo
-          2. Proporciona la referencia
-          3. Usa el nombre del cliente
-          4. Tono tranquilizador, sin upsells
+        criteria: |                   # soft qualities
+          1. States amount and timeline
+          2. Provides refund reference
+          3. Uses customer's name
+          4. Reassuring tone, no upsells
 ```
 
-### Paso 3: Verificaciones sobre toda la conversación
+### Step 3: Chain evaluations
 
 ```yaml
 evaluations:
@@ -143,80 +131,68 @@ evaluations:
     match: { actor: assistant, action: hands_off }
 ```
 
-`sequence` verifica orden. `variable_consistency` atrapa IDs que cambian misteriosamente. `never` es un guarda: este flujo no debe escalar a humano.
+`sequence` checks ordering. `variable_consistency` catches ID drift. `never` is a safety guard.
 
 ---
 
-## Cómo se ejecuta
+## How to run it
 
-### Navegador
+**Browser:** [ABS Designer](/abs-designer/) — paste YAML, enter agent URL, ▶ Run.
 
-Andá al **[ABS Designer](/abs-designer/)**, pegá tu YAML, poné la URL del agente, ▶ Run.
+**Terminal:** `abs run session.abs.yaml --agent http://localhost:8080/chat`
 
-### Terminal
-
-```bash
-abs run sesion.abs.yaml --agent http://localhost:8080/chat
-```
-
-### VSCode
-
-Abrí `.abs.yaml`, el panel del editor se abre. Editá y ejecutá con ▶ Run.
+**VSCode:** Open `.abs.yaml`, editor panel opens. ▶ Run.
 
 ---
 
-## Vocabulario de acciones
+## Action vocabulary
 
-| Categoría | Acciones |
+| Category | Actions |
 |---|---|
-| Comunicación | `says`, `asks`, `informs`, `greets`, `clarifies`, `confirms`, `rejects`, `suggests`, `shows` |
-| Ejecución | `calls`, `submits`, `retrieves`, `stores`, `updates` |
-| Interacción | `selects`, `uploads`, `approves` |
-| Delegación | `hands_off` |
+| Communication | `says`, `asks`, `informs`, `greets`, `clarifies`, `confirms`, `rejects`, `suggests`, `shows` |
+| Execution | `calls`, `submits`, `retrieves`, `stores`, `updates` |
+| Interaction | `selects`, `uploads`, `approves` |
+| Delegation | `hands_off` |
 
 ---
 
-## Tipos de evaluación
+## Evaluation types
 
-| Evaluador | Para qué |
+| Evaluator | What it checks |
 |---|---|
-| `contains` | El texto incluye X |
-| `exact_match` | El texto es exactamente X |
-| `regex` | El texto matchea un patrón |
-| `schema` | El payload cumple un JSON Schema |
-| `llm_judge` | Criterios cualitativos (tono, empatía) |
-| `sequence` | Varios pasos en orden |
-| `eventually` | Algo ocurre al menos una vez |
-| `never` | Algo NUNCA ocurre |
-| `count` | Algo ocurre N veces |
-| `within` | Algo ocurre dentro de N pasos de otra cosa |
-| `variable_consistency` | Un valor no cambia durante la sesión |
+| `contains` | Text includes substring |
+| `exact_match` | Text equals exactly |
+| `regex` | Text matches pattern |
+| `schema` | Payload validates against JSON Schema |
+| `llm_judge` | Qualitative criteria (tone, empathy) |
+| `sequence` | Steps in order |
+| `eventually` | Something happens at least once |
+| `never` | Something NEVER happens |
+| `count` | Something happens N times |
+| `within` | A happens within N steps of B |
+| `variable_consistency` | A value stays unchanged |
 
 ---
 
-## La sesión de 3 amigos
+## The Three Amigos session
 
-**15 min — Escribir la secuencia.** Los tres describen la conversación ideal. Sin evaluaciones.
+**15 min** — Write the sequence. No evaluations.
 
-**15 min — Agregar verificaciones.** QA pregunta *"¿qué podría salir mal?"* y *"¿cómo verificamos esto?"*.
+**15 min** — Add step evaluations. *"What could go wrong? How do we verify?"*
 
-**15 min — Verificaciones globales.** *"¿Qué debe ser verdad sobre toda la conversación?"* → sequence, never.
+**15 min** — Add chain evaluations. *"What must be true about the whole trace?"*
 
-**15 min — Revisar y firmar.** Un archivo. Tres perspectivas. Listo.
+**15 min** — Review and sign off. One file, three perspectives.
 
 ---
 
-## Errores comunes
+## Common mistakes
 
-| Error | Corrección |
+| Mistake | Fix |
 |---|---|
-| *"Puse `says` pero era un llamado a API"* | `calls` + `target` para APIs. `says` para hablar. |
-| *"El sequence falla pero los pasos están"* | `sequence` pide orden relativo, no adyacencia. |
-| *"Quiero un IF en la conversación"* | v0.1 no tiene branching. Dos caminos = dos sesiones. |
-| *"Mi llm_judge es inconsistente"* | Criterios vagos → resultados inconsistentes. Sé específico. |
-
----
-
-👉 El tutorial completo paso a paso está en [TUTORIAL.md](https://github.com/fvinciarelli/abs/blob/main/TUTORIAL.md).
+| Used `says` for an API call | Use `calls` + `target` |
+| `sequence` fails but steps are there | It checks relative order, not adjacency |
+| Want branching inside a session | v0.1: one path = one session |
+| `llm_judge` inconsistent | Be specific in criteria |
 
 </DocsLayout>

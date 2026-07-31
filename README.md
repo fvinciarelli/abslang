@@ -105,6 +105,7 @@ This single file describes the full interaction and verifies it automatically.
 | Document | Purpose |
 |---|---|
 | [TUTORIAL.md](./TUTORIAL.md) | Step-by-step guide for QA — learn ABS in 20 minutes |
+| [PO-GUIDE.md](./PO-GUIDE.md) | Guide for Product Owners — specify behavior without code |
 | [MANIFESTO.md](./MANIFESTO.md) | Why ABS exists, principles, what it is and isn't |
 | [SPECIFICATION.md](./SPECIFICATION.md) | Formal v0.1 spec — document format, conformance |
 | [CORE_MODEL.md](./CORE_MODEL.md) | Session, Behavior, Actor, Action, Target, Content, Variables, Evaluations |

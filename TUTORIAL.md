@@ -1,29 +1,29 @@
-# Tutorial ABS para QA
+# ABS Tutorial for QA
 
-> Una guía paso a paso para escribir especificaciones de agente que todos entienden y que además se ejecutan como tests.
-
----
-
-## ¿Qué es ABS y por qué te importa?
-
-Imaginá esto: llega un desarrollador y te dice *"el bot de devoluciones ya está listo, probalo"*. Vos abrís el chat, escribís *"quiero devolver un producto"*, y el bot te responde. ¿Está bien? ¿Hizo todo lo que debía? ¿Se saltó algún paso?
-
-Hoy probablemente tenés un documento de Word con una lista de "casos de prueba" y hacés todo a mano. ABS reemplaza eso: **un archivo YAML que describe qué debe hacer el agente, y que además podés ejecutar como test automático.**
-
-En una sesión de 3 amigos (QA + Dev + PO), este archivo es el artefacto que los tres leen, debaten y firman. El dev lo usa para saber qué construir. El PO para entender qué hace el producto. Vos para saber exactamente qué verificar.
+> A step-by-step guide to writing agent specifications that everyone understands — and that run as automated tests.
 
 ---
 
-## Primeros 5 minutos: entendé la estructura
+## What ABS is and why you should care
 
-Un archivo ABS describe una **conversación**. Tiene dos partes: quién habla y qué hace.
+A developer tells you *"the refund bot is ready, test it."* You open the chat, type *"I want to return an item,"* and the bot replies. Is it correct? Did it do everything it should? Did it skip a step?
+
+Right now you probably have a Word doc with test cases and you run through them manually. ABS replaces that: **a single YAML file that describes what the agent should do, and can be executed as an automated test.**
+
+In a Three Amigos session (QA + Dev + PO), this file is the artifact all three of you read, debate, and sign off on. Dev uses it to know what to build. PO reads it as a behavioral contract. You use it to know exactly what to verify.
+
+---
+
+## First 5 minutes: the structure
+
+An ABS document describes a **conversation**. It has two parts per step: who is speaking and what they're doing.
 
 ```yaml
-session: Un usuario pide el estado de su pedido
+session: Customer checks order status
 behaviors:
   - actor: user
     action: says
-    content: "¿Dónde está mi pedido #8291?"
+    content: "Where is my order #8291?"
 
   - actor: assistant
     action: calls
@@ -31,49 +31,44 @@ behaviors:
 
   - actor: assistant
     action: informs
-    content: "Tu pedido está en camino"
+    content: "Your order is on the way"
 ```
 
-Eso es todo. Tres líneas por paso. `actor` es quién (`user`, `assistant`, `tool`), `action` es qué hace (`says`, `calls`, `informs`, `asks`...), y `content` es el texto o datos.
+That's it. Three fields per step. `actor` is who (`user`, `assistant`, `tool`), `action` is what they do (`says`, `calls`, `informs`, `asks`...), and `content` or `target` is the details.
 
 ---
 
-## Manos a la obra: especifiquemos una devolución
+## A real example: refund for damaged item
 
-Vamos a escribir la spec de un bot que procesa devoluciones. Esta es la historia que nos pasó el PO:
+Here's the user story from your PO:
 
-> *"Un cliente dice que recibió dañado el producto. El bot le pide que confirme nombre y fecha. Después verifica en el sistema de órdenes si el pedido existe y es elegible para devolución. Si todo está bien, procesa la devolución y le dice al cliente cuánto le devuelven y cuándo."*
+> *"A customer reports a damaged item. The agent asks them to confirm their name and order date. Then it checks the Orders API to verify the order exists and is eligible for refund. If everything checks out, it processes the refund and tells the customer the amount and when they'll receive it."*
 
-### Paso 1: Escribimos la conversación, sin evaluaciones
+### Step 1: Write the conversation — no evaluations yet
 
-Primero describimos lo que debería pasar, paso a paso. Nada de assertions todavía — solo la secuencia:
+First, describe what should happen, step by step. No assertions — just the sequence:
 
 ```yaml
-session: Devolución por producto dañado
+session: Refund — damaged item
 behaviors:
-  # El cliente inicia
   - actor: user
     action: says
-    content: "Recibí dañado el pedido #8291, quiero devolverlo"
+    content: "I received order #8291 damaged, I want to return it"
 
-  # El bot pide verificación antes de hacer nada
   - actor: assistant
     action: asks
-    content: "Lamento lo del daño. ¿Me confirmás tu nombre y la fecha del pedido?"
+    content: "I'm sorry about the damage. Can you confirm your name and order date?"
 
-  # El cliente responde
   - actor: user
     action: says
-    content: "Franco Vinciarelli, lo pedí el martes pasado"
+    content: "Franco Vinciarelli, ordered last Tuesday"
 
-  # El bot verifica contra la API de órdenes
   - actor: assistant
     action: calls
     target: Orders API
     with:
       orderId: "8291"
 
-  # La API responde
   - actor: tool
     action: responds
     target: Orders API
@@ -82,7 +77,6 @@ behaviors:
       status: "delivered"
       eligibleForRefund: true
 
-  # El bot procesa la devolución
   - actor: assistant
     action: calls
     target: Refunds API
@@ -90,7 +84,6 @@ behaviors:
       orderId: "8291"
       reason: "damaged"
 
-  # La API de devoluciones responde
   - actor: tool
     action: responds
     target: Refunds API
@@ -99,61 +92,58 @@ behaviors:
       amount: 47.50
       status: "processed"
 
-  # El bot le informa al cliente
   - actor: assistant
     action: informs
-    content: "Devolución de €47.50 procesada, Franco. La recibirás en 3-5 días. Referencia: R-5512."
+    content: "Refund of €47.50 processed, Franco. You'll receive it in 3-5 days. Reference: R-5512."
 ```
 
-En este punto, ya tenemos algo que el PO puede leer y entender. El dev ve qué APIs llamar y con qué parámetros. Pero vos, como QA, necesitás más — necesitás poder verificar que el bot realmente hizo todo esto bien.
+At this point, your PO can read and understand the flow. Your dev can see which APIs to call and with what parameters. But you, as QA, need more — you need to verify the agent actually did all of this correctly.
 
-### Paso 2: Agregamos verificaciones en los pasos clave
+### Step 2: Add evaluations on the critical steps
 
-Hay dos momentos críticos en esta conversación: cuando el bot pide verificación (¿fue empático? ¿pidió los datos correctos?) y cuando informa el resultado (¿dio todos los datos? ¿no inventó nada?). 
+There are two moments that matter most: when the agent asks for verification (was it empathetic? did it ask for the right info?), and when it delivers the result (did it include all the facts? did it hallucinate anything?). 
 
-Agreguemos `evaluations` en esos puntos:
+Add `evaluations` at these points:
 
 ```yaml
-  # El bot pide verificación — evaluamos con LLM
   - actor: assistant
     action: asks
-    content: "Lamento lo del daño. ¿Me confirmás tu nombre y la fecha del pedido?"
+    content: "I'm sorry about the damage. Can you confirm your name and order date?"
     evaluations:
       - type: llm_judge
         criteria: |
-          1. Muestra empatía por el producto dañado
-          2. Hace referencia al número de pedido #8291
-          3. Pide los datos de verificación antes de actuar
+          1. Shows empathy for the damaged item
+          2. References the order number #8291
+          3. Asks for verification info before taking action
 ```
 
-Esto usa un LLM (el mismo que usa el bot u otro) para evaluar si la respuesta cumple los criterios. No es un "contiene la palabra X" — es un juicio cualitativo. Para cosas factuales, usamos evaluadores exactos:
+This uses an LLM to judge whether the response meets the criteria. For hard facts, use exact evaluators instead:
 
 ```yaml
-  # El bot informa el resultado — mezclamos verificaciones duras y blandas
   - actor: assistant
     action: informs
-    content: "Devolución de €47.50 procesada, Franco. La recibirás en 3-5 días. Referencia: R-5512."
+    content: "Refund of €47.50 processed, Franco. You'll receive it in 3-5 days. Reference: R-5512."
     evaluations:
-      # Hecho concreto: el ID de devolución TIENE que aparecer
+      # Hard fact: the refund ID MUST appear
       - type: contains
         value: "R-5512"
 
-      # Cualidades blandas: tono, completitud, lo evaluamos con LLM
+      # Soft qualities: tone, completeness — use LLM
       - type: llm_judge
         criteria: |
-          1. Indica el monto (€47.50) y el plazo (3-5 días)
-          2. Proporciona la referencia R-5512
-          3. Usa el nombre del cliente (Franco)
-          4. Tono tranquilizador, sin upsells ni desvíos
+          1. States the amount (€47.50) and timeline (3-5 days)
+          2. Provides the refund reference R-5512
+          3. Uses the customer's name (Franco)
+          4. Reassuring tone, no upsells or deflections
 ```
 
-### Paso 3: Verificaciones sobre TODA la conversación
+### Step 3: Whole-conversation evaluations
 
-Además de verificar cada paso, nos interesa verificar propiedades de la conversación completa. Esto se pone en un bloque `evaluations` al final del archivo, al mismo nivel que `behaviors`:
+Beyond checking individual steps, you want to check properties of the entire trace. These go in a top-level `evaluations` block, sibling to `behaviors`:
 
 ```yaml
 evaluations:
-  # Los 4 pasos del asistente DEBEN ocurrir en este orden exacto
+  # The 4 assistant actions MUST happen in this relative order
   - type: sequence
     order:
       - { actor: assistant, action: asks }
@@ -161,103 +151,103 @@ evaluations:
       - { actor: assistant, action: calls, target: "Refunds API" }
       - { actor: assistant, action: informs }
 
-  # El ID de devolución debe ser el mismo en toda la conversación
+  # The refund ID must be the same everywhere it appears
   - type: variable_consistency
     variable: refundId
 
-  # NUNCA debe derivar a un humano — este flujo se resuelve automático
+  # Must NEVER escalate to a human — this flow resolves automatically
   - type: never
     match: { actor: assistant, action: hands_off }
 ```
 
-Esto es lo que hace que ABS sea distinto a un script de pruebas tradicional. `sequence` verifica que los pasos críticos ocurran en orden. `variable_consistency` atrapa un bug sútil: que el bot diga "R-5512" al principio pero "R-5513" al final. `never` es un guarda de seguridad: si este flujo deriva a un humano, algo salió mal.
+This is where ABS earns its keep over manual test scripts. `sequence` checks ordering without you having to trace through step numbers. `variable_consistency` catches a subtle bug: the agent saying "R-5512" early but "R-5513" later. `never` is a safety guard: if this flow hands off to a human, something went wrong.
 
 ---
 
-## El archivo completo
+## The complete file
 
-Juntando todo, el archivo final tiene ~70 líneas. El PO entiende la conversación. El dev sabe qué construir. Vos tenés 7 verificaciones automatizadas. Todo en un solo archivo.
+Putting it all together, the file is about 70 lines. PO understands the conversation. Dev knows what to build. You have 7 automated checks. One file.
 
-> 👉 El archivo completo está en [`examples/refund-request.yaml`](examples/refund-request.yaml)
+> 👉 Full file at [`examples/refund-request.yaml`](examples/refund-request.yaml)
 
 ---
 
-## Cómo se ejecuta
+## How to run it
 
-Hay tres formas, de más simple a más integrada:
+Three ways, simplest to most integrated:
 
-### 1. Navegador — sin instalar nada
+### 1. Browser — zero install
 
-Andá a la [web de ABS](/abs-designer/), pegá tu YAML, poné la URL de tu agente y dale ▶ Run. Resultados en pantalla.
+Go to the **[ABS Designer](/abs-designer/)**, paste your YAML, enter your agent URL, hit ▶ Run. Results appear inline.
 
 ### 2. Terminal
 
 ```bash
-abs run mi-sesion.abs.yaml --agent http://localhost:8080/chat
+abs run session.abs.yaml --agent http://localhost:8080/chat
 ```
 
-Te dice paso por paso qué matcheó, qué falló, y por qué.
+Prints step-by-step: what matched, what failed, and why.
 
 ### 3. VSCode
 
-Abrí cualquier `.abs.yaml`, el panel del editor se abre solo. Editás visualmente y ejecutás con ▶ Run.
+Open any `.abs.yaml` — the editor panel opens automatically. Edit visually, run with ▶ Run.
 
 ---
 
-## Vocabulario rápido: las acciones que existen
+## Action vocabulary cheat sheet
 
-| Categoría | Acciones | Cuándo usarlas |
+| Category | Actions | When to use |
 |---|---|---|
-| **Comunicación** | `says`, `asks`, `informs`, `greets`, `clarifies`, `confirms`, `rejects`, `suggests`, `shows` | El bot o el usuario hablan |
-| **Ejecución** | `calls`, `submits`, `retrieves`, `stores`, `updates` | El bot invoca herramientas o APIs |
-| **Interacción** | `selects`, `uploads`, `approves` | El usuario interactúa con UI |
-| **Delegación** | `hands_off` | El bot transfiere a un humano |
+| **Communication** | `says`, `asks`, `informs`, `greets`, `clarifies`, `confirms`, `rejects`, `suggests`, `shows` | Agent or user speaks |
+| **Execution** | `calls`, `submits`, `retrieves`, `stores`, `updates` | Agent invokes tools or APIs |
+| **Interaction** | `selects`, `uploads`, `approves` | User interacts with UI |
+| **Delegation** | `hands_off` | Agent transfers to a human |
 
 ---
 
-## Tipos de evaluación: cuándo usar cada uno
+## Evaluation types: when to use each
 
-| Evaluador | ¿Qué verifica? | ¿Cuándo? |
+| Evaluator | What it checks | When |
 |---|---|---|
-| `contains` | El texto contiene una subcadena | Hechos concretos: IDs, montos, nombres |
-| `exact_match` | El texto es exactamente igual | Respuestas determinísticas |
-| `regex` | El texto matchea un patrón | Formatos: emails, fechas, códigos |
-| `schema` | El contenido cumple un JSON Schema | Respuestas de APIs |
-| `llm_judge` | Criterios cualitativos en lenguaje natural | Tono, empatía, completitud |
-| `sequence` | Varios pasos ocurren en orden | Flujos multi-step |
-| `eventually` | Algo ocurre al menos una vez | "El bot debe confirmar en algún momento" |
-| `never` | Algo NUNCA ocurre | Guardas de seguridad |
-| `count` | Algo ocurre N veces | "Exactamente 2 llamadas a la API" |
-| `within` | Algo ocurre dentro de N pasos de otra cosa | "Responde en menos de 3 pasos" |
-| `variable_consistency` | Una variable capturada no cambia de valor | IDs, nombres |
-| `all_of` / `any_of` / `none_of` | Combina evaluadores | Lógica booleana |
+| `contains` | Text includes a substring | Hard facts: IDs, amounts, names |
+| `exact_match` | Text equals exactly | Deterministic responses |
+| `regex` | Text matches a pattern | Formats: emails, dates, codes |
+| `schema` | Content validates against JSON Schema | API responses |
+| `llm_judge` | Qualitative criteria in natural language | Tone, empathy, completeness |
+| `sequence` | Multiple steps occur in order | Multi-step flows |
+| `eventually` | Something happens at least once | "Must confirm at some point" |
+| `never` | Something NEVER happens | Safety guards |
+| `count` | Something happens N times | "Exactly 2 API calls" |
+| `within` | A happens within N steps of B | "Responds within 3 steps" |
+| `variable_consistency` | A captured value stays unchanged | IDs, names |
+| `all_of` / `any_of` / `none_of` | Combine evaluators | Boolean logic |
 
 ---
 
-## La sesión de 3 amigos: cómo usamos ABS
+## The Three Amigos session
 
-**Antes de la sesión:** el PO escribe la historia de usuario. Nada de ABS todavía.
+**Before the session:** PO writes the user story. No ABS yet.
 
-**Durante la sesión (60-90 minutos):**
+**During the session (60-90 minutes):**
 
-1. **15 min — Escribir la secuencia.** Entre los tres describen la conversación ideal. Solo `actor`, `action`, `content`. Sin evaluaciones. Esto lo entienden todos.
+1. **15 min — Write the sequence.** The three of you describe the ideal conversation. Just `actor`, `action`, `content`. No evaluations yet.
 
-2. **15 min — Agregar verificaciones.** Vos (QA) preguntás: *"¿Qué podría salir mal acá?"* y *"¿Cómo sabemos que el bot hizo esto bien?"*. De esa conversación salen los `evaluations` en los pasos clave.
+2. **15 min — Add step evaluations.** You (QA) ask: *"What could go wrong here?"* and *"How do we know the agent did this right?"* Those questions become `evaluations` on the key steps.
 
-3. **15 min — Verificaciones de la conversación completa.** *"¿Qué tiene que ser verdad sobre TODA la conversación?"* De ahí salen los `sequence`, `never`, `variable_consistency`.
+3. **15 min — Add chain evaluations.** *"What must be true about the ENTIRE conversation?"* That's where `sequence`, `never`, `variable_consistency` come from.
 
-4. **15 min — Revisar y firmar.** Los tres leen el archivo completo. ¿Falta algo? ¿Sobra algo? Es el momento de ajustar.
+4. **15 min — Review and sign off.** All three read the full file. Anything missing? Anything unnecessary? This is the moment to refine.
 
-**Después de la sesión:** el dev tiene la spec para construir. Vos tenés la spec para probar. El PO tiene la spec como documento de qué hace el producto. Un solo archivo, tres usos.
+**After the session:** Dev has the spec to build against. You have the spec to test against. PO has the spec as a behavioral contract. One file, three uses.
 
 ---
 
-## Errores comunes (y cómo evitarlos)
+## Common mistakes
 
-| Error | Corrección |
+| Mistake | Fix |
 |---|---|
-| *"Puse `says` pero el bot estaba llamando una API"* | `calls` + `target` es para APIs. `says`/`informs`/`asks` es para hablar. |
-| *"El sequence falla pero los pasos están"* | `sequence` pide orden relativo, no adyacencia. Si A está antes que B, matchea aunque haya pasos en el medio. |
-| *"Quiero poner un IF en la conversación"* | ABS no tiene branching dentro de una sesión. Dos caminos = dos sesiones. Escribí una para el happy path y otra para el alternativo. |
-| *"Mi `llm_judge` pasa a veces y falla otras"* | Los criterios muy vagos ("que sea amable") dan resultados inconsistentes. Sé específico: "saluda, se presenta, no interrumpe". |
-| *"No sé qué actor poner"* | `user` = el que prueba. `assistant` = el bot. `tool` = API/sistema externo. `human` = persona real (para hand-offs). |
+| *"I used `says` but the agent was calling an API"* | Use `calls` + `target` for APIs. `says`/`informs`/`asks` is for talking. |
+| *"`sequence` fails but all steps are present"* | `sequence` checks relative order, not adjacency. If A is before B, it matches even with steps in between. |
+| *"I want an IF branch in the conversation"* | ABS v0.1 has no branching. Two paths = two Sessions. Write one for the happy path, another for the alternative. |
+| *"My `llm_judge` passes sometimes and fails other times"* | Vague criteria ("be friendly") produce inconsistent results. Be specific: "greets, introduces itself, doesn't interrupt." |
+| *"I don't know which actor to use"* | `user` = the tester. `assistant` = the bot. `tool` = external API/system. `human` = real person (for hand-offs). |

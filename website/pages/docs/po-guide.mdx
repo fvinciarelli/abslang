@@ -1,0 +1,173 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: 'Guide for Product Owners', description: 'How to specify agent behavior without writing code or tests.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+ABS is YAML. If you can write a bullet list, you can write an ABS spec. No code, no tests — just the conversation you want the agent to have.
+
+---
+
+## From user story to spec in 5 minutes
+
+Your user story:
+
+> *As a customer, I want to return a damaged item. The agent asks for my order number, verifies it, processes the refund, and tells me the amount and timeline.*
+
+Same story in ABS:
+
+```yaml
+session: Return a damaged item
+behaviors:
+  - actor: user
+    action: says
+    content: "I received order #8291 damaged, I want to return it"
+  - actor: assistant
+    action: asks
+    content: "Can you confirm your name and the order date?"
+  - actor: user
+    action: says
+    content: "Franco Vinciarelli, ordered last Tuesday"
+  - actor: assistant
+    action: calls
+    target: Orders API
+  - actor: assistant
+    action: calls
+    target: Refunds API
+  - actor: assistant
+    action: informs
+    content: "Refund of €47.50 processed. You'll receive it in 3-5 days."
+```
+
+You just wrote a spec. QA will add evaluations later. Your job is the behavior.
+
+---
+
+## The four things you need
+
+### 1. `actor` — who
+
+| Actor | Meaning |
+|---|---|
+| `user` | The customer |
+| `assistant` | Your agent / bot |
+| `tool` | External system (API, database) |
+| `human` | Real person (hand-offs) |
+
+### 2. `action` — what they do
+
+| What you want to describe | Action |
+|---|---|
+| Someone says something | `says` |
+| Agent asks a question | `asks` |
+| Agent delivers information | `informs` |
+| Agent greets the user | `greets` |
+| Agent calls an external system | `calls` |
+| Agent hands off to a human | `hands_off` |
+| User selects a UI option | `selects` |
+
+### 3. `target` — what system or person
+
+```yaml
+  - actor: assistant
+    action: calls
+    target: Orders API       # the system being called
+  - actor: assistant
+    action: hands_off
+    target: Human Agent      # who receives the hand-off
+```
+
+### 4. `content` — the message or data
+
+```yaml
+  - actor: user
+    action: says
+    content: "Where is my order?"     # what the user says
+  - actor: tool
+    action: responds
+    content:
+      status: "shipped"               # what the API returned
+```
+
+---
+
+## Writing your first spec
+
+### 1. User's opening message
+
+```yaml
+session: Check order status
+behaviors:
+  - actor: user
+    action: says
+    content: "Where is my order #4456?"
+```
+
+### 2. Agent's response
+
+```yaml
+  - actor: assistant
+    action: calls
+    target: Orders API
+    with:
+      orderId: "4456"
+```
+
+### 3. Tool's response
+
+```yaml
+  - actor: tool
+    action: responds
+    target: Orders API
+    content:
+      orderId: "4456"
+      status: "in transit"
+      eta: "Friday"
+```
+
+### 4. Agent tells the user
+
+```yaml
+  - actor: assistant
+    action: informs
+    content: "Order #4456 is on its way — estimated delivery Friday."
+```
+
+---
+
+## What about branching?
+
+ABS v0.1 is linear. If your flow has a decision point, write one file per branch:
+
+- `refund-request.yaml` → hands off to Refunds Agent
+- `order-status.yaml` → hands off to Orders Agent
+- `security-issue.yaml` → hands off to Human
+
+Each file is a complete, self-contained conversation.
+
+---
+
+## What happens after you write it
+
+1. **Three Amigos review.** Dev confirms APIs exist. QA confirms edge cases. You confirm it matches the need.
+2. **QA adds evaluations.** Your spec gets annotated with `llm_judge`, `contains`, `sequence` — same file, no changes to the behaviors.
+3. **Dev builds the agent.** Your spec is the acceptance criteria.
+4. **The spec lives on.** Six months later, the answer to "what does the refund bot do?" is one file.
+
+---
+
+## FAQ
+
+**Do I need to install anything?**
+No. ABS files are plain YAML. Write them in Notepad. Or use the [ABS Designer](/abs-designer/).
+
+**What if I don't know the exact API responses?**
+Use placeholder data. Dev replaces it during Three Amigos.
+
+**Can I use this for non-chat agents?**
+Yes. Emails, file processing, database updates — all `calls` with a `target`.
+
+**Who adds the `evaluations`?**
+QA. That's why this guide has no evaluations. Description and testing use the same format, different roles contribute different parts.
+
+</DocsLayout>
