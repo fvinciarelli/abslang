@@ -1,0 +1,48 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: 'ABS Designer', description: 'Visual editor for ABS sessions — drag, drop, and export.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+The ABS Designer is a visual, no-code editor for building agent behavior specifications. You can use it standalone in the browser, or inside VSCode via the [ABS extension](#vscode-extension).
+
+## Launch the designer
+
+The designer is built into this website — no install needed.
+
+👉 **[Open ABS Designer](/abs/abs-designer/)** (opens in a new tab)
+
+## What you can do
+
+- **Build sessions visually** — add behaviors by clicking palette items (User message, Tool call, Hand-off…)
+- **Drag to reorder** — drag and drop behaviors in the flow to reorder steps
+- **Property sheet** — click any behavior to edit its actor, action, target, content, and evaluations
+- **Add evaluations** — contains, exact_match, regex, schema, llm_judge, tool_call, and all chain evaluators
+- **YAML preview** — toggle between visual editor and generated YAML in the inspector panel
+- **Export** — download your session as a `.abs.yaml` file ready to run with the CLI
+
+## VSCode Extension
+
+The same designer is built into the [ABS VSCode extension](https://github.com/fvinciarelli/abs/tree/main/vscode). Open any `.abs.yaml` file and the designer opens alongside it — edit visually, save back to YAML automatically, and run against your agent with ▶ Run.
+
+Install from the VSCode marketplace or build from source:
+
+```bash
+cd vscode
+npm install
+npm run build
+```
+
+## Standalone vs VSCode
+
+| Feature | Standalone (browser) | VSCode extension |
+|---|---|---|
+| Visual editor | ✅ | ✅ |
+| Drag & drop | ✅ | ✅ |
+| Property sheet | ✅ | ✅ |
+| YAML preview | ✅ | ✅ |
+| Export YAML | ✅ Download file | ✅ Auto-sync to editor |
+| Import YAML | ✅ Upload file | ✅ Opens from active editor |
+| Run against agent | — | ✅ ▶ Run button |
+| Chain evaluations | ✅ | ✅ |
+</DocsLayout>

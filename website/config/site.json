@@ -48,6 +48,7 @@
         "heading": "Resources",
         "items": [
           { "label": "Manifesto", "href": "/docs/manifesto" },
+          { "label": "ABS Designer", "href": "/docs/designer" },
           { "label": "Examples", "href": "/docs/examples" },
           { "label": "Roadmap", "href": "/docs/roadmap" },
           { "label": "Deploy", "href": "/docs/deploy" },
