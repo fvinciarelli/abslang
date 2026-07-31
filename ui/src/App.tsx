@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import * as yaml from 'js-yaml';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
@@ -17,6 +17,14 @@ import { BehaviorForm } from './components/BehaviorForm';
 import { YAMLPreview } from './components/YAMLPreview';
 import { useSession } from './hooks/useSession';
 import { behaviorToYAML, newId } from './types';
+
+const IS_VSCODE = !!(window as any).__ABS_VSCODE__;
+
+declare global {
+  interface Window {
+    __ABS_VSCODE__?: boolean;
+  }
+}
 
 export default function App() {
   const s = useSession();
@@ -79,6 +87,49 @@ export default function App() {
     [s.addBehavior, s.session.behaviors],
   );
 
+  // ── VSCode bridge: receive documents from extension host ──
+  useEffect(() => {
+    if (!IS_VSCODE) return;
+
+    const handler = async (e: Event) => {
+      const { yaml: yamlText } = (e as CustomEvent).detail;
+      try {
+        const { parseYaml, expandFragments } = await import('./yaml-parser');
+        const docs = parseYaml(yamlText);
+        if (docs.length > 0) {
+          const expanded = expandFragments(docs[0]);
+          s.setSession({
+            ...expanded,
+            behaviors: expanded.behaviors.map((b: any) => ({ ...b, id: newId() })),
+          });
+        }
+      } catch (err) {
+        console.error('Failed to parse ABS document:', err);
+      }
+    };
+    window.addEventListener('abs-load-document', handler);
+    return () => window.removeEventListener('abs-load-document', handler);
+  }, [s.setSession]);
+
+  // ── VSCode bridge: auto-save on session changes ──
+  useEffect(() => {
+    if (!IS_VSCODE) return;
+
+    const doc: any = { session: s.session.session };
+    if (s.session.description) doc.description = s.session.description;
+    if (s.session.abs_version) doc.abs_version = s.session.abs_version;
+    doc.behaviors = s.session.behaviors.map(behaviorToYAML);
+    if (s.session.evaluations?.length) doc.evaluations = s.session.evaluations;
+    const yamlStr = yaml.dump(doc, { indent: 2, lineWidth: -1, noRefs: true });
+
+    const timer = setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent('abs-save', { detail: { yaml: yamlStr } })
+      );
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [s.session]);
+
   return (
     <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <Sidebar
@@ -95,6 +146,7 @@ export default function App() {
           onNew={handleNew}
           onExport={handleExport}
           onImport={handleImport}
+          isVSCode={IS_VSCODE}
         />
 
         <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
