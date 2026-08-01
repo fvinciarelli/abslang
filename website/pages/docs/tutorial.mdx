@@ -1,22 +1,22 @@
 import DocsLayout from '@/components/layout/DocsLayout';
 
-export const frontmatter = { title: 'Tutorial', description: 'Learn ABS in 20 minutes. Step-by-step guide for QA.' };
+export const frontmatter = { title: 'Tutorial (QA)', description: 'Learn ABS in 20 minutes. A step-by-step guide for QA engineers — from zero to automated agent tests.' };
 
 <DocsLayout frontmatter={frontmatter}>
 
-A hands-on guide to ABS from zero. If you're QA, start here.
+> A step-by-step guide to learning ABS — **A**gent **B**ehavior **S**pecification — from scratch. If you can write a bullet list, you can write ABS. No code, no prior testing experience — just YAML.
 
 ---
 
-## What ABS is and why it matters
+## Minute 0–5: What ABS is and its structure
 
-A dev tells you *"the refund bot is ready, test it."* How do you know it's correct? Today you probably have test cases in a doc and you run through them manually. ABS replaces that: **one YAML file that describes behavior and runs as an automated test.**
+**ABS stands for Agent Behavior Specification.** It's a spec for describing the **observable** behavior of an AI agent: what it says, what tools it calls, what it responds. It's the equivalent of what OpenAPI is for REST APIs: a shared format, readable by both humans and machines, that a PO, a dev, and a QA can all read and sign off on together.
 
-In a Three Amigos session, this is the artifact QA, Dev, and PO all sign off on.
+ABS is **YAML**. Plain text. Not code. It's a way of writing:
 
----
+> *"The user says this, the assistant does that, and I want to verify it went well."*
 
-## Basic structure
+Here's the smallest possible ABS document:
 
 ```yaml
 session: Customer checks order status
@@ -24,41 +24,67 @@ behaviors:
   - actor: user
     action: says
     content: "Where is my order #8291?"
+
   - actor: assistant
     action: calls
     target: Orders API
+
   - actor: assistant
     action: informs
     content: "Your order is on the way"
 ```
 
-Three fields per step: `actor` (who), `action` (what they do), `content`/`target` (details).
+That's already a complete specification. Three fields per step:
+
+| Field | Meaning | Example |
+|---|---|---|
+| `actor` | **Who** is acting | `user`, `assistant`, `tool` |
+| `action` | **What** they do | `says`, `calls`, `informs`, `asks` |
+| `content` / `target` | **The details** | the message, or the system being called |
+
+**The four actors you'll always use:**
+
+- `user` → the customer, the one talking to the bot
+- `assistant` → the bot you're testing
+- `tool` → an external API or database the bot queries
+- `human` → a real person (for when the bot transfers)
 
 ---
 
-## A real example: refund for damaged item
+## Minute 5–10: Let's write a real conversation
 
-PO story: *"Customer reports damaged item. Agent verifies, processes refund, informs."*
+Imagine you're QA for a refund bot. The PO gives you this story:
 
-### Step 1: The conversation
+> *"A customer returns a damaged item. The bot asks to verify name and date. It queries two APIs. Processes the refund. Confirms amount and timeline."*
+
+Let's write it in ABS, step by step:
 
 ```yaml
 session: Refund — damaged item
 behaviors:
+  # Step 1: the customer complains
   - actor: user
     action: says
     content: "I received order #8291 damaged, I want to return it"
+
+  # Step 2: the bot asks for verification
   - actor: assistant
     action: asks
     content: "I'm sorry about the damage. Can you confirm your name and order date?"
+
+  # Step 3: the customer responds
   - actor: user
     action: says
     content: "Franco Vinciarelli, ordered last Tuesday"
+
+  # Step 4: the bot queries the Orders API
   - actor: assistant
     action: calls
     target: Orders API
     with:
       orderId: "8291"
+
+  # Step 5: the API responds
   - actor: tool
     action: responds
     target: Orders API
@@ -66,12 +92,16 @@ behaviors:
       orderId: "8291"
       status: "delivered"
       eligibleForRefund: true
+
+  # Step 6: the bot calls the Refunds API
   - actor: assistant
     action: calls
     target: Refunds API
     with:
       orderId: "8291"
       reason: "damaged"
+
+  # Step 7: the Refunds API responds
   - actor: tool
     action: responds
     target: Refunds API
@@ -79,44 +109,93 @@ behaviors:
       refundId: "R-5512"
       amount: 47.50
       status: "processed"
+
+  # Step 8: the bot confirms to the customer
   - actor: assistant
     action: informs
     content: "Refund of €47.50 processed, Franco. You'll receive it in 3-5 days. Reference: R-5512."
 ```
 
-PO understands it. Dev knows what to build.
+**Important:** Notice steps 4-5 and 6-7? Every time the bot calls an API, it's **two separate Behaviors**: the call and the response. This is intentional: you can verify separately whether it called correctly and whether what the API returned is correct.
 
-### Step 2: Step-level evaluations
+At this point **you already have a specification**. Your PO can read it and understand the flow. Your dev knows which APIs to call. No code, no tests.
 
-Two critical moments: the agent asks for verification, and the agent delivers the result.
+---
+
+## Minute 10–15: Adding step-level verifications
+
+Describing is fine, but you're QA: you want to **verify** the bot actually did everything right. That's what `evaluations` are for.
+
+There are two critical moments in this flow: when the bot asks for verification (was it empathetic? did it ask for the right info?), and when it delivers the final result (are all the facts there? did it hallucinate anything?).
+
+Let's add `evaluations` at those two points:
 
 ```yaml
+  # Step 2 improved: we verify response quality
   - actor: assistant
     action: asks
+    content: "I'm sorry about the damage. Can you confirm your name and order date?"
     evaluations:
       - type: llm_judge
         criteria: |
           1. Shows empathy for the damaged item
-          2. References the order number #8291
-          3. Asks for verification info before taking action
-
-  - actor: assistant
-    action: informs
-    evaluations:
-      - type: contains
-        value: "R-5512"              # hard fact
-      - type: llm_judge
-        criteria: |                   # soft qualities
-          1. States amount and timeline
-          2. Provides refund reference
-          3. Uses customer's name
-          4. Reassuring tone, no upsells
+          2. Mentions order number #8291
+          3. Asks for verification before taking action
 ```
 
-### Step 3: Chain evaluations
+`llm_judge` asks an AI to evaluate the response against your criteria, in natural language. Zero code.
+
+For hard facts — things that absolutely must appear — we use exact verifications:
+
+```yaml
+  # Step 8 improved: hard facts + quality
+  - actor: assistant
+    action: informs
+    content: "Refund of €47.50 processed, Franco. You'll receive it in 3-5 days. Reference: R-5512."
+    capture:
+      refundId: "R-5512"
+    evaluations:
+      # Hard fact: the ID must appear
+      - type: contains
+        value: "R-5512"
+
+      # Quality: tone, completeness
+      - type: llm_judge
+        criteria: |
+          1. States the amount (€47.50) and timeline (3-5 days)
+          2. Gives the reference R-5512
+          3. Uses the customer's name (Franco)
+          4. Reassuring tone, no upsells or deflections
+```
+
+**`capture`** stores the value `R-5512` for later use. You'll need it soon.
+
+### Available evaluation types
+
+| Evaluator | What it's for |
+|---|---|
+| `contains` | Text includes a specific word or phrase |
+| `exact_match` | Text matches exactly |
+| `regex` | Text matches a pattern (email, date, code) |
+| `schema` | API response matches a structure |
+| `llm_judge` | Qualitative criteria in natural language |
+| `tool_call` | Verifies the right tool was called with the right parameters |
+
+---
+
+## Minute 15–20: Verifications over the whole conversation
+
+So far we've evaluated individual steps. But there are things you can only verify by looking at **the entire conversation**:
+
+- Did the steps happen in the right order?
+- Did the refund ID stay the same everywhere?
+- Is there something that should **never** have happened?
+
+These go in an `evaluations:` block at the same level as `behaviors:`, **not** inside a step:
 
 ```yaml
 evaluations:
+  # 1. Order: the bot must ask BEFORE calling the APIs
   - type: sequence
     order:
       - { actor: assistant, action: asks }
@@ -124,75 +203,366 @@ evaluations:
       - { actor: assistant, action: calls, target: "Refunds API" }
       - { actor: assistant, action: informs }
 
+  # 2. The refund ID must be the same everywhere
   - type: variable_consistency
     variable: refundId
 
+  # 3. This flow must NEVER transfer to a human
   - type: never
     match: { actor: assistant, action: hands_off }
 ```
 
-`sequence` checks ordering. `variable_consistency` catches ID drift. `never` is a safety guard.
+**What each one does:**
 
----
+- **`sequence`**: verifies the 4 assistant steps happen in that relative order. It doesn't matter if there are other steps in between — it only matters that A is before B, B before C, etc.
 
-## How to run it
+- **`variable_consistency`**: remember `capture: refundId: "R-5512"`? This checks that every time `R-5512` appears in the conversation, the value is the same. Catches subtle bugs where the bot says "R-5512" at the beginning and "R-5513" later.
 
-**Browser:** [ABS Designer](/abs-designer/) — paste YAML, enter agent URL, ▶ Run.
+- **`never`**: a gatekeeper. If this flow transfers to a human, something went wrong and the test fails.
 
-**Terminal:** `abs run session.abs.yaml --agent http://localhost:8080/chat`
+### More chain evaluators
 
-**VSCode:** Open `.abs.yaml`, editor panel opens. ▶ Run.
-
----
-
-## Action vocabulary
-
-| Category | Actions |
+| Evaluator | What it verifies |
 |---|---|
-| Communication | `says`, `asks`, `informs`, `greets`, `clarifies`, `confirms`, `rejects`, `suggests`, `shows` |
-| Execution | `calls`, `submits`, `retrieves`, `stores`, `updates` |
-| Interaction | `selects`, `uploads`, `approves` |
-| Delegation | `hands_off` |
-
----
-
-## Evaluation types
-
-| Evaluator | What it checks |
-|---|---|
-| `contains` | Text includes substring |
-| `exact_match` | Text equals exactly |
-| `regex` | Text matches pattern |
-| `schema` | Payload validates against JSON Schema |
-| `llm_judge` | Qualitative criteria (tone, empathy) |
-| `sequence` | Steps in order |
+| `sequence` | Steps in relative order |
 | `eventually` | Something happens at least once |
-| `never` | Something NEVER happens |
-| `count` | Something happens N times |
-| `within` | A happens within N steps of B |
-| `variable_consistency` | A value stays unchanged |
+| `never` | Something **never** happens |
+| `count` | Something happens exactly N times |
+| `within` | A happens within N steps after B |
+| `variable_consistency` | A captured value stays the same |
 
 ---
 
-## The Three Amigos session
+## The complete document
 
-**15 min** — Write the sequence. No evaluations.
-
-**15 min** — Add step evaluations. *"What could go wrong? How do we verify?"*
-
-**15 min** — Add chain evaluations. *"What must be true about the whole trace?"*
-
-**15 min** — Review and sign off. One file, three perspectives.
+All together, it's about 70 lines. A single page. Your PO understands it, your dev knows what to build, you have 7 automated verifications. One file, three uses.
 
 ---
 
-## Common mistakes
+## How do I run it?
+
+Three options, from simplest to most integrated:
+
+**1. Browser — zero install**
+
+Open the **[ABS Designer](/abs-designer/)**, paste your YAML, enter your agent URL, ▶ Run.
+
+**2. Terminal**
+
+```bash
+abs run session.abs.yaml --agent http://localhost:8080/chat
+```
+
+**3. VSCode**
+
+Open any `.abs.yaml` → the visual editor opens automatically → ▶ Run.
+
+---
+
+## From one test to 100: datasets and golden data
+
+So far we've run **a single case**. The happy path with fixed data. That's fine to start, but with AI agents you need more: what about 100 different orders? What if the name has accents? What if the amount is zero?
+
+ABS has an answer: **datasets**. Turn your Session into a template with `{{placeholders}}` and run it against a data file.
+
+### Step 1: Turn fixed values into placeholders
+
+Instead of hardcoding `"8291"` and `"R-5512"`, use `{{variables}}`:
+
+```yaml
+session: Refund — damaged item
+behaviors:
+  - actor: user
+    action: says
+    content: "I received order #{{orderId}} damaged, I want to return it"
+
+  - actor: assistant
+    action: asks
+    content: "I'm sorry about the damage. Can you confirm your name and order date?"
+    evaluations:
+      - type: llm_judge
+        criteria: |
+          1. Shows empathy for the damaged item
+          2. Mentions the order number
+          3. Asks for verification before taking action
+
+  - actor: user
+    action: says
+    content: "{{customerName}}, ordered last Tuesday"
+
+  - actor: assistant
+    action: calls
+    target: Orders API
+    with:
+      orderId: "{{orderId}}"
+
+  # ... rest of the flow with {{expectedAmount}}, {{expectedKeyword}}, etc.
+
+  - actor: assistant
+    action: informs
+    content: "Refund of {{expectedAmount}} processed, {{customerName}}. Reference: {{refundId}}."
+    capture:
+      refundId: "{{refundId}}"
+    evaluations:
+      - type: contains
+        value: "{{expectedKeyword}}"
+      - type: llm_judge
+        criteria: |
+          1. States the amount ({{expectedAmount}}) and timeline (3-5 days)
+          2. Uses the customer's name ({{customerName}})
+          3. Reassuring tone, no upsells or deflections
+```
+
+### Step 2: Create your golden dataset
+
+A `.jsonl` file where each line is a different case:
+
+```jsonl
+{"orderId": "8291", "customerName": "Franco", "expectedAmount": "€47.50", "refundId": "R-5512", "expectedKeyword": "processed"}
+{"orderId": "4456", "customerName": "María José", "expectedAmount": "€128.00", "refundId": "R-7813", "expectedKeyword": "authorized"}
+{"orderId": "1023", "customerName": "Åsmund", "expectedAmount": "€9.99", "refundId": "R-2004", "expectedKeyword": "completed"}
+```
+
+### Step 3: Run everything together
+
+```bash
+abs run refund.abs.yaml --agent $URL --dataset golden-cases.jsonl
+```
+
+The Runner executes the Session **once per row**. If you have 100 rows, it runs 100 tests. The report shows how many passed, how many failed, and the details of each failed row:
+
+```
+Session:  Refund — damaged item
+Agent:    http://localhost:8080/chat
+Dataset:  golden-cases.jsonl (100 rows)
+Result:   ❌ FAILED
+Rows:     97/100 passed · 3 failed
+
+❌ Row 42 (orderId=5555):
+  Step 8 — assistant informs:
+    Expected keyword: "processed"
+    Observed: "Your refund was rejected"
+    ❌ contains "processed" → FAILED
+```
+
+**This is what you want as QA:** the same spec, run against diverse real data, catching regressions. The Session is the *what*. The dataset is the *with what data*.
+
+### Bonus: run a single row while developing
+
+```bash
+abs run refund.abs.yaml --agent $URL --dataset golden-cases.jsonl --filter "orderId:8291"
+```
+
+`--filter` lets you iterate on a single case without waiting for all 100.
+
+### Advanced: quality evaluations with dataset columns
+
+Beyond exact assertions like `contains`, your golden dataset can feed more sophisticated evaluations. For example, verifying the bot's response **doesn't hallucinate** (Groundedness), **answers what the user asked** (Relevance), or **isn't biased** (bias check with `llm_judge`).
+
+Imagine a customer support bot with a knowledge base. The dataset includes the context the bot should use:
+
+```jsonl
+{"userQuery": "What's the return policy?", "kbContext": "Returns are accepted within 30 days. Opened items have a 15% surcharge.", "expectedPolicy": "30 days"}
+{"userQuery": "Do you ship to Uruguay?", "kbContext": "We ship to Argentina, Chile, Uruguay, and Paraguay. Cost depends on weight.", "expectedPolicy": "Uruguay"}
+{"userQuery": "Do you offer extended warranty?", "kbContext": "We offer a 1-year warranty on all products. Extension to 3 years at 15% additional cost.", "expectedPolicy": "3 years"}
+```
+
+Now the Session references those columns both in the input and in the evaluations:
+
+```yaml
+session: Knowledge base query
+dataset:
+  id: cases
+  path: kb-cases.jsonl
+behaviors:
+  - id: user_asks
+    actor: user
+    action: says
+    content: "{{cases.userQuery}}"
+
+  - id: kb_result
+    actor: tool
+    action: responds
+    target: Knowledge Base
+    content: "{{cases.kbContext}}"
+
+  - id: answer
+    actor: assistant
+    action: informs
+    evaluations:
+      # Does the response rely on the context or invent facts?
+      - type: Groundedness
+        query: user_asks.says
+        context: kb_result.responds
+        response: self
+        threshold: 0.8
+
+      # Does it answer what the user asked?
+      - type: Relevance
+        query: user_asks.says
+        response: self
+        threshold: 0.7
+
+      # Is the response internally coherent?
+      - type: Coherence
+        response: self
+
+      # Hard fact: does it mention the right policy?
+      - type: contains
+        value: "{{cases.expectedPolicy}}"
+
+      # Right tone? No bias?
+      - type: llm_judge
+        criteria: |
+          1. Answers the user's question: {{cases.userQuery}}
+          2. Doesn't make up information not in the context
+          3. Shows no bias or favoritism
+          4. Professional and helpful tone
+        threshold: 0.7
+```
+
+**What's happening here?** Each dataset row brings its own question, its own knowledge base context, and its own expected policy. The evaluations use `{{cases.column}}` to adapt criteria per case. `Groundedness`, `Relevance`, and `Coherence` are industry-standard evaluators (the same ones used by Azure AI Foundry and Vertex AI). `llm_judge` with `{{cases.userQuery}}` injects the actual question into the criteria, so each row is evaluated against what it's supposed to handle.
+
+### Where do these evaluations run? — Adapters
+
+Simple evaluations (`contains`, `exact_match`, `regex`, `schema`, `tool_call`) run **locally** on your machine, with no external calls. They're instant and free.
+
+Evaluations that need an LLM (`llm_judge`, `Groundedness`, `Relevance`, `Coherence`, `Fluency`) go through an **adapter**. The adapter is a bridge between ABS and *wherever you want to run the judgment*. ABS doesn't lock you into a provider:
+
+| Option | How to configure | Best for |
+|---|---|---|
+| **AI Evaluator (default)** | Already configured. 5 free evaluations/day without API key. Sign up for 100/month. | Getting started with zero infrastructure |
+| **Your own local LLM** | `--adapter llm_judge=local --adapter-url http://localhost:11434` | Full privacy, no usage limits |
+| **OpenAI / Azure / Vertex AI** | `--adapter llm_judge=azure --adapter-key $KEY` | Integration with your existing provider |
+| **LangSmith / Promptfoo / Galileo** | Each publishes its own adapter. Configure with `--adapter`. | If you already use an observability platform |
+
+```bash
+# With AI Evaluator (default, no configuration needed)
+abs run kb-session.abs.yaml --agent $URL --dataset kb-cases.jsonl
+
+# With your own local LLM (Ollama, llama.cpp, etc.)
+abs run kb-session.abs.yaml --agent $URL --dataset kb-cases.jsonl \
+  --adapter llm_judge=local --adapter-url http://localhost:11434
+
+# With Azure AI Foundry
+abs run kb-session.abs.yaml --agent $URL --dataset kb-cases.jsonl \
+  --adapter llm_judge=azure --adapter-key $AZURE_KEY
+```
+
+**The Session is the same.** The dataset is the same. You only change the adapter depending on the environment: local while developing, AI Evaluator in staging, Azure in production. The *what* doesn't change; the *where* is resolved with a flag.
+
+---
+
+## Common mistakes (and how to avoid them)
 
 | Mistake | Fix |
 |---|---|
-| Used `says` for an API call | Use `calls` + `target` |
-| `sequence` fails but steps are there | It checks relative order, not adjacency |
-| Want branching inside a session | v0.1: one path = one session |
-| `llm_judge` inconsistent | Be specific in criteria |
+| *I used `says` for an API call* | Use `calls` + `target`. `says` is for talking. |
+| *`sequence` fails but the steps are there* | `sequence` checks relative order, not adjacency. If A is before B, it passes. |
+| *I want an IF branch in the conversation* | v0.1 has no branching. Two paths = two separate Sessions. |
+| *`llm_judge` passes sometimes and fails others* | Vague criteria ("be friendly") produce inconsistent results. Be specific. |
+| *I don't know which actor to use* | `user` = the tester. `assistant` = the bot. `tool` = external API/system. `human` = real person. |
+
+---
+
+## Available tools
+
+ABS isn't just a format: you have a tool ecosystem to write, run, and debug specifications.
+
+### CLI — the Swiss Army knife
+
+Install with npm or pip:
+
+```bash
+npm install -g abs-cli
+# or
+pip install abs-cli
+```
+
+Three commands:
+
+```bash
+abs init                               # Scaffold a project from scratch
+abs run session.abs.yaml --agent $URL  # Run against your agent
+abs report report.json                 # Read a previous report
+```
+
+### ABS Designer — visual editor in the browser
+
+Zero install. Open the **[Designer](/abs-designer/)** and build Sessions by dragging blocks. Ideal for Three Amigos sessions with PO and dev. Export YAML ready to run.
+
+### VSCode extension
+
+Install from the VSCode marketplace. Open any `.abs.yaml` and the visual editor opens automatically. Edit visually, save, and run against your agent with ▶ Run. All in one place.
+
+### Mock agent — test without a real agent
+
+If you're writing the spec and your agent doesn't exist yet or isn't available, use the mock agent to verify your YAML parses and evaluates correctly:
+
+```bash
+python tools/mock_agent.py --port 8080
+abs run session.abs.yaml --agent http://localhost:8080/chat
+```
+
+The mock agent returns predefined responses, so you can validate the entire chain — parsing, execution, evaluations — without depending on a real agent.
+
+### Chatbot — generate specs by chatting
+
+You already know how to write specs by hand. But ABS can do more: instead of remembering every field and action, **tell the chatbot what you want to test and it generates the file for you.**
+
+It's available in two places:
+
+**On the website.** Go to the **[ABS Designer](/abs-designer/)** and open the chat. Type something like:
+
+> *"I want to test a refund bot: the customer asks to return a damaged item, the bot verifies with Orders API and Refunds API, and confirms the amount and timeline."*
+
+The chatbot returns a complete `.abs.yaml` with Behaviors, tool calls, and suggested evaluations. Review it, tweak what you need, and run it.
+
+**In the CLI.** The same chat is integrated:
+
+```bash
+abs chat
+```
+
+It works the same way: describe the scenario in natural language, and the chatbot generates the spec. Ideal when you're in the terminal and don't want to switch contexts.
+
+**Why does this matter?** Because you can go from an idea to an executable test in two minutes. You tell the chatbot the same thing you'd tell a coworker at standup, and you get a file ready for `abs run`. Then you refine it with datasets, advanced evaluations, and everything you learned in this tutorial. But 80% of the initial work is already done.
+
+### Full documentation
+
+- **[Specification](/docs/specification)** — normative reference
+- **[Evaluations](/docs/evaluations)** — all evaluators with examples
+- **[Patterns](/docs/patterns)** — recipes for real-world cases (routing, escalation, multi-step verification)
+- **[GitHub](https://github.com/fvinciarelli/abs)** — source code, examples, issues
+
+---
+
+## Cheat sheet
+
+### Actions
+
+| Category | Actions | When to use |
+|---|---|---|
+| Communication | `says`, `asks`, `informs`, `greets`, `clarifies`, `confirms`, `rejects`, `suggests`, `shows` | Bot or user speaks |
+| Execution | `calls`, `submits`, `retrieves`, `stores`, `updates` | Bot invokes tools |
+| Interaction | `selects`, `uploads`, `approves` | User interacts with UI |
+| Delegation | `hands_off` | Bot transfers to a human |
+
+### Evaluations
+
+| Type | Level | What it verifies |
+|---|---|---|
+| `contains` | Step | Text includes substring |
+| `exact_match` | Step | Exact text match |
+| `regex` | Step | Pattern match |
+| `schema` | Step | Valid JSON structure |
+| `tool_call` | Step | Correct tool call |
+| `llm_judge` | Step | Qualitative criteria |
+| `sequence` | Chain | Step order |
+| `eventually` | Chain | Something happens at least once |
+| `never` | Chain | Something never happens |
+| `count` | Chain | Something happens N times |
+| `within` | Chain | A happens within N steps of B |
+| `variable_consistency` | Chain | A value stays unchanged |
 
 </DocsLayout>
