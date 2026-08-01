@@ -18,6 +18,7 @@ export interface EvalResult {
   score: number;
   reason: string;
   blocking?: boolean;
+  inconclusive?: boolean;
 }
 
 // ── Built-in step-level evaluators ──
@@ -283,15 +284,30 @@ export function variableConsistency(
   behaviors: Behavior[],
   rule: { variable: string }
 ): EvalResult {
-  // Collect all resolved values of this variable from captured steps
-  const values: any[] = [];
+  const varName = rule.variable;
+  // Simulate resolution: track every value bound to this variable
+  const values: { value: any; source: string }[] = [];
   const vars: Record<string, any> = {};
 
   for (const b of behaviors) {
-    if (b.capture && rule.variable in b.capture) {
-      const val = b.capture[rule.variable];
-      values.push(val);
-      vars[rule.variable] = val;
+    // Resolve {{var}} references in with and content before using captures
+    const resolvedWith = resolveVarRefs(b.with, vars);
+    const resolvedContent = resolveVarRefs(b.content, vars);
+
+    // If this behavior references {{varName}} in with or content, record the resolved value
+    if (b.with && hasVarRef(b.with, varName)) {
+      const val = deepGet(resolvedWith, varName);
+      if (val !== undefined) values.push({ value: val, source: `with in step ${b.actor}/${b.action}` });
+    }
+    if (typeof b.content === "string" && hasVarRefStr(b.content, varName)) {
+      values.push({ value: resolvedContent, source: `content in step ${b.actor}/${b.action}` });
+    }
+
+    // Apply captures
+    if (b.capture && varName in b.capture) {
+      const val = resolveVarRefs(b.capture[varName], vars);
+      vars[varName] = val;
+      values.push({ value: val, source: `capture in step ${b.actor}/${b.action}` });
     }
   }
 
@@ -300,19 +316,134 @@ export function variableConsistency(
       type: "variable_consistency",
       passed: true,
       score: 1,
-      reason: `Variable "${rule.variable}" captured ${values.length} time(s) — nothing to compare`,
+      reason: `Variable "${varName}" used ${values.length} time(s) — nothing to compare`,
     };
   }
 
-  const first = JSON.stringify(values[0]);
-  const consistent = values.every((v: any) => JSON.stringify(v) === first);
+  const first = JSON.stringify(values[0].value);
+  const consistent = values.every((v) => JSON.stringify(v.value) === first);
+  if (!consistent) {
+    const details = values.map((v) => `${v.source}: ${JSON.stringify(v.value)}`).join(", ");
+    return {
+      type: "variable_consistency",
+      passed: false,
+      score: 0,
+      reason: `Variable "${varName}" has inconsistent values: ${details}`,
+    };
+  }
   return {
     type: "variable_consistency",
-    passed: consistent,
-    score: consistent ? 1 : 0,
-    reason: consistent
-      ? `Variable "${rule.variable}" consistent across ${values.length} captures`
-      : `Variable "${rule.variable}" has inconsistent values: ${values.map((v: any) => JSON.stringify(v)).join(", ")}`,
+    passed: true,
+    score: 1,
+    reason: `Variable "${varName}" consistent across ${values.length} uses`,
+  };
+}
+
+function hasVarRef(obj: any, varName: string): boolean {
+  if (typeof obj === "string") return hasVarRefStr(obj, varName);
+  if (Array.isArray(obj)) return obj.some((v) => hasVarRef(v, varName));
+  if (typeof obj === "object" && obj !== null) return Object.values(obj).some((v) => hasVarRef(v, varName));
+  return false;
+}
+
+function hasVarRefStr(s: string, varName: string): boolean {
+  return s.includes(`{{${varName}}}`);
+}
+
+function resolveVarRefs(value: any, vars: Record<string, any>): any {
+  if (typeof value === "string") {
+    return value.replace(/\{\{(\w+)\}\}/g, (_, name) => {
+      return name in vars ? String(vars[name]) : `{{${name}}}`;
+    });
+  }
+  if (Array.isArray(value)) return value.map((v) => resolveVarRefs(v, vars));
+  if (typeof value === "object" && value !== null) {
+    const resolved: any = {};
+    for (const [k, v] of Object.entries(value)) {
+      resolved[k] = resolveVarRefs(v, vars);
+    }
+    return resolved;
+  }
+  return value;
+}
+
+function deepGet(obj: any, key: string): any {
+  if (typeof obj === "object" && obj !== null && key in obj) return obj[key];
+  if (typeof obj === "object" && obj !== null) {
+    for (const v of Object.values(obj)) {
+      const found = deepGet(v, key);
+      if (found !== undefined) return found;
+    }
+  }
+  return undefined;
+}
+
+export function toolCall(
+  trace: ObservedStep[],
+  rule: { target?: string; with?: Record<string, any>; ordered?: boolean }
+): EvalResult {
+  // Find all matching tool calls in the trace
+  const calls = trace.filter((s) => s.actor === "assistant" && s.action === "calls");
+
+  if (rule.target) {
+    const matching = calls.filter((c) => c.target === rule.target);
+    if (matching.length === 0) {
+      return {
+        type: "tool_call",
+        passed: false,
+        score: 0,
+        reason: `Tool "${rule.target}" was never called. Observed calls: ${calls.map((c) => c.target).join(", ") || "none"}`,
+      };
+    }
+
+    // Check with params on the matching calls
+    if (rule.with) {
+      for (const call of matching) {
+        const observedWith = call.with ?? {};
+        for (const [key, expected] of Object.entries(rule.with)) {
+          if (!(key in observedWith)) {
+            return {
+              type: "tool_call",
+              passed: false,
+              score: 0,
+              reason: `Tool "${rule.target}" missing parameter "${key}". Observed: ${JSON.stringify(observedWith)}`,
+            };
+          }
+          if (JSON.stringify(observedWith[key]) !== JSON.stringify(expected)) {
+            return {
+              type: "tool_call",
+              passed: false,
+              score: 0,
+              reason: `Tool "${rule.target}" parameter "${key}" expected ${JSON.stringify(expected)}, got ${JSON.stringify(observedWith[key])}`,
+            };
+          }
+        }
+      }
+    }
+
+    return {
+      type: "tool_call",
+      passed: true,
+      score: 1,
+      reason: `Tool "${rule.target}" called correctly`,
+    };
+  }
+
+  // No target specified — just check that at least one tool was called
+  if (calls.length === 0) {
+    return {
+      type: "tool_call",
+      passed: false,
+      score: 0,
+      reason: "No tool calls observed in the trace",
+    };
+  }
+
+  return {
+    type: "tool_call",
+    passed: true,
+    score: 1,
+    reason: `${calls.length} tool call(s) observed`,
   };
 }
 
@@ -361,16 +492,23 @@ export function evaluateStep(
       return applyThreshold({ ...within(trace, evaluation), blocking }, evaluation);
     case "variable_consistency":
       return applyThreshold({ ...variableConsistency(trace, behaviors, evaluation), blocking }, evaluation);
-    case "tool_call":
-      return applyThreshold({ type: "tool_call", passed: true, score: 1, reason: "Tool call validated", blocking }, evaluation);
+    case "tool_call": {
+      const result = toolCall(trace, evaluation);
+      return applyThreshold({ ...result, blocking }, evaluation);
+    }
     case "llm_judge":
       return applyThreshold({ type: "llm_judge", passed: false, score: 0, reason: "No LLM judge adapter registered. Use --adapter llm_judge=<provider>.", blocking }, evaluation);
-    case "groundedness":
-      return applyThreshold({ type: "groundedness", passed: false, score: 0, reason: "No groundedness adapter registered.", blocking }, evaluation);
-    case "bias":
-      return applyThreshold({ type: "bias", passed: false, score: 0, reason: "No bias adapter registered.", blocking }, evaluation);
-    case "toxicity":
-      return applyThreshold({ type: "toxicity", passed: false, score: 0, reason: "No toxicity adapter registered.", blocking }, evaluation);
+    case "Groundedness":
+    case "Relevance":
+    case "Coherence":
+    case "Fluency":
+      return applyThreshold({
+        type: evaluation.type,
+        passed: false,
+        score: 0,
+        reason: `No adapter registered for ${evaluation.type}. Use --adapter ${evaluation.type}=<provider>.`,
+        blocking
+      }, evaluation);
     case "all_of":
     case "any_of":
     case "none_of":

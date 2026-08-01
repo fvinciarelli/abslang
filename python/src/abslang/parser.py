@@ -16,8 +16,9 @@ from .schema_validator import validate_document
 
 @dataclass
 class Behavior:
-    actor: str
-    action: str
+    id: str | None = None
+    actor: str = ""
+    action: str = ""
     target: str | None = None
     content: Any = None
     capture: dict[str, Any] | None = None
@@ -32,6 +33,7 @@ class ABSDocument:
     behaviors: list[Behavior | dict[str, str]]
     description: str | None = None
     abs_version: str | None = None
+    dataset: dict[str, str] | None = None
     fragments: dict[str, list[Behavior]] | None = None
     evaluations: list[dict[str, Any]] | None = None
 
@@ -42,6 +44,7 @@ class NormalizedSession:
     behaviors: list[Behavior]
     description: str | None = None
     abs_version: str | None = None
+    dataset: dict[str, str] | None = None
     evaluations: list[dict[str, Any]] | None = None
 
 
@@ -78,6 +81,7 @@ def _dict_to_document(data: dict[str, Any]) -> ABSDocument:
             behaviors.append({"include": b["include"]})
         elif isinstance(b, dict):
             behaviors.append(Behavior(
+                id=b.get("id"),
                 actor=b.get("actor", ""),
                 action=b.get("action", ""),
                 target=b.get("target"),
@@ -109,6 +113,7 @@ def _dict_to_document(data: dict[str, Any]) -> ABSDocument:
         behaviors=behaviors,
         description=data.get("description"),
         abs_version=data.get("abs_version"),
+        dataset=data.get("dataset"),
         fragments=fragments if fragments else None,
         evaluations=data.get("evaluations"),
     )
@@ -140,6 +145,7 @@ def expand_fragments(doc: ABSDocument) -> NormalizedSession:
         behaviors=expand(doc.behaviors),
         description=doc.description,
         abs_version=doc.abs_version,
+        dataset=doc.dataset,
         evaluations=doc.evaluations,
     )
 

@@ -2,7 +2,7 @@
 
 import { Command } from "commander";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import { join, resolve } from "path";
+import { join, resolve, dirname } from "path";
 import chalk from "chalk";
 import {
   parse,
@@ -26,10 +26,13 @@ program
 
 const SMOKE_SESSION = `session: Order status
 description: User asks about an order. Happy path.
+dataset:
+  id: cases
+  path: order-status.jsonl
 behaviors:
   - actor: user
     action: says
-    content: "Where is my order {{orderId}}?"
+    content: "Where is my order {{cases.orderId}}?"
 
   - actor: assistant
     action: asks
@@ -37,9 +40,9 @@ behaviors:
 
   - actor: user
     action: says
-    content: "{{orderId}}"
+    content: "{{cases.orderId}}"
     capture:
-      orderId: "{{orderId}}"
+      orderId: "{{cases.orderId}}"
 
   - actor: assistant
     action: calls
@@ -49,10 +52,10 @@ behaviors:
 
   - actor: assistant
     action: informs
-    content: "{{expectedResponse}}"
+    content: "{{cases.expectedResponse}}"
     evaluations:
       - type: contains
-        value: "{{expectedKeyword}}"
+        value: "{{cases.expectedKeyword}}"
 `;
 
 const SMOKE_DATASET = [
@@ -103,20 +106,16 @@ defaults:
       console.log("⏭️  sessions/order-status.abs.yaml already exists, skipping");
     }
 
-    // 3. datasets/
-    const datasetsDir = join(cwd, "datasets");
-    if (!existsSync(datasetsDir)) {
-      mkdirSync(datasetsDir);
-    }
-    const datasetPath = join(datasetsDir, "order-status.jsonl");
+    // 3. Create dataset next to the session
+    const datasetPath = join(sessionsDir, "order-status.jsonl");
     if (!existsSync(datasetPath)) {
       writeFileSync(
         datasetPath,
         SMOKE_DATASET.map((r) => JSON.stringify(r)).join("\n") + "\n"
       );
-      console.log(chalk.green("✅ Created datasets/order-status.jsonl (3 rows)"));
+      console.log(chalk.green("✅ Created sessions/order-status.jsonl (3 rows)"));
     } else {
-      console.log("⏭️  datasets/order-status.jsonl already exists, skipping");
+      console.log("⏭️  sessions/order-status.jsonl already exists, skipping");
     }
 
     // 4. .gitignore
@@ -150,9 +149,13 @@ program
   .option("--agent-format <format>", "openai, claude, or gemini", "openai")
   .option("--agent-auth <auth>", "none, api_key, bearer, or oauth2", "none")
   .option("--agent-token <token>", "Token or API key")
+  .option("--agent-refresh-url <url>", "OAuth2 token refresh URL")
+  .option("--agent-refresh-token <token>", "OAuth2 refresh token")
+  .option("--agent-client-id <id>", "OAuth2 client ID")
   .option("--adapter <binding>", "Evaluator adapter binding", collectAdapter, {} as Record<string, string>)
   .option("--format <format>", "table, json, or junit", "table")
   .option("--ci", "CI mode (no colors, no prompts)", false)
+  .option("--timeout <n>", "Timeout per session run in seconds", "300")
   .option("--output <path>", "Write report to file")
   .option("--parallel <n>", "Run N dataset rows in parallel", "1")
   .action(async (session, options) => {
@@ -196,6 +199,10 @@ program
       format: cfg.agent_format,
       auth: cfg.agent_auth,
       token: cfg.agent_token,
+      refreshUrl: options.agentRefreshUrl,
+      refreshToken: options.agentRefreshToken,
+      clientId: options.agentClientId,
+      timeout: parseInt(options.timeout) || 300,
     };
 
     const runtimeVars: Record<string, any> = {};
@@ -220,21 +227,39 @@ program
       process.exit(2);
     }
 
-    // Load dataset if provided
+    // Load dataset — from session's dataset: block, or --dataset flag
     let dataset: Record<string, any>[] | null = null;
-    if (cfg.dataset || options.dataset) {
+    let datasetId: string | undefined;
+
+    // In-file dataset: block takes precedence
+    const inFileDataset = sessions[0]?.dataset;
+    if (inFileDataset?.path) {
+      try {
+        const resolvedPath = resolve(
+          sessionPath.endsWith(".yaml") || sessionPath.endsWith(".abs.yaml")
+            ? dirname(sessionPath)
+            : sessionPath,
+          inFileDataset.path
+        );
+        dataset = loadDataset(resolvedPath);
+        datasetId = inFileDataset.id;
+      } catch (err: any) {
+        console.error(chalk.red(`❌ Cannot load dataset '${inFileDataset.path}': ${err.message}`));
+        process.exit(2);
+      }
+    } else if (cfg.dataset || options.dataset) {
       try {
         dataset = loadDataset(cfg.dataset || options.dataset);
       } catch (err: any) {
         console.error(chalk.red(`❌ Cannot load dataset: ${err.message}`));
         process.exit(2);
       }
+    }
 
-      // Apply filter
-      if (options.filter) {
-        const [fk, fv] = options.filter.split(":");
-        dataset = dataset.filter((row) => String(row[fk]) === fv);
-      }
+    // Apply filter
+    if (dataset && options.filter) {
+      const [fk, fv] = options.filter.split(":");
+      dataset = dataset.filter((row) => String(row[fk]) === fv);
     }
 
     // Run
@@ -255,13 +280,16 @@ program
     };
 
     if (dataset) {
-      // Run with concurrency limiter
       const semaphore = new Array(parallel).fill(null).map(() => Promise.resolve());
       let semIdx = 0;
       const tasks = dataset.map(async (row) => {
         const idx = semIdx++ % parallel;
         await semaphore[idx];
-        const vars = { ...runtimeVars, ...row };
+        // Prefix columns with dataset id if declared in-file
+        const prefixedRow: Record<string, any> = datasetId
+          ? Object.fromEntries(Object.entries(row).map(([k, v]) => [`${datasetId}.${k}`, v]))
+          : row;
+        const vars = { ...runtimeVars, ...prefixedRow };
         const results = await Promise.all(sessions.map(s => runOne(s, vars, row)));
         results.forEach(r => allResults.push(r));
       });
@@ -457,24 +485,113 @@ program
       process.exit(2);
     }
 
-    if (options.format === "json") {
-      console.log(JSON.stringify(data, null, 2));
-    } else if (options.format === "junit") {
-      console.log(formatJunit(data));
-    } else {
-      // Table format — reconstruct RunResult
-      const result: RunResult = {
-        session: data.session ?? data.results?.[0]?.session ?? "",
+    // Handle multi-row reports (from dataset runs)
+    const results: any[] = data.results ?? [data];
+
+    // --detail: show full trace for a specific row (1-indexed)
+    if (options.detail) {
+      const idx = parseInt(options.detail) - 1;
+      if (idx < 0 || idx >= results.length) {
+        console.error(chalk.red(`❌ Row ${options.detail} not found. Report has ${results.length} rows.`));
+        process.exit(2);
+      }
+      const row = results[idx];
+      console.log(formatTable({
+        session: row.session ?? data.session ?? "",
         agent: data.agent ?? "",
-        passed: data.passed,
-        steps: data.trace ?? [],
-        chainEvaluations: data.chain_evaluations ?? [],
-        stepsTotal: data.steps_total ?? 0,
-        stepsMatched: data.steps_matched ?? 0,
-        evaluationsTotal: data.evaluations_total ?? 0,
-        evaluationsPassed: data.evaluations_passed ?? 0,
-      };
-      console.log(formatTable(result));
+        passed: row.passed,
+        steps: row.trace ?? [],
+        chainEvaluations: row.chain_evaluations ?? [],
+        stepsTotal: row.steps_total ?? 0,
+        stepsMatched: row.steps_matched ?? 0,
+        evaluationsTotal: row.evaluations_total ?? 0,
+        evaluationsPassed: row.evaluations_passed ?? 0,
+      }));
+      return;
+    }
+
+    if (options.format === "json") {
+      if (options.failed) {
+        const failed = results.filter((r: any) => !r.passed);
+        console.log(JSON.stringify({ ...data, results: failed }, null, 2));
+      } else {
+        console.log(JSON.stringify(data, null, 2));
+      }
+    } else if (options.format === "junit") {
+      const filtered = options.failed ? results.filter((r: any) => !r.passed) : results;
+      console.log(formatJunit({ ...data, results: filtered }));
+    } else {
+      // Table format — show aggregated view for multi-row, or single-row view
+      if (results.length === 1) {
+        const row = results[0];
+        console.log(formatTable({
+          session: row.session ?? data.session ?? "",
+          agent: data.agent ?? "",
+          passed: row.passed,
+          steps: row.trace ?? [],
+          chainEvaluations: row.chain_evaluations ?? [],
+          stepsTotal: row.steps_total ?? 0,
+          stepsMatched: row.steps_matched ?? 0,
+          evaluationsTotal: row.evaluations_total ?? 0,
+          evaluationsPassed: row.evaluations_passed ?? 0,
+        }));
+      } else {
+        // Multi-row: show summary + failed rows
+        const rows = options.failed ? results.filter((r: any) => !r.passed) : results;
+        const passed = results.filter((r: any) => r.passed).length;
+        const lines: string[] = [];
+        lines.push("┌──────────────────────────────────────────────────────────────┐");
+        lines.push("│  ABS — Report                                                │");
+        lines.push("├──────────────────────────────────────────────────────────────┤");
+        lines.push(`│  Session:  ${(data.session ?? "").padEnd(52)}│`);
+        lines.push(`│  Agent:    ${(data.agent ?? "").padEnd(52)}│`);
+        lines.push(`│  Rows:     ${String(results.length).padEnd(52)}│`);
+        const status = data.passed ? chalk.green("✅ PASSED") : chalk.red("❌ FAILED");
+        lines.push(`│  Result:   ${status.padEnd(62)}│`);
+        lines.push(`│  Passed:   ${String(passed)}/${String(results.length)}`.padEnd(64) + "│");
+        lines.push("├──────┬──────────────────────────────┬──────────┬─────────────┤");
+        lines.push("│  Row │ Session                      │ Steps    │ Evaluations │");
+        lines.push("├──────┼──────────────────────────────┼──────────┼─────────────┤");
+
+        let rowNum = 0;
+        for (const r of rows) {
+          rowNum++;
+          const actualNum = results.indexOf(r) + 1;
+          const sessionName = (r.session || "").substring(0, 28).padEnd(28);
+          const steps = `${r.steps_matched ?? 0}/${r.steps_total ?? 0} ${(r.steps_matched ?? 0) === (r.steps_total ?? 0) ? "✅" : "❌"}`.padEnd(8);
+          const evals = `${r.evaluations_passed ?? 0}/${r.evaluations_total ?? 0} ${(r.evaluations_passed ?? 0) === (r.evaluations_total ?? 0) ? "✅" : "❌"}`.padEnd(11);
+          lines.push(`│ ${String(actualNum).padStart(4)} │ ${sessionName} │ ${steps} │ ${evals} │`);
+        }
+
+        lines.push("└──────┴──────────────────────────────┴──────────┴─────────────┘");
+
+        if (!options.failed && !data.passed) {
+          const failedRows = results.filter((r: any) => !r.passed);
+          lines.push("");
+          lines.push(chalk.red(`❌ ${failedRows.length} rows failed:`) + "\n");
+          for (const r of failedRows) {
+            const idx = results.indexOf(r) + 1;
+            lines.push(chalk.red(`  Row ${idx}: ${r.session || ""}`));
+            const failedSteps = (r.trace || []).filter((s: any) =>
+              (s.evaluations || []).some((e: any) => !e.passed && !e.inconclusive)
+            );
+            for (const s of failedSteps) {
+              for (const e of (s.evaluations || [])) {
+                if (!e.passed && !e.inconclusive) {
+                  lines.push(chalk.red(`    Step ${s.step} — ${e.type}: ${e.reason}`));
+                }
+              }
+            }
+            for (const e of (r.chain_evaluations || [])) {
+              if (!e.passed && !e.inconclusive) {
+                lines.push(chalk.red(`    Chain — ${e.type}: ${e.reason}`));
+              }
+            }
+          }
+          lines.push(`\nRun ${chalk.bold(`abs report ${file} --detail <row>`)} to see a full trace.`);
+        }
+        console.log(lines.join("\n"));
+      }
     }
   });
 

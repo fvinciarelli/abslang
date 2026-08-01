@@ -337,7 +337,6 @@ agent:
 
 adapters:
   llm_judge: aievaluator
-  groundedness: azure
 
 defaults:
   dataset: datasets/

@@ -19,6 +19,22 @@
       "description": "Version of the ABS spec this document targets. Optional in v0.1, RECOMMENDED, will be REQUIRED in v0.2.",
       "pattern": "^0\\.1$"
     },
+    "dataset": {
+      "type": "object",
+      "description": "Dataset that feeds this session. Each row triggers one execution. Columns are referenced as {{id.column}}.",
+      "required": ["id", "path"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Short name used to reference columns (e.g. {{cases.userQuery}})."
+        },
+        "path": {
+          "type": "string",
+          "description": "Path to a .json or .jsonl file relative to the session file."
+        }
+      },
+      "additionalProperties": false
+    },
     "behaviors": {
       "type": "array",
       "description": "Ordered list of Behaviors and/or fragment includes. REQUIRED.",
@@ -58,7 +74,7 @@
       "properties": {
         "include": {
           "type": "string",
-          "description": "Name of a fragment declared in the top-level fragments: map. The fragment's Behaviors are expanded in place before any other processing."
+          "description": "Name of a fragment declared in the top-level fragments: map."
         }
       },
       "additionalProperties": false
@@ -68,34 +84,38 @@
       "type": "object",
       "required": ["actor", "action"],
       "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for this Behavior. Used by evaluations to reference steps via id.action."
+        },
         "actor": {
           "type": "string",
-          "description": "Who performs this Behavior. Common values: user, assistant, tool, system, human, external."
+          "description": "Who performs this Behavior: user, assistant, tool, system, human, external."
         },
         "action": {
           "type": "string",
-          "description": "What is performed. See VOCABULARY.md for the standard list."
+          "description": "What is performed. See VOCABULARY.md."
         },
         "target": {
           "type": "string",
           "description": "Object or destination of the action. Meaning depends on the action category — see SPECIFICATION.md §4."
         },
         "content": {
-          "description": "Payload of the Behavior: free text, structured data, or displayed information. Intentionally untyped in v0.1."
+          "description": "Payload of the Behavior: free text, structured data, or displayed information."
         },
         "capture": {
           "type": "object",
-          "description": "Names runtime values for later reuse via {{variable}} syntax. Each key becomes a variable name. See VARIABLES.md.",
+          "description": "Names runtime values for later reuse via {{variable}} syntax.",
           "minProperties": 1
         },
         "with": {
           "type": "object",
-          "description": "Parameters passed on an outbound Action (typically calls). Partial match by default — the observed call must contain all these keys but may contain additional ones. For strict matching use with_only.",
+          "description": "Parameters passed on an outbound Action (typically calls). Partial match by default.",
           "minProperties": 1
         },
         "with_only": {
           "type": "object",
-          "description": "Parameters passed on an outbound Action. Strict match — the observed call must contain exactly these keys and no others. Mutually exclusive with with.",
+          "description": "Parameters passed on an outbound Action. Strict match — exact keys only.",
           "minProperties": 1
         },
         "evaluations": {
@@ -121,224 +141,50 @@
         "type": {
           "type": "string",
           "enum": [
-            "exact_match", "contains", "regex", "schema", "tool_call", "llm_judge",
-            "groundedness", "bias", "toxicity", "custom",
+            "exact_match", "contains", "regex", "schema", "tool_call",
+            "llm_judge", "custom",
+            "Groundedness", "Relevance", "Coherence", "Fluency",
             "sequence", "eventually", "never", "count", "within", "variable_consistency",
             "all_of", "any_of", "none_of"
           ]
         },
-        "blocking": {
-          "type": "boolean",
-          "description": "If true, failure of this evaluation marks downstream dependent evaluations as inconclusive rather than failed."
-        },
-        "threshold": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Minimum score for this evaluation to pass. Defaults to 0.5. Applies to evaluators that produce a score (llm_judge, groundedness, bias, toxicity, custom, and composition types)."
-        },
-        "adapter": {
-          "type": "string",
-          "description": "Which LLM judge provider to use (e.g. aievaluator, azure, openai, vertexai). Agnostic — the runner maps this to a configured adapter at execution time."
-        },
-        "dataset": {
-          "description": "Reference data for the evaluator. Can be a UUID string referencing an external dataset registry, an inline array of objects, or a JSONL string."
-        },
-        "prompt": {
-          "type": "string",
-          "description": "Custom prompt template for the evaluator. Variables like {{criteria}}, {{context}}, {{response}} are interpolated by the adapter."
-        }
-      },
-      "allOf": [
-        { "$ref": "#/definitions/evalFieldsByType" }
-      ]
-    },
-
-    "evalFieldsByType": {
-      "if": { "required": ["type"] },
-      "then": {
-        "oneOf": [
-          { "$ref": "#/definitions/evalExactMatch" },
-          { "$ref": "#/definitions/evalContains" },
-          { "$ref": "#/definitions/evalRegex" },
-          { "$ref": "#/definitions/evalSchema" },
-          { "$ref": "#/definitions/evalToolCall" },
-          { "$ref": "#/definitions/evalLlmJudge" },
-          { "$ref": "#/definitions/evalGroundedness" },
-          { "$ref": "#/definitions/evalBias" },
-          { "$ref": "#/definitions/evalToxicity" },
-          { "$ref": "#/definitions/evalCustom" },
-          { "$ref": "#/definitions/evalSequence" },
-          { "$ref": "#/definitions/evalEventually" },
-          { "$ref": "#/definitions/evalNever" },
-          { "$ref": "#/definitions/evalCount" },
-          { "$ref": "#/definitions/evalWithin" },
-          { "$ref": "#/definitions/evalVariableConsistency" },
-          { "$ref": "#/definitions/evalComposition" }
-        ]
-      }
-    },
-
-    "evalExactMatch": {
-      "properties": {
-        "type": { "const": "exact_match" },
-        "value": { "description": "The observed content must equal this exactly." }
-      },
-      "required": ["value"]
-    },
-
-    "evalContains": {
-      "properties": {
-        "type": { "const": "contains" },
-        "value": { "type": "string", "description": "The observed content must contain this substring (case-insensitive by default)." }
-      },
-      "required": ["value"]
-    },
-
-    "evalRegex": {
-      "properties": {
-        "type": { "const": "regex" },
-        "pattern": { "type": "string", "description": "The observed content must match this regular expression." }
-      },
-      "required": ["pattern"]
-    },
-
-    "evalSchema": {
-      "properties": {
-        "type": { "const": "schema" },
-        "schema": { "type": "object", "description": "A JSON Schema to validate the observed content against." }
-      },
-      "required": ["schema"]
-    },
-
-    "evalToolCall": {
-      "properties": {
-        "type": { "const": "tool_call" },
-        "target": { "type": "string", "description": "Which tool should have been called." },
-        "with": { "type": "object", "description": "Parameters that must be present in the call (partial match)." },
-        "ordered": { "type": "boolean", "description": "If multiple calls in a row, must they be in this order? Default true." }
-      }
-    },
-
-    "evalLlmJudge": {
-      "properties": {
-        "type": { "const": "llm_judge" },
-        "criteria": { "type": "string", "description": "Natural-language rubric for the LLM judge." }
-      },
-      "required": ["criteria"]
-    },
-
-    "evalGroundedness": {
-      "properties": {
-        "type": { "const": "groundedness" },
-        "context": { "type": "string", "description": "Context or source material to check the response against." },
-        "criteria": { "type": "string", "description": "Optional custom rubric. If omitted, uses a default groundedness prompt." }
-      }
-    },
-
-    "evalBias": {
-      "properties": {
-        "type": { "const": "bias" },
-        "categories": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Bias categories to check (e.g. gender, race, age). If omitted, checks all categories."
-        },
-        "criteria": { "type": "string", "description": "Optional custom rubric." }
-      }
-    },
-
-    "evalToxicity": {
-      "properties": {
-        "type": { "const": "toxicity" },
-        "categories": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Toxicity categories (e.g. hate, harassment, violence). If omitted, checks all."
-        },
-        "criteria": { "type": "string", "description": "Optional custom rubric." }
-      }
-    },
-
-    "evalCustom": {
-      "properties": {
-        "type": { "const": "custom" },
-        "id": { "type": "string", "description": "Identifier for the custom evaluator implementation (e.g. my-org.sentiment-positive)." }
-      },
-      "required": ["id"]
-    },
-
-    "evalSequence": {
-      "properties": {
-        "type": { "const": "sequence" },
+        "blocking": { "type": "boolean" },
+        "threshold": { "type": "number", "minimum": 0, "maximum": 1 },
+        "adapter": { "type": "string" },
+        "dataset": {},
+        "prompt": { "type": "string" },
+        "query": { "type": "string" },
+        "context": { "type": "string" },
+        "response": { "type": "string" },
+        "criteria": { "type": "string" },
+        "value": {},
+        "pattern": { "type": "string" },
+        "schema": { "type": "object" },
+        "target": { "type": "string" },
+        "with": { "type": "object" },
+        "ordered": { "type": "boolean" },
+        "id": { "type": "string" },
+        "match": { "$ref": "#/definitions/selector" },
         "order": {
           "type": "array",
-          "description": "Selectors that must match Behaviors in the trace, in increasing position.",
-          "items": { "$ref": "#/definitions/selector" },
-          "minItems": 2
-        }
-      },
-      "required": ["order"]
-    },
-
-    "evalEventually": {
-      "properties": {
-        "type": { "const": "eventually" },
-        "match": { "$ref": "#/definitions/selector" }
-      },
-      "required": ["match"]
-    },
-
-    "evalNever": {
-      "properties": {
-        "type": { "const": "never" },
-        "match": { "$ref": "#/definitions/selector" }
-      },
-      "required": ["match"]
-    },
-
-    "evalCount": {
-      "properties": {
-        "type": { "const": "count" },
-        "match": { "$ref": "#/definitions/selector" },
-        "min": { "type": "integer", "minimum": 0 },
-        "max": { "type": "integer", "minimum": 0 }
-      }
-    },
-
-    "evalWithin": {
-      "properties": {
-        "type": { "const": "within" },
+          "items": { "$ref": "#/definitions/selector" }
+        },
+        "variable": { "type": "string" },
+        "min": { "type": "integer" },
+        "max": { "type": "integer" },
         "after": { "$ref": "#/definitions/selector" },
-        "match": { "$ref": "#/definitions/selector" },
-        "max_steps": { "type": "integer", "minimum": 1 }
-      },
-      "required": ["after", "match", "max_steps"]
-    },
-
-    "evalVariableConsistency": {
-      "properties": {
-        "type": { "const": "variable_consistency" },
-        "variable": { "type": "string", "description": "Every resolved value of this variable in the trace must be equal." }
-      },
-      "required": ["variable"]
-    },
-
-    "evalComposition": {
-      "properties": {
-        "type": { "enum": ["all_of", "any_of", "none_of"] },
+        "max_steps": { "type": "integer" },
         "evaluations": {
           "type": "array",
-          "items": { "$ref": "#/definitions/evaluation" },
-          "minItems": 1
+          "items": { "$ref": "#/definitions/evaluation" }
         }
       },
-      "required": ["evaluations"]
+      "additionalProperties": true
     },
 
     "selector": {
       "type": "object",
-      "description": "Identifies Behaviors in the trace. A field that's present must match exactly; a field that's omitted is a wildcard.",
+      "description": "Identifies Behaviors in the trace. A field that's present must match exactly; omitted is wildcard.",
       "properties": {
         "actor": { "type": "string" },
         "action": { "type": "string" },

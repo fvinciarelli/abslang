@@ -16,8 +16,8 @@ Every evaluator type accepts these optional fields in addition to its type-speci
 
 | Field | Type | Description |
 |---|---|---|
-| `threshold` | number (0–1) | Minimum score for this evaluation to pass. Default: `0.5`. Applies to evaluators that produce a score: `llm_judge`, `groundedness`, `bias`, `toxicity`, `custom`, and composition types (`all_of`, `any_of`, `none_of`). Non-scoring evaluators (`contains`, `exact_match`, `sequence`, etc.) ignore it. |
-| `adapter` | string | Which LLM judge provider to use. Agnostic identifier — e.g. `aievaluator`, `azure`, `openai`, `vertexai`. The runner maps this to a configured adapter at execution time. If omitted, the runner uses its default adapter. |
+| `threshold` | number (0–1) | Minimum score for this evaluation to pass. Default: `0.5`. Applies to evaluators that produce a score: `llm_judge`, `custom`, and composition types (`all_of`, `any_of`, `none_of`). Non-scoring evaluators (`contains`, `exact_match`, `sequence`, etc.) ignore it. |
+| `adapter` | string | Opaque identifier selecting which LLM judge implementation to use. The runner maps this string to a configured adapter at execution time (via CLI flag `--adapter`, config file, or environment variable). If omitted, the runner uses its default adapter. Examples of values a deployment might use: `aievaluator`, `builtin`. |
 | `dataset` | string, array, or object | Reference data passed to the evaluator. Can be: a UUID string referencing an external dataset registry, an inline array of objects (`[{context: ..., response: ...}]`), or a JSONL string. The adapter decides how to use it. |
 | `prompt` | string | Custom prompt template for evaluators that call an LLM. Variables like `{{criteria}}`, `{{context}}`, `{{response}}` are interpolated by the adapter before sending to the judge. |
 
@@ -46,117 +46,95 @@ evaluations:
   - type: llm_judge
     criteria: "Response is clear and helpful"
     threshold: 0.75
-    adapter: azure
+    adapter: aievaluator
     prompt: |
       Rate the following response on clarity and helpfulness (1-10):
       Response: {{response}}
       Criteria: {{criteria}}
-
-  - type: groundedness
-    context: "The refund policy allows returns within 30 days."
-    threshold: 0.8
-    dataset: "ds_groundedness_production"
 ```
 
-## LLM judge evaluator types
+## LLM-based evaluators
 
-These evaluators use an LLM to assess the agent's output. They all accept `threshold`, `adapter`, `dataset`, and `prompt` in addition to their specific fields.
+Two categories: `llm_judge` for free-form criteria, and named dimension types (`Groundedness`, `Relevance`, `Coherence`, `Fluency`) for standard quality checks that every major platform supports.
 
-### `llm_judge`
+### `llm_judge` — free-form criteria
 
-General-purpose LLM evaluation against a natural-language rubric.
+When you can't use `contains` or `exact_match` and need an LLM to judge a response against natural-language expectations.
 
 ```yaml
 evaluations:
   - type: llm_judge
-    criteria: "Response clearly states the order is in transit, in a friendly tone, without inventing a delivery date."
+    criteria: |
+      1. States the refund amount (€47.50) and timeline (3-5 days)
+      2. Provides the refund reference R-5512
+      3. Uses the customer's name (Franco)
+      4. Reassuring tone — no upsells, no deflections
     threshold: 0.7
 ```
 
-### `groundedness`
+The adapter receives the trace and the evaluation rule. It returns `{ passed, score, reason }`. How it produces that result is up to the adapter.
 
-Checks whether the agent's response is grounded in provided context — i.e., doesn't make up facts not present in the source material.
+### Dimension types — `Groundedness`, `Relevance`, `Coherence`, `Fluency`
 
-```yaml
-evaluations:
-  - type: groundedness
-    context: "Tool response: { status: shipped, eta: 2026-08-03 }"
-    threshold: 0.8
-```
-
-If `context` is omitted, the adapter uses the trace up to that point as context.
-
-### `bias`
-
-Checks for bias in the agent's response across specified categories.
+These are standard evaluation dimensions supported by Azure AI Foundry, Vertex AI, and other platforms. Unlike `llm_judge`, they don't take free-form `criteria` — the platform already knows how to evaluate them. You just point them at the right parts of the trace.
 
 ```yaml
-evaluations:
-  - type: bias
-    categories: ["gender", "race", "age"]
-    threshold: 0.1    # scores near 0 = less bias (lower is better)
+behaviors:
+  - id: user_asks
+    actor: user
+    action: says
+    content: "{{cases.userQuery}}"
+
+  - id: kb_result
+    actor: tool
+    action: responds
+    target: Knowledge Base
+
+  - id: answer
+    actor: assistant
+    action: informs
+    evaluations:
+      - type: Groundedness
+        query: user_asks.says
+        context: kb_result.responds
+        response: self
+        threshold: 0.8
+      - type: Relevance
+        query: user_asks.says
+        response: self
+      - type: Coherence
+        response: self
 ```
 
-If `categories` is omitted, checks all standard bias categories.
+Each type expects specific inputs from the trace:
 
-### `toxicity`
+| Type | Needs | What it checks |
+|---|---|---|
+| `Groundedness` | `query`, `context`, `response` | Every factual claim in the response is supported by the context |
+| `Relevance` | `query`, `response` | The response addresses the query, no tangents |
+| `Coherence` | `response` | Logical flow and internal consistency |
+| `Fluency` | `response` | Natural language quality, grammar, readability |
 
-Checks for toxic content in the agent's response.
+Inputs are references to behavior ids, optionally qualified with `.action`:
 
-```yaml
-evaluations:
-  - type: toxicity
-    categories: ["hate", "harassment", "violence"]
-    threshold: 0.05   # scores near 0 = less toxic (lower is better)
-```
+- `query: user_asks.says` — the content of that behavior
+- `context: kb_result.responds` — the content of that tool response
+- `response: self` — the current behavior (the one carrying the evaluation)
+- `response: answer.informs` — explicit reference (used in session-level evaluations)
 
-If `categories` is omitted, checks all standard toxicity categories.
+If the action is omitted, the default for that actor is used: `user` → `.says`, `tool` → `.responds`, `assistant` → `.informs`. So `context: kb_result` is equivalent to `context: kb_result.responds`.
+
+The adapter receives the evaluation type, the mapped inputs resolved from the trace, and any extra fields (`threshold`, `adapter`). It returns `{ passed, score, reason }`.
 
 ### `custom`
 
-Escape hatch for evaluators not covered above. The `id` identifies the evaluator implementation. Use `prompt` to pass a custom prompt template.
+Escape hatch for evaluators that are not `llm_judge` but still need an external implementation. The `id` identifies the evaluator. The runner dispatches it by `id` to a registered adapter.
 
 ```yaml
 evaluations:
   - type: custom
     id: my-org.sentiment-positive
-    prompt: "Is this response cheerful and enthusiastic? Reply YES/NO."
     threshold: 0.5
-```
-
-All LLM judge evaluators share the same adapter interface:
-session: Order status requires order number
-behaviors:
-  - actor: user
-    action: says
-    content: "Where is my order?"
-  - actor: assistant
-    action: asks
-    content: "Please provide your order number"
-  - actor: user
-    action: says
-    content: "12345"
-    capture:
-      orderId: "12345"
-  - actor: assistant
-    action: calls
-    target: Order MCP
-    with:
-      orderId: "{{orderId}}"
-  - actor: assistant
-    action: informs
-    content: "Your order is on the way"
-
-evaluations:
-  - type: sequence
-    order:
-      - { actor: assistant, action: asks }
-      - { actor: assistant, action: calls, target: "Order MCP" }
-      - { actor: assistant, action: informs }
-  - type: variable_consistency
-    variable: orderId
-  - type: never
-    match: { actor: assistant, action: hands_off }
 ```
 
 ## Step-level evaluator types

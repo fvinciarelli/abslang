@@ -38,6 +38,7 @@ class AgentConfig:
     refresh_token: str | None = None
     client_id: str | None = None
     stream: bool = False
+    timeout: int = 300
 
 
 @dataclass
@@ -90,7 +91,7 @@ async def _openai_adapter(messages: list[AgentMessage], config: AgentConfig) -> 
     if config.stream:
         body["stream"] = True
 
-    async with httpx.AsyncClient(timeout=300) as client:
+    async with httpx.AsyncClient(timeout=config.timeout) as client:
         resp = await client.post(config.url, json=body, headers=headers)
 
     if resp.status_code >= 400:
@@ -168,7 +169,7 @@ async def _claude_adapter(messages: list[AgentMessage], config: AgentConfig) -> 
     if system_msgs:
         body["system"] = system_msgs[0].content
 
-    async with httpx.AsyncClient(timeout=300) as client:
+    async with httpx.AsyncClient(timeout=config.timeout) as client:
         resp = await client.post(config.url, json=body, headers=headers)
 
     if resp.status_code >= 400:
@@ -200,7 +201,7 @@ async def _gemini_adapter(messages: list[AgentMessage], config: AgentConfig) -> 
         "generationConfig": {"maxOutputTokens": 1024},
     }
 
-    async with httpx.AsyncClient(timeout=300) as client:
+    async with httpx.AsyncClient(timeout=config.timeout) as client:
         resp = await client.post(url, json=body, headers=headers)
 
     if resp.status_code >= 400:
@@ -337,6 +338,7 @@ async def run(session: NormalizedSession, agent_config: AgentConfig) -> RunResul
                      or (observed.action in EXEC_ACTIONS and behavior.action in EXEC_ACTIONS))
                 # Skip target check for communication actions (runner can't detect target from text)
                 and (behavior.action in COMM_ACTIONS or not behavior.target or observed.target == behavior.target)
+                and _match_with_params(behavior, observed)
             )
 
             match_observed = observed if matched else None
@@ -377,16 +379,21 @@ async def run(session: NormalizedSession, agent_config: AgentConfig) -> RunResul
 
     all_evals = [e for s in step_results for e in s.evaluations] + chain_evals
 
+    # Propagate blocking failures → mark downstream evals as inconclusive
+    _propagate_blocking(step_results)
+
+    all_evals_final = [e for s in step_results for e in s.evaluations] + chain_evals
+
     return RunResult(
         session=session.session,
         agent=agent_config.url,
-        passed=all(e.passed for e in all_evals),
+        passed=all(e.passed or e.inconclusive for e in all_evals_final),
         steps=step_results,
         chain_evaluations=chain_evals,
         steps_total=len(step_results),
         steps_matched=sum(1 for s in step_results if s.matched or s.sent),
-        evaluations_total=len(all_evals),
-        evaluations_passed=sum(1 for e in all_evals if e.passed),
+        evaluations_total=len(all_evals_final),
+        evaluations_passed=sum(1 for e in all_evals_final if e.passed or e.inconclusive),
     )
 
 
@@ -395,3 +402,45 @@ def _try_parse_json(s: str) -> Any:
         return json.loads(s)
     except (json.JSONDecodeError, TypeError):
         return s
+
+
+def _match_with_params(behavior: Behavior, observed: ObservedStep) -> bool:
+    """Validate with / with_only parameter matching for execution actions."""
+    if not behavior.with_ and not behavior.with_only:
+        return True
+
+    observed_with = observed.with_ or {}
+
+    if behavior.with_only:
+        expected_keys = sorted(behavior.with_only.keys())
+        observed_keys = sorted(observed_with.keys())
+        if len(expected_keys) != len(observed_keys):
+            return False
+        if expected_keys != observed_keys:
+            return False
+        for key in expected_keys:
+            if json.dumps(observed_with[key], default=str) != json.dumps(behavior.with_only[key], default=str):
+                return False
+        return True
+
+    if behavior.with_:
+        for key, expected in behavior.with_.items():
+            if key not in observed_with:
+                return False
+            if json.dumps(observed_with[key], default=str) != json.dumps(expected, default=str):
+                return False
+        return True
+
+    return True
+
+
+def _propagate_blocking(step_results: list[StepResult]) -> None:
+    """Mark downstream evaluations as inconclusive after a blocking failure."""
+    downstream_blocked = False
+    for sr in step_results:
+        for ev in sr.evaluations:
+            if downstream_blocked:
+                ev.inconclusive = True
+                ev.reason = "Inconclusive: a blocking evaluation earlier in the session failed."
+            elif ev.blocking and not ev.passed:
+                downstream_blocked = True

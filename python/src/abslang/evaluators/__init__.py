@@ -26,6 +26,7 @@ class EvalResult:
     score: float
     reason: str
     blocking: bool = False
+    inconclusive: bool = False
 
 
 @dataclass
@@ -265,31 +266,151 @@ def variable_consistency(
     rule: dict[str, Any],
 ) -> EvalResult:
     var_name = rule["variable"]
-    values: list[Any] = []
+    values: list[dict[str, Any]] = []
     variables: dict[str, Any] = {}
 
     for b in behaviors:
+        # Resolve {{var}} references in with and content
+        resolved_with = _resolve_var_refs(b.with_, variables) if b.with_ else None
+        resolved_content = _resolve_var_refs(b.content, variables)
+
+        # Track references in with
+        if b.with_ and _has_var_ref(b.with_, var_name):
+            val = _deep_get(resolved_with, var_name)
+            if val is not None:
+                values.append({"value": val, "source": f"with in step {b.actor}/{b.action}"})
+
+        # Track references in content
+        if isinstance(b.content, str) and _has_var_ref_str(b.content, var_name):
+            values.append({"value": resolved_content, "source": f"content in step {b.actor}/{b.action}"})
+
+        # Apply captures
         if b.capture and var_name in b.capture:
-            val = b.capture[var_name]
-            values.append(val)
+            val = _resolve_var_refs(b.capture[var_name], variables)
             variables[var_name] = val
+            values.append({"value": val, "source": f"capture in step {b.actor}/{b.action}"})
 
     if len(values) <= 1:
         return EvalResult(
             type="variable_consistency",
             passed=True,
             score=1.0,
-            reason=f'Variable "{var_name}" captured {len(values)} time(s) — nothing to compare',
+            reason=f'Variable "{var_name}" used {len(values)} time(s) — nothing to compare',
         )
 
-    first = json.dumps(values[0], default=str)
-    consistent = all(json.dumps(v, default=str) == first for v in values)
+    first = json.dumps(values[0]["value"], default=str)
+    consistent = all(json.dumps(v["value"], default=str) == first for v in values)
+    if not consistent:
+        details = ", ".join(f'{v["source"]}: {json.dumps(v["value"], default=str)}' for v in values)
+        return EvalResult(
+            type="variable_consistency",
+            passed=False,
+            score=0.0,
+            reason=f'Variable "{var_name}" has inconsistent values: {details}',
+        )
     return EvalResult(
         type="variable_consistency",
-        passed=consistent,
-        score=1.0 if consistent else 0.0,
-        reason=f'Variable "{var_name}" consistent across {len(values)} captures' if consistent
-        else f'Variable "{var_name}" has inconsistent values: {[json.dumps(v, default=str) for v in values]}',
+        passed=True,
+        score=1.0,
+        reason=f'Variable "{var_name}" consistent across {len(values)} uses',
+    )
+
+
+def _has_var_ref(obj: Any, var_name: str) -> bool:
+    if isinstance(obj, str):
+        return _has_var_ref_str(obj, var_name)
+    if isinstance(obj, list):
+        return any(_has_var_ref(v, var_name) for v in obj)
+    if isinstance(obj, dict):
+        return any(_has_var_ref(v, var_name) for v in obj.values())
+    return False
+
+
+def _has_var_ref_str(s: str, var_name: str) -> bool:
+    return f"{{{{{var_name}}}}}" in s
+
+
+def _resolve_var_refs(value: Any, variables: dict[str, Any]) -> Any:
+    if isinstance(value, str):
+        def _replace(m: re.Match) -> str:
+            name = m.group(1)
+            return str(variables[name]) if name in variables else f"{{{{{name}}}}}"
+        return re.sub(r"\{\{(\w+)\}\}", _replace, value)
+    if isinstance(value, list):
+        return [_resolve_var_refs(v, variables) for v in value]
+    if isinstance(value, dict):
+        return {k: _resolve_var_refs(v, variables) for k, v in value.items()}
+    return value
+
+
+def _deep_get(obj: Any, key: str) -> Any:
+    if isinstance(obj, dict) and key in obj:
+        return obj[key]
+    if isinstance(obj, dict):
+        for v in obj.values():
+            found = _deep_get(v, key)
+            if found is not None:
+                return found
+    return None
+
+
+def tool_call_eval(trace: list[ObservedStep], rule: dict[str, Any]) -> EvalResult:
+    """Validate tool calls in the trace."""
+    calls = [s for s in trace if s.actor == "assistant" and s.action == "calls"]
+
+    target = rule.get("target")
+    expected_with = rule.get("with")
+
+    if target:
+        matching = [c for c in calls if c.target == target]
+        if not matching:
+            observed_targets = [c.target for c in calls]
+            return EvalResult(
+                type="tool_call",
+                passed=False,
+                score=0.0,
+                reason=f'Tool "{target}" was never called. Observed calls: {", ".join(observed_targets) or "none"}',
+            )
+
+        if expected_with:
+            for call in matching:
+                observed_with = call.with_ or {}
+                for key, expected in expected_with.items():
+                    if key not in observed_with:
+                        return EvalResult(
+                            type="tool_call",
+                            passed=False,
+                            score=0.0,
+                            reason=f'Tool "{target}" missing parameter "{key}". Observed: {json.dumps(observed_with)}',
+                        )
+                    if json.dumps(observed_with[key], default=str) != json.dumps(expected, default=str):
+                        return EvalResult(
+                            type="tool_call",
+                            passed=False,
+                            score=0.0,
+                            reason=f'Tool "{target}" parameter "{key}" expected {json.dumps(expected)}, got {json.dumps(observed_with[key], default=str)}',
+                        )
+
+        return EvalResult(
+            type="tool_call",
+            passed=True,
+            score=1.0,
+            reason=f'Tool "{target}" called correctly',
+        )
+
+    if not calls:
+        return EvalResult(
+            type="tool_call",
+            passed=False,
+            score=0.0,
+            reason="No tool calls observed in the trace",
+        )
+
+    return EvalResult(
+        type="tool_call",
+        passed=True,
+        score=1.0,
+        reason=f"{len(calls)} tool call(s) observed",
     )
 
 
@@ -326,20 +447,15 @@ def evaluate_step(
     elif etype == "variable_consistency":
         return _with_blocking(variable_consistency(trace, behaviors, evaluation), blocking)
     elif etype == "tool_call":
-        return EvalResult(type="tool_call", passed=True, score=1.0, reason="Tool call validated", blocking=blocking)
+        return _with_blocking(tool_call_eval(trace, evaluation), blocking)
     elif etype == "llm_judge":
         return EvalResult(type="llm_judge", passed=False, score=0.0,
                           reason="No LLM judge adapter registered. Use --adapter llm_judge=<provider>.",
                           blocking=blocking)
-    elif etype == "groundedness":
-        return EvalResult(type="groundedness", passed=False, score=0.0,
-                          reason="No groundedness adapter registered.", blocking=blocking)
-    elif etype == "bias":
-        return EvalResult(type="bias", passed=False, score=0.0,
-                          reason="No bias adapter registered.", blocking=blocking)
-    elif etype == "toxicity":
-        return EvalResult(type="toxicity", passed=False, score=0.0,
-                          reason="No toxicity adapter registered.", blocking=blocking)
+    elif etype in ("Groundedness", "Relevance", "Coherence", "Fluency"):
+        return EvalResult(type=etype, passed=False, score=0.0,
+                          reason=f"No adapter registered for {etype}. Use --adapter {etype}=<provider>.",
+                          blocking=blocking)
     elif etype in ("all_of", "any_of", "none_of"):
         return _evaluate_composition(trace, evaluation, behaviors)
     else:

@@ -52,7 +52,9 @@ export function formatTable(
 
     for (const ev of step.evaluations) {
       const evDesc = ev.type.substring(0, 28).padEnd(28);
-      const evStatus = ev.passed ? "   ✅    │   pass  │" : "   ❌    │  FAIL  │";
+      const evStatus = ev.inconclusive
+        ? "   ⚠️    │  incon  │"
+        : ev.passed ? "   ✅    │   pass  │" : "   ❌    │  FAIL  │";
       lines.push(`│    │   └─ ${evDesc} │ ${evStatus}`);
     }
   }
@@ -60,7 +62,9 @@ export function formatTable(
   // Chain evaluations
   for (const ev of result.chainEvaluations) {
     const desc = `chain: ${ev.type}`.substring(0, 34).padEnd(34);
-    const status = ev.passed ? "   ✅    │   pass  │" : "   ❌    │  FAIL  │";
+    const status = ev.inconclusive
+      ? "   ⚠️    │  incon  │"
+      : ev.passed ? "   ✅    │   pass  │" : "   ❌    │  FAIL  │";
     lines.push(`│  C │ ${desc} │ ${status}`);
   }
 
@@ -71,16 +75,25 @@ export function formatTable(
     lines.push(chalk.red("❌ Some evaluations failed:"));
     for (const step of result.steps) {
       for (const ev of step.evaluations) {
-        if (!ev.passed) {
+        if (!ev.passed && !ev.inconclusive) {
           lines.push(chalk.red(`  Step ${step.step} — ${ev.type}: ${ev.reason}`));
         }
       }
     }
     for (const ev of result.chainEvaluations) {
-      if (!ev.passed) {
+      if (!ev.passed && !ev.inconclusive) {
         lines.push(chalk.red(`  Chain — ${ev.type}: ${ev.reason}`));
       }
     }
+  }
+
+  const inconclusive = [
+    ...result.steps.flatMap((s) => s.evaluations),
+    ...result.chainEvaluations,
+  ].filter((e) => e.inconclusive).length;
+  if (inconclusive > 0) {
+    lines.push("");
+    lines.push(chalk.yellow(`⚠️  ${inconclusive} evaluation(s) marked inconclusive (downstream of a blocking failure).`));
   }
 
   return lines.join("\n");
@@ -146,7 +159,9 @@ export function formatJunit(result: RunResult): string {
     for (const ev of step.evaluations) {
       caseNum++;
       xml += `  <testcase classname="ABS" name="Step ${step.step}: ${escapeXml(ev.type)}" time="0">\n`;
-      if (!ev.passed) {
+      if (ev.inconclusive) {
+        xml += `    <skipped message="${escapeXml(ev.reason)}" />\n`;
+      } else if (!ev.passed) {
         xml += `    <failure message="${escapeXml(ev.reason)}">\n`;
         xml += `      Type: ${escapeXml(ev.type)}\n`;
         xml += `      Reason: ${escapeXml(ev.reason)}\n`;
@@ -159,7 +174,9 @@ export function formatJunit(result: RunResult): string {
   for (const ev of result.chainEvaluations) {
     caseNum++;
     xml += `  <testcase classname="ABS" name="Chain: ${escapeXml(ev.type)}" time="0">\n`;
-    if (!ev.passed) {
+    if (ev.inconclusive) {
+      xml += `    <skipped message="${escapeXml(ev.reason)}" />\n`;
+    } else if (!ev.passed) {
       xml += `    <failure message="${escapeXml(ev.reason)}">\n`;
       xml += `      Type: ${escapeXml(ev.type)}\n`;
       xml += `      Reason: ${escapeXml(ev.reason)}\n`;

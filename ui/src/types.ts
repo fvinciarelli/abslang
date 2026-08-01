@@ -21,6 +21,9 @@ export interface Evaluation {
   id?: string;
   ordered?: boolean;
   blocking?: boolean;
+  query?: string;
+  context?: string;
+  response?: string;
   match?: Selector;
   order?: Selector[];
   variable?: string;
@@ -48,6 +51,7 @@ export interface ABSSession {
   session: string;
   description?: string;
   abs_version?: string;
+  dataset?: { id: string; path: string };
   behaviors: Behavior[];
   fragments?: Record<string, ABSFragment[]>;
   evaluations?: Evaluation[];
@@ -117,6 +121,11 @@ export const EVAL_TYPE_OPTIONS = [
   { label: 'schema', desc: 'JSON Schema validation' },
   { label: 'tool_call', desc: 'Tool call validation' },
   { label: 'llm_judge', desc: 'LLM-as-judge evaluation' },
+  { label: 'Groundedness', desc: 'Response supported by context' },
+  { label: 'Relevance', desc: 'Response addresses the query' },
+  { label: 'Coherence', desc: 'Logical flow and consistency' },
+  { label: 'Fluency', desc: 'Natural language quality' },
+  { label: 'custom', desc: 'Custom evaluator by id' },
   { label: 'sequence', desc: 'Steps in order' },
   { label: 'eventually', desc: 'Must occur at least once' },
   { label: 'never', desc: 'Must never occur' },
@@ -153,6 +162,14 @@ export function newEvaluation(type = 'contains'): Evaluation {
       break;
     case 'llm_judge':
       base.criteria = '';
+      break;
+    case 'Groundedness':
+    case 'Relevance':
+    case 'Coherence':
+    case 'Fluency':
+      base.query = '';
+      base.context = '';
+      base.response = 'self';
       break;
     case 'schema':
       base.schema = { type: 'object', required: [], properties: {} };

@@ -38,7 +38,7 @@ A `{{variable}}` that has no prior `capture:` in the Session is not an error —
 
 | Source | Example | Typical use |
 |--------|---------|-------------|
-| Dataset row | `abs run session.abs.yaml --dataset cases.jsonl` | Run the same Session against many inputs |
+| Dataset column | `{{cases.userQuery}}` | Bound from the `dataset:` block declared in the session file |
 | CLI flag | `abs run session.abs.yaml --var orderId=12345` | Quick one-off with a single value |
 | Environment variable | `ABS_VAR_orderId=12345 abs run session.abs.yaml` | CI pipelines, secrets |
 
@@ -46,22 +46,25 @@ A Session becomes a template, and a dataset is what turns it into many test case
 
 ### Datasets
 
-A dataset is a JSON or JSONL file where each row is a set of variable bindings:
+A dataset is declared in the session file with an `id` and a `path`. Each row in the file becomes one execution of the session. Columns are referenced as `{{id.column}}`.
 
-```jsonl
-{"orderId": "12345", "expectedStatus": "shipped"}
-{"orderId": "67890", "expectedStatus": "pending"}
-{"orderId": "99999", "expectedStatus": "cancelled"}
+```yaml
+# session.abs.yaml
+dataset:
+  id: cases
+  path: cases.jsonl
+
+behaviors:
+  - actor: user
+    action: says
+    content: "{{cases.userQuery}}"
 ```
 
-Or as a JSON array:
-
-```json
-[
-  { "orderId": "12345", "expectedStatus": "shipped" },
-  { "orderId": "67890", "expectedStatus": "pending" },
-  { "orderId": "99999", "expectedStatus": "cancelled" }
-]
+```jsonl
+# cases.jsonl
+{"userQuery": "What's your return policy?"}
+{"userQuery": "Can I return opened items?"}
+{"userQuery": "Do you do refunds?"}
 ```
 
 When the Runner executes with `--dataset`, it runs the Session once per row, binding the row's keys as `{{variables}}`. The report aggregates all runs together — see CLI.md.

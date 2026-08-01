@@ -34,7 +34,7 @@ A Behavior is the smallest unit of observable behavior described by ABS: somethi
 
 ### Actor (required)
 
-The entity performing the Behavior.
+The entity performing the Behavior. The behavior MAY carry an `id` field, a unique string used by evaluations to reference this step (e.g. `query: user_asks.says`).
 
 Examples: `user`, `assistant`, `tool`, `system`, `human`, `external`.
 

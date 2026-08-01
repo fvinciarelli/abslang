@@ -5,6 +5,7 @@ import { validateDocument } from "./schema";
 // ── Types ──
 
 export interface Behavior {
+  id?: string;
   actor: string;
   action: string;
   target?: string;
@@ -30,6 +31,7 @@ export interface ABSDocument {
   session: string;
   description?: string;
   abs_version?: string;
+  dataset?: { id: string; path: string };
   behaviors: (Behavior | { include: string })[];
   fragments?: Record<string, Behavior[]>;
   evaluations?: Evaluation[];
@@ -39,6 +41,7 @@ export interface NormalizedSession {
   session: string;
   description?: string;
   abs_version?: string;
+  dataset?: { id: string; path: string };
   behaviors: Behavior[];
   evaluations?: Evaluation[];
 }
@@ -94,6 +97,7 @@ export function expandFragments(doc: ABSDocument): NormalizedSession {
     session: doc.session,
     description: doc.description,
     abs_version: doc.abs_version,
+    dataset: doc.dataset,
     behaviors: expand(doc.behaviors),
     evaluations: doc.evaluations,
   };

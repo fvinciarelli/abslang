@@ -13,6 +13,7 @@ export interface AgentConfig {
   format?: "openai" | "claude" | "custom";
   auth?: "none" | "api_key" | "bearer";
   token?: string;
+  timeout?: number;
 }
 
 interface AgentMessage {
@@ -74,11 +75,11 @@ async function openaiAdapter(
     tool_choice: "auto",
   };
 
-  const resp = await fetch(config.url, {
+  const resp = await absFetchBrowser(config.url, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
-  });
+  }, config.timeout);
 
   if (!resp.ok) {
     const text = await resp.text();
@@ -218,7 +219,8 @@ export async function runBrowser(
           (observed.action === behavior.action ||
             (commActions.includes(observed.action) && commActions.includes(behavior.action)) ||
             (execActions.includes(observed.action) && execActions.includes(behavior.action))) &&
-          (commActions.includes(behavior.action) || !behavior.target || observed.target === behavior.target)
+          (commActions.includes(behavior.action) || !behavior.target || observed.target === behavior.target) &&
+          matchWithParamsBrowser(behavior, observed)
         : false;
 
       const matchObserved: ObservedStep | null = matched ? observed : null;
@@ -254,19 +256,81 @@ export async function runBrowser(
 
   const allEvals = [...stepResults.flatMap((s) => s.evaluations), ...chainEvaluations];
 
+  // Propagate blocking failures → mark downstream evals as inconclusive
+  propagateBlockingBrowser(stepResults);
+
+  const allEvalsFinal = [...stepResults.flatMap((s) => s.evaluations), ...chainEvaluations];
+
   return {
     session: session.session,
     agent: agentConfig.url,
-    passed: allEvals.every((e) => e.passed),
+    passed: allEvalsFinal.every((e) => e.passed || e.inconclusive),
     steps: stepResults,
     chainEvaluations,
     stepsTotal: stepResults.length,
     stepsMatched: stepResults.filter((s) => s.matched || s.sent).length,
-    evaluationsTotal: allEvals.length,
-    evaluationsPassed: allEvals.filter((e) => e.passed).length,
+    evaluationsTotal: allEvalsFinal.length,
+    evaluationsPassed: allEvalsFinal.filter((e) => e.passed || e.inconclusive).length,
   };
+}
+
+function matchWithParamsBrowser(behavior: Behavior, observed: ObservedStep): boolean {
+  if (!behavior.with && !behavior.with_only) return true;
+  const observedWith = observed.with ?? {};
+
+  if (behavior.with_only) {
+    const expectedKeys = Object.keys(behavior.with_only).sort();
+    const observedKeys = Object.keys(observedWith).sort();
+    if (expectedKeys.length !== observedKeys.length) return false;
+    if (expectedKeys.join(",") !== observedKeys.join(",")) return false;
+    for (const key of expectedKeys) {
+      if (JSON.stringify(observedWith[key]) !== JSON.stringify(behavior.with_only[key])) return false;
+    }
+    return true;
+  }
+
+  if (behavior.with) {
+    for (const [key, expected] of Object.entries(behavior.with)) {
+      if (!(key in observedWith)) return false;
+      if (JSON.stringify(observedWith[key]) !== JSON.stringify(expected)) return false;
+    }
+    return true;
+  }
+
+  return true;
+}
+
+function propagateBlockingBrowser(stepResults: StepResult[]): void {
+  let downstreamBlocked = false;
+  for (const sr of stepResults) {
+    for (const ev of sr.evaluations) {
+      if (downstreamBlocked) {
+        ev.inconclusive = true;
+        ev.reason = `Inconclusive: a blocking evaluation earlier in the session failed.`;
+      } else if (ev.blocking && !ev.passed) {
+        downstreamBlocked = true;
+      }
+    }
+  }
 }
 
 function tryParseJson(s: string): any {
   try { return JSON.parse(s); } catch { return s; }
 }
+
+async function absFetchBrowser(
+  url: string,
+  init: RequestInit,
+  timeoutSec?: number
+): Promise<Response> {
+  if (!timeoutSec) return fetch(url, init);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutSec * 1000);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Already exported above — end of module

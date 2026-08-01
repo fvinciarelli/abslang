@@ -25,10 +25,13 @@ from .config import merge_config
 
 SMOKE_SESSION = """session: Order status
 description: User asks about an order. Happy path.
+dataset:
+  id: cases
+  path: order-status.jsonl
 behaviors:
   - actor: user
     action: says
-    content: "Where is my order {{orderId}}?"
+    content: "Where is my order {{cases.orderId}}?"
 
   - actor: assistant
     action: asks
@@ -36,9 +39,9 @@ behaviors:
 
   - actor: user
     action: says
-    content: "{{orderId}}"
+    content: "{{cases.orderId}}"
     capture:
-      orderId: "{{orderId}}"
+      orderId: "{{cases.orderId}}"
 
   - actor: assistant
     action: calls
@@ -48,10 +51,10 @@ behaviors:
 
   - actor: assistant
     action: informs
-    content: "{{expectedResponse}}"
+    content: "{{cases.expectedResponse}}"
     evaluations:
       - type: contains
-        value: "{{expectedKeyword}}"
+        value: "{{cases.expectedKeyword}}"
 """
 
 SMOKE_DATASET = [
@@ -139,15 +142,13 @@ def init():
     else:
         click.echo("⏭️  sessions/order-status.abs.yaml already exists, skipping")
 
-    # 3. datasets/
-    datasets_dir = cwd / "datasets"
-    datasets_dir.mkdir(exist_ok=True)
-    dataset_path = datasets_dir / "order-status.jsonl"
+    # 3. Create dataset next to the session
+    dataset_path = sessions_dir / "order-status.jsonl"
     if not dataset_path.exists():
         dataset_path.write_text(
             "\n".join(json.dumps(r) for r in SMOKE_DATASET) + "\n"
         )
-        click.echo("✅ Created datasets/order-status.jsonl (3 rows)")
+        click.echo("✅ Created sessions/order-status.jsonl (3 rows)")
     else:
         click.echo("⏭️  datasets/order-status.jsonl already exists, skipping")
 
@@ -181,9 +182,13 @@ def init():
 @click.option("--agent-format", help="openai, claude, or gemini", default="openai")
 @click.option("--agent-auth", help="none, api_key, bearer, or oauth2", default="none")
 @click.option("--agent-token", help="Token or API key", default=None)
+@click.option("--agent-refresh-url", help="OAuth2 token refresh URL", default=None)
+@click.option("--agent-refresh-token", help="OAuth2 refresh token", default=None)
+@click.option("--agent-client-id", help="OAuth2 client ID", default=None)
 @click.option("--adapter", "adapters", multiple=True, help="Evaluator adapter binding (--adapter llm_judge=aievaluator)")
 @click.option("--format", "output_format", help="table, json, or junit", default="table")
 @click.option("--ci", is_flag=True, help="CI mode (no colors, no prompts)")
+@click.option("--timeout", type=int, default=300, help="Timeout per session run in seconds")
 @click.option("--output", "output_file", help="Write report to file")
 @click.option("--parallel", type=int, default=1, help="Run N dataset rows in parallel")
 def run_cmd(
@@ -195,9 +200,13 @@ def run_cmd(
     agent_format: str,
     agent_auth: str,
     agent_token: Optional[str],
+    agent_refresh_url: Optional[str],
+    agent_refresh_token: Optional[str],
+    agent_client_id: Optional[str],
     adapters: tuple[str, ...],
     output_format: str,
     ci: bool,
+    timeout: int,
     output_file: Optional[str],
     parallel: int,
 ):
@@ -243,6 +252,10 @@ def run_cmd(
         format=agent_format,
         auth=agent_auth,
         token=agent_token or os.environ.get("ABS_AGENT_TOKEN"),
+        refresh_url=agent_refresh_url,
+        refresh_token=agent_refresh_token,
+        client_id=agent_client_id,
+        timeout=timeout,
     )
 
     # Parse runtime vars
@@ -258,9 +271,21 @@ def run_cmd(
         click.echo(f"❌ {e}", err=True)
         sys.exit(2)
 
-    # Load dataset
+    # Load dataset — from session's dataset: block, or --dataset flag
     dataset: list[dict[str, Any]] | None = None
-    if dataset_path:
+    dataset_id: str | None = None
+
+    in_file = sessions[0].dataset if sessions else None
+    if in_file and in_file.get("path"):
+        try:
+            session_dir = Path(session).parent if Path(session).suffix in (".yaml", ".abs.yaml") else Path(session)
+            resolved_path = session_dir / in_file["path"]
+            dataset = load_dataset(str(resolved_path))
+            dataset_id = in_file.get("id")
+        except Exception as e:
+            click.echo(f"❌ Cannot load dataset '{in_file['path']}': {e}", err=True)
+            sys.exit(2)
+    elif dataset_path:
         try:
             dataset = load_dataset(dataset_path)
         except Exception as e:
@@ -284,11 +309,12 @@ def run_cmd(
             return {"result": result, "row_vars": vars_dict}
 
         if dataset:
-            # Parallel execution with semaphore
             sem = asyncio.Semaphore(parallel)
             async def run_with_semaphore(row: dict[str, Any]):
                 async with sem:
-                    vars_combined = {**runtime_vars, **row}
+                    # Prefix columns with dataset id if declared in-file
+                    prefixed = {f"{dataset_id}.{k}": v for k, v in row.items()} if dataset_id else row
+                    vars_combined = {**runtime_vars, **prefixed}
                     tasks = []
                     for sess in sessions:
                         tasks.append(run_one(sess, vars_combined))
@@ -454,17 +480,68 @@ def report(file: str, output_format: str, failed: bool, detail: Optional[int]):
         click.echo(f"❌ Cannot read report: {e}", err=True)
         sys.exit(2)
 
+    results = data.get("results", [data])
+
+    if detail:
+        idx = detail - 1
+        if idx < 0 or idx >= len(results):
+            click.echo(f"❌ Row {detail} not found. Report has {len(results)} rows.", err=True)
+            sys.exit(2)
+        result = results[idx]
+        click.echo(f"Row {detail}: {result.get('session', '')}")
+        if output_format == "json":
+            click.echo(json.dumps(result, indent=2, default=str))
+        else:
+            trace = result.get("trace", [])
+            chain = result.get("chain_evaluations", [])
+            click.echo(f"{'✅' if result.get('passed') else '❌'} Steps: {result.get('steps_matched', 0)}/{result.get('steps_total', 0)}")
+            click.echo(f"   Evaluations: {result.get('evaluations_passed', 0)}/{result.get('evaluations_total', 0)}")
+            for s in trace:
+                match_status = "→" if s.get("sent") else ("✅" if s.get("matched") else "❌")
+                b = s.get("behavior", {})
+                click.echo(f"  Step {s.get('step')}: {b.get('actor')} {b.get('action')} {match_status}")
+                for e in s.get("evaluations", []):
+                    estatus = "⚠️" if e.get("inconclusive") else ("✅" if e.get("passed") else "❌")
+                    click.echo(f"    └─ {e.get('type')} {estatus}: {e.get('reason', '')[:100]}")
+            for e in chain:
+                estatus = "⚠️" if e.get("inconclusive") else ("✅" if e.get("passed") else "❌")
+                click.echo(f"  Chain — {e.get('type')} {estatus}: {e.get('reason', '')[:100]}")
+        return
+
     if output_format == "json":
-        click.echo(json.dumps(data, indent=2))
+        if failed:
+            failed_results = [r for r in results if not r.get("passed")]
+            click.echo(json.dumps({**data, "results": failed_results}, indent=2, default=str))
+        else:
+            click.echo(json.dumps(data, indent=2, default=str))
+    elif output_format == "junit":
+        filtered = [r for r in results if not r.get("passed")] if failed else results
+        click.echo(format_junit({"results": filtered}))
     else:
-        # Reconstruct RunResult
-        results = data.get("results", [data])
-        for r in results:
-            if "trace" in r:
-                click.echo(f"Session: {r.get('session', '')}")
-                click.echo(f"Passed: {'✅' if r.get('passed') else '❌'}")
-                if r.get("row_vars"):
-                    click.echo(f"Variables: {r['row_vars']}")
+        # Table format
+        if len(results) == 1:
+            r = results[0]
+            click.echo(f"Session: {r.get('session', '')}")
+            click.echo(f"Passed: {'✅' if r.get('passed') else '❌'}")
+            if r.get("row_vars"):
+                click.echo(f"Variables: {r['row_vars']}")
+            click.echo(f"Steps: {r.get('steps_matched', 0)}/{r.get('steps_total', 0)}")
+            click.echo(f"Evaluations: {r.get('evaluations_passed', 0)}/{r.get('evaluations_total', 0)}")
+            for s in r.get("trace", []):
+                b = s.get("behavior", {})
+                match_status = "→" if s.get("sent") else ("✅" if s.get("matched") else "❌")
+                click.echo(f"  Step {s.get('step')}: {b.get('actor')} {b.get('action')} {match_status}")
+                for e in s.get("evaluations", []):
+                    estatus = "⚠️" if e.get("inconclusive") else ("✅" if e.get("passed") else "❌")
+                    click.echo(f"    └─ {e.get('type')} {estatus}")
+        else:
+            rows = [r for r in results if not r.get("passed")] if failed else results
+            passed_count = sum(1 for r in results if r.get("passed"))
+            click.echo(f"Rows: {len(results)} total, {passed_count} passed")
+            for i, r in enumerate(rows):
+                actual = results.index(r) + 1
+                status = "✅" if r.get("passed") else "❌"
+                click.echo(f"  Row {actual}: {r.get('session', '')} {status}")
 
 
 # ═══════════════════════════════════════════════════════════════════

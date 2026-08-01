@@ -14,8 +14,12 @@ An ABS document is valid YAML. (JSON is also valid, being a syntactic subset of 
 session: <string>            # REQUIRED — human-readable session name
 description: <string>        # OPTIONAL
 abs_version: "0.1"           # OPTIONAL in v0.1, RECOMMENDED, will be REQUIRED in v0.2
+dataset:                     # OPTIONAL — dataset that feeds this session
+  id: <string>               #   REQUIRED if dataset present — short name for column references
+  path: <string>             #   REQUIRED if dataset present — path to .json or .jsonl file
 behaviors:                   # REQUIRED — ordered list of Behavior objects
-  - actor: <string>
+  - id: <string>             #   OPTIONAL — unique id for this behavior, used by evaluations
+    actor: <string>
     action: <string>
     target: <string>         # OPTIONAL
     content: <any>           # OPTIONAL
@@ -42,6 +46,7 @@ This is **not valid YAML** — a block mapping (`session: ...`) cannot be direct
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
+| `id` | string | No | Unique identifier for this Behavior. Used by evaluations to reference steps via `id.action`. |
 | `actor` | string | Yes | Who performs the Behavior. See CORE_MODEL.md §Actor. |
 | `action` | string | Yes | What is performed. See VOCABULARY.md. |
 | `target` | string | No | Object or destination of the action. Semantics are determined by the Action category — normative rule in §4. |

@@ -44,6 +44,7 @@ export interface AgentConfig {
   refreshToken?: string;
   clientId?: string;
   stream?: boolean;
+  timeout?: number;
 }
 
 // ── Run result ──
@@ -100,11 +101,7 @@ export async function openaiAdapter(
   body.tool_choice = "auto";
   if (config.stream) body.stream = true;
 
-  const resp = await fetch(config.url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-  });
+  const resp = await absFetch(config.url, { method: "POST", headers, body: JSON.stringify(body) }, config.timeout);
 
   if (!resp.ok) {
     const text = await resp.text();
@@ -197,11 +194,7 @@ async function claudeAdapter(
     body.system = systemMsg.content;
   }
 
-  const resp = await fetch(config.url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-  });
+  const resp = await absFetch(config.url, { method: "POST", headers, body: JSON.stringify(body) }, config.timeout);
 
   if (!resp.ok) {
     const text = await resp.text();
@@ -242,14 +235,14 @@ async function geminiAdapter(
 
   const url = `${config.url}${config.token ? `?key=${config.token}` : ""}`;
 
-  const resp = await fetch(url, {
+  const resp = await absFetch(url, {
     method: "POST",
     headers,
     body: JSON.stringify({
       contents,
       generationConfig: { maxOutputTokens: 1024 },
     }),
-  });
+  }, config.timeout);
 
   if (!resp.ok) {
     const text = await resp.text();
@@ -422,13 +415,16 @@ export async function run(
       const commActions = ["says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests", "shows", "hands_off"];
       // Execution actions are equivalent (all result in tool_calls)
       const execActions = ["calls", "submits", "retrieves", "stores", "updates"];
+      const isExecAction = execActions.includes(behavior.action);
       const matched = observed
         ? observed.actor === behavior.actor &&
           (observed.action === behavior.action ||
            (commActions.includes(observed.action) && commActions.includes(behavior.action)) ||
            (execActions.includes(observed.action) && execActions.includes(behavior.action))) &&
           // Skip target check for communication actions (runner can't detect target from text)
-          (commActions.includes(behavior.action) || !behavior.target || observed.target === behavior.target)
+          (commActions.includes(behavior.action) || !behavior.target || observed.target === behavior.target) &&
+          // Validate with / with_only parameter matching for execution actions
+          matchWithParams(behavior, observed)
         : false;
 
       const matchObserved: ObservedStep | null = matched ? observed : null;
@@ -487,17 +483,70 @@ export async function run(
     ...chainEvaluations,
   ];
 
+  // Propagate blocking failures → mark downstream evals as inconclusive
+  propagateBlocking(stepResults);
+
+  // Recompute allEvals after propagation (inconclusive counts as passed for stats)
+  const allEvalsFinal = [
+    ...stepResults.flatMap((s) => s.evaluations),
+    ...chainEvaluations,
+  ];
+
   return {
     session: session.session,
     agent: agentConfig.url,
-    passed: allEvals.every((e) => e.passed),
+    passed: allEvalsFinal.every((e) => e.passed || e.inconclusive),
     steps: stepResults,
     chainEvaluations,
     stepsTotal: stepResults.length,
     stepsMatched: stepResults.filter((s) => s.matched || s.sent).length,
-    evaluationsTotal: allEvals.length,
-    evaluationsPassed: allEvals.filter((e) => e.passed).length,
+    evaluationsTotal: allEvalsFinal.length,
+    evaluationsPassed: allEvalsFinal.filter((e) => e.passed || e.inconclusive).length,
   };
+}
+
+function propagateBlocking(stepResults: StepResult[]): void {
+  let downstreamBlocked = false;
+  for (const sr of stepResults) {
+    for (const ev of sr.evaluations) {
+      if (downstreamBlocked) {
+        ev.inconclusive = true;
+        ev.reason = `Inconclusive: a blocking evaluation earlier in the session failed.`;
+      } else if (ev.blocking && !ev.passed) {
+        downstreamBlocked = true;
+      }
+    }
+  }
+}
+
+function matchWithParams(behavior: Behavior, observed: ObservedStep): boolean {
+  // If neither with nor with_only is declared, skip parameter check
+  if (!behavior.with && !behavior.with_only) return true;
+
+  const observedWith = observed.with ?? {};
+
+  if (behavior.with_only) {
+    // Strict: same keys, same values
+    const expectedKeys = Object.keys(behavior.with_only).sort();
+    const observedKeys = Object.keys(observedWith).sort();
+    if (expectedKeys.length !== observedKeys.length) return false;
+    if (expectedKeys.join(",") !== observedKeys.join(",")) return false;
+    for (const key of expectedKeys) {
+      if (JSON.stringify(observedWith[key]) !== JSON.stringify(behavior.with_only[key])) return false;
+    }
+    return true;
+  }
+
+  if (behavior.with) {
+    // Partial: observed must contain all expected keys with matching values
+    for (const [key, expected] of Object.entries(behavior.with)) {
+      if (!(key in observedWith)) return false;
+      if (JSON.stringify(observedWith[key]) !== JSON.stringify(expected)) return false;
+    }
+    return true;
+  }
+
+  return true;
 }
 
 function tryParseJson(s: string): any {
@@ -505,5 +554,20 @@ function tryParseJson(s: string): any {
     return JSON.parse(s);
   } catch {
     return s;
+  }
+}
+
+async function absFetch(
+  url: string,
+  init: RequestInit,
+  timeoutSec?: number
+): Promise<Response> {
+  if (!timeoutSec) return fetch(url, init);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutSec * 1000);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
   }
 }

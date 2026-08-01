@@ -121,7 +121,7 @@ The spec deliberately does not mandate a specific API format — `openai` is the
 
 ## The Evaluator Adapter
 
-ABS defines *what* to check. An evaluator adapter defines *how* to check it. The built-in evaluators (`exact_match`, `contains`, `regex`, `schema`, `sequence`, `never`) ship with the Runner. Everything else — LLM-as-judge, grounding checks, toxicity, custom business rules — goes through adapters.
+ABS defines *what* to check. An evaluator adapter defines *how* to check it. The built-in evaluators (`exact_match`, `contains`, `regex`, `schema`, `tool_call`, `sequence`, `eventually`, `never`, `count`, `within`, `variable_consistency`) ship with the Runner. `llm_judge` and `custom` go through adapters.
 
 ### Adapter interface
 
@@ -189,12 +189,24 @@ These run locally, no external service required:
 | `contains` | Observed content contains substring |
 | `regex` | Observed content matches pattern |
 | `schema` | Observed content validates against JSON Schema |
+| `tool_call` | Tool was called with correct target and parameters |
 | `sequence` | Steps occurred in order |
 | `never` | Something never happened |
 | `eventually` | Something happened at least once |
 | `count` | Something happened N times |
 | `within` | Something happened within N steps of something else |
 | `variable_consistency` | A captured variable had the same value everywhere |
+
+Adapters implement these evaluator types (the runner dispatches to the configured adapter):
+
+| Evaluator | What it checks |
+|---|---|
+| `llm_judge` | Free-form criteria evaluated by an LLM |
+| `Groundedness` | Response is supported by the provided context |
+| `Relevance` | Response addresses the query |
+| `Coherence` | Logical flow and internal consistency |
+| `Fluency` | Natural language quality |
+| `custom` | Arbitrary evaluator identified by `id` |
 
 ### Adapter registry
 
@@ -203,7 +215,7 @@ Adapters are registered by evaluator type. The Runner ships with a default adapt
 ```bash
 abs run session.abs.yaml \
   --adapter llm_judge=azure \
-  --adapter groundedness=langsmith
+  --adapter llm_judge=langsmith
 ```
 
 Or in a config file:
@@ -212,8 +224,6 @@ Or in a config file:
 # abs.config.yaml
 adapters:
   llm_judge: aievaluator
-  groundedness: azure
-  toxicity: azure
   custom: langsmith
 ```
 
@@ -223,11 +233,7 @@ adapters:
 
 AI Evaluator ([aievaluator.dev](https://aievaluator.dev)) provides LLM-as-a-judge with multiple judge models (DeepSeek, GPT-4, Gemini, Mistral) and metrics (faithfulness, groundedness, toxicity, and custom evaluators). It already has the infrastructure ABS needs — a judge factory, BYOK support, and a sync evaluation API.
 
-When the Runner starts with the AI Evaluator adapter configured, it:
-
-1. Groups all `llm_judge` and other LLM-based evaluations from the session
-2. Calls the AI Evaluator API with the trace and evaluation rules
-3. Maps the results back to each Behavior
+When the Runner starts with the AI Evaluator adapter configured, it sends `llm_judge` evaluations to the AI Evaluator API with the trace and criteria. The adapter handles the rest.
 
 This makes `llm_judge` work out of the box with zero configuration:
 
