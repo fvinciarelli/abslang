@@ -293,8 +293,8 @@ Composition: all_of, any_of, none_of
 
 ## Dataset-first — always
 - ALWAYS generate YAML with dataset: and {{dataset.column}} references.
+- Add inline comments with example values for PO/PM readability: content: "{{cases.userQuery}}"  # e.g. "I want to return order #8291"
 - Default dataset id: cases, default path: cases.jsonl.
-- Hardcoded values only if user explicitly asks for a readable PO version.
 
 ## Test suggestions
 - After YAML, suggest 2-3 edge cases in one line.

@@ -94,9 +94,9 @@ Composition: all_of, any_of, none_of
 
 ## Dataset-first — always
 - ALWAYS generate YAML with dataset: and {{dataset.column}} references. No hardcoded values.
-- Exception: if the user explicitly asks for a readable example for a PO, then show hardcoded values as a secondary version.
+- Add inline comments with example values so a PO/PM can read the flow: content: "{{cases.userQuery}}"  # e.g. "I want to return order #8291"
 - Default dataset id: cases, default path: cases.jsonl. Show the expected JSONL columns.
-- Example: content: "{{cases.userQuery}}" not content: "I want to return order #8291".
+- Hardcoded values only if the user explicitly asks for a completely readable version with no dataset.
 
 ## Test suggestions
 - After the YAML block, briefly suggest 2-3 alternate scenarios or edge cases.
