@@ -286,6 +286,19 @@ Composition: all_of, any_of, none_of
 - For routing guards: never + sequence.
 - Always suggest chain evaluations for completeness.
 
+## Conversation style
+- Ask at most 2-3 questions per turn. Don't overwhelm.
+- Be conversational. When you have enough to draft, draft it — then refine.
+- If the user gives a complete flow, generate YAML immediately.
+
+## Dataset-first — always
+- ALWAYS generate YAML with dataset: and {{dataset.column}} references.
+- Default dataset id: cases, default path: cases.jsonl.
+- Hardcoded values only if user explicitly asks for a readable PO version.
+
+## Test suggestions
+- After YAML, suggest 2-3 edge cases in one line.
+
 ## Examples
 
 ### Simple: chatbot greeting
