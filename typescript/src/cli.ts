@@ -775,9 +775,24 @@ program
     });
 
     console.log(chalk.bold("\n🤖 ABS Assistant — describe the agent behavior you want to test\n"));
-    console.log(chalk.dim("  Type your message, or /save <path> to save the last YAML, /quit to exit.\n"));
+    console.log(chalk.dim("  I'll ask you guided questions to understand your flow and build the best possible test."));
+    console.log(chalk.dim("  Some questions may feel extra — they're there to make sure we don't miss edge cases.\n"));
+    console.log(chalk.dim("  Type /save <path> to save the generated YAML, /quit to exit.\n"));
 
     let lastYaml: string | null = null;
+
+    const spinner = (running: boolean) => {
+      if (!running) return;
+      const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+      let i = 0;
+      const timer = setInterval(() => {
+        process.stdout.write(`\r${chalk.blue(frames[i++ % frames.length])} `);
+      }, 80);
+      return () => {
+        clearInterval(timer);
+        process.stdout.write("\r");
+      };
+    };
 
     const ask = () => {
       rl.question(chalk.green("You: "), async (input: string) => {
@@ -796,9 +811,31 @@ program
           } else if (!path) {
             console.log(chalk.yellow("Usage: /save <path>\n"));
           } else {
+            // Validate YAML before saving
+            try {
+              const { parseYaml, expandFragments } = await import("./parser");
+              const docs = parseYaml(lastYaml);
+              expandFragments(docs[0]);
+              const { writeFileSync } = await import("fs");
+              writeFileSync(path, lastYaml);
+              console.log(chalk.green(`✅ Valid YAML — saved to ${path}\n`));
+            } catch (err: any) {
+              console.log(chalk.red(`❌ Invalid YAML: ${err.message}`));
+              console.log(chalk.yellow("  The generated YAML has errors. Keep chatting to refine it, or /save anyway with /force.\n"));
+            }
+          }
+          ask();
+          return;
+        }
+
+        if (trimmed.startsWith("/force")) {
+          const path = trimmed.split(/\s+/)[1];
+          if (!lastYaml) {
+            console.log(chalk.yellow("No YAML generated yet.\n"));
+          } else if (path) {
             const { writeFileSync } = await import("fs");
             writeFileSync(path, lastYaml);
-            console.log(chalk.green(`✅ Saved to ${path}\n`));
+            console.log(chalk.yellow(`⚠️  Saved without validation to ${path}\n`));
           }
           ask();
           return;
@@ -807,8 +844,10 @@ program
         messages.push({ role: "user", content: trimmed });
 
         try {
-          process.stdout.write(chalk.blue("Assistant: "));
+          const stop = spinner(true);
           const response = await chat(messages, { apiKey });
+          stop?.();
+          console.log(chalk.blue("Assistant: "));
           console.log(response);
           console.log();
 
@@ -816,8 +855,18 @@ program
 
           const yaml = extractYaml(response);
           if (yaml) {
-            lastYaml = yaml;
-            console.log(chalk.dim("  💾 YAML extracted. Use /save <path> to write it.\n"));
+            // Validate extracted YAML
+            try {
+              const { parseYaml, expandFragments } = await import("./parser");
+              const docs = parseYaml(yaml);
+              expandFragments(docs[0]);
+              lastYaml = yaml;
+              console.log(chalk.dim("  ✅ Valid YAML extracted. Use /save <path> to write it.\n"));
+            } catch (err: any) {
+              lastYaml = yaml; // still save it so user can /force
+              console.log(chalk.yellow(`  ⚠️  YAML extracted but has issues: ${err.message}`));
+              console.log(chalk.dim("  Use /save <path> to try anyway, or keep chatting to fix.\n"));
+            }
           }
         } catch (err: any) {
           console.error(chalk.red(`\nError: ${err.message}\n`));

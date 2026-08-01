@@ -585,9 +585,20 @@ def chat_cmd(api_key: str | None):
     last_yaml: str | None = None
 
     click.echo("\n🤖 ABS Assistant — describe the agent behavior you want to test\n")
-    click.echo("  Type your message, or /save <path> to save the last YAML, /quit to exit.\n")
+    click.echo("  I'll ask you guided questions to understand your flow and build the best possible test.")
+    click.echo("  Some questions may feel extra — they're there to make sure we don't miss edge cases.\n")
+    click.echo("  Type /save <path> to save the generated YAML, /quit to exit.\n")
 
     import asyncio
+
+    async def _spinner(task: asyncio.Task):
+        frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        i = 0
+        while not task.done():
+            click.echo(f"\r{click.style(frames[i % len(frames)], fg='blue')} ", nl=False)
+            i += 1
+            await asyncio.sleep(0.08)
+        click.echo("\r", nl=False)
 
     async def _chat_loop():
         nonlocal last_yaml
@@ -613,24 +624,55 @@ def chat_cmd(api_key: str | None):
                 elif not path:
                     click.echo("Usage: /save <path>\n")
                 else:
+                    # Validate before saving
+                    try:
+                        from .parser import parse_yaml, expand_fragments
+                        docs = parse_yaml(last_yaml)
+                        expand_fragments(docs[0])
+                        from pathlib import Path
+                        Path(path).write_text(last_yaml)
+                        click.echo(f"✅ Valid YAML — saved to {path}\n")
+                    except Exception as e:
+                        click.echo(f"❌ Invalid YAML: {e}")
+                        click.echo("  Keep chatting to refine it, or use /force <path> to save anyway.\n")
+                continue
+
+            if trimmed.startswith("/force"):
+                parts = trimmed.split(maxsplit=1)
+                path = parts[1] if len(parts) > 1 else ""
+                if not last_yaml:
+                    click.echo("No YAML generated yet.\n")
+                elif path:
                     from pathlib import Path
                     Path(path).write_text(last_yaml)
-                    click.echo(f"✅ Saved to {path}\n")
+                    click.echo(f"⚠️  Saved without validation to {path}\n")
                 continue
 
             messages.append({"role": "user", "content": trimmed})
 
             try:
-                click.echo(click.style("Assistant: ", fg="blue"), nl=False)
-                response = await chat(messages, key)
+                task = asyncio.create_task(chat(messages, key))
+                spinner_task = asyncio.create_task(_spinner(task))
+                response = await task
+                await spinner_task
+
+                click.echo(click.style("Assistant: ", fg="blue"))
                 click.echo(response)
                 click.echo()
                 messages.append({"role": "assistant", "content": response})
 
                 yaml_content = extract_yaml(response)
                 if yaml_content:
-                    last_yaml = yaml_content
-                    click.echo(click.style("  💾 YAML extracted. Use /save <path> to write it.\n", dim=True))
+                    try:
+                        from .parser import parse_yaml, expand_fragments
+                        docs = parse_yaml(yaml_content)
+                        expand_fragments(docs[0])
+                        last_yaml = yaml_content
+                        click.echo(click.style("  ✅ Valid YAML extracted. Use /save <path> to write it.\n", dim=True))
+                    except Exception as e:
+                        last_yaml = yaml_content
+                        click.echo(click.style(f"  ⚠️  YAML extracted but has issues: {e}", fg="yellow"))
+                        click.echo(click.style("  Use /save <path> to try anyway, or keep chatting to fix.\n", dim=True))
             except Exception as e:
                 click.echo(f"\nError: {e}\n", err=True)
 

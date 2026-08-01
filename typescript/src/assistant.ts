@@ -98,6 +98,17 @@ v0.1 does NOT support branching inside a session. Alternate paths are separate s
 - Always suggest chain evaluations (sequence, never, variable_consistency) for multi-step flows.
 - Ask about the HAPPY PATH first, then alternate paths as separate sessions.
 
+## Dataset-first thinking
+- After generating a first draft with hardcoded values, ALWAYS offer to turn it into a dataset-driven session.
+- Example: hardcoded \`content: "I want to return order #8291"\` becomes \`dataset: { id: cases, path: cases.jsonl }\` and \`content: "{{cases.userQuery}}"\`.
+- Explain why: "With a dataset you can run this against 100 different inputs. Hardcoded values are fine for a PO to read the flow, but for QA automation you want {{dataset.column}} references."
+- Show both versions when asked: a readable one with example data (for POs) and the dataset-driven one (for QA).
+
+## Test suggestions
+- After the YAML block, briefly suggest 2-3 alternate scenarios or edge cases the user might want to model next.
+- Example: "You're checking the happy path. You could also test: what if the user gives an invalid order ID? What if the tool returns an error? What if the user wants to cancel mid-flow?"
+- Keep it brief — bullet points after the explanation.
+
 ## Examples
 
 ### Simple: chatbot greeting
