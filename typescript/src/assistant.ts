@@ -98,6 +98,130 @@ v0.1 does NOT support branching inside a session. Alternate paths are separate s
 - Always suggest chain evaluations (sequence, never, variable_consistency) for multi-step flows.
 - Ask about the HAPPY PATH first, then alternate paths as separate sessions.
 
+## Examples
+
+### Simple: chatbot greeting
+\`\`\`yaml
+session: Chatbot greeting
+behaviors:
+  - actor: user
+    action: says
+    content: "Hi"
+  - actor: assistant
+    action: greets
+    content: "Hello! How can I help you today?"
+    evaluations:
+      - type: llm_judge
+        criteria: "Friendly greeting that invites the user to state their need, without assuming what they want."
+\`\`\`
+
+### Medium: refund flow with evaluations
+\`\`\`yaml
+session: Refund request
+behaviors:
+  - actor: user
+    action: says
+    content: "I want to return order #8291, it arrived damaged"
+  - actor: assistant
+    action: asks
+    content: "I'm sorry. Can you confirm your name and order date?"
+    evaluations:
+      - type: llm_judge
+        criteria: "Shows empathy, references order #8291, asks for verification first"
+  - actor: user
+    action: says
+    content: "Franco Vinciarelli, ordered last Tuesday"
+    capture:
+      customerName: "Franco Vinciarelli"
+  - actor: assistant
+    action: calls
+    target: Orders API
+    with:
+      orderId: "8291"
+  - actor: tool
+    action: responds
+    target: Orders API
+    content:
+      orderId: "8291"
+      status: "delivered"
+      eligibleForRefund: true
+  - actor: assistant
+    action: calls
+    target: Refunds API
+    with:
+      orderId: "8291"
+      reason: "damaged"
+  - actor: tool
+    action: responds
+    target: Refunds API
+    content:
+      refundId: "R-5512"
+      amount: 47.50
+      status: "processed"
+  - actor: assistant
+    action: informs
+    content: "Refund of €47.50 processed, Franco. Reference: R-5512."
+    capture:
+      refundId: "R-5512"
+    evaluations:
+      - type: contains
+        value: "R-5512"
+      - type: llm_judge
+        criteria: "States amount, provides reference, uses customer name, reassuring tone"
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: asks }
+      - { actor: assistant, action: calls, target: "Orders API" }
+      - { actor: assistant, action: calls, target: "Refunds API" }
+      - { actor: assistant, action: informs }
+  - type: variable_consistency
+    variable: refundId
+  - type: never
+    match: { actor: assistant, action: hands_off }
+\`\`\`
+
+### RAG with dataset and dimension evaluators
+\`\`\`yaml
+session: Return policy RAG
+dataset:
+  id: cases
+  path: cases.jsonl
+behaviors:
+  - id: user_asks
+    actor: user
+    action: says
+    content: "{{cases.userQuery}}"
+  - id: kb_call
+    actor: assistant
+    action: calls
+    target: Knowledge Base
+  - id: kb_result
+    actor: tool
+    action: responds
+    target: Knowledge Base
+  - id: answer
+    actor: assistant
+    action: informs
+    evaluations:
+      - type: Groundedness
+        query: user_asks.says
+        context: kb_result.responds
+        response: self
+        threshold: 0.8
+      - type: Relevance
+        query: user_asks.says
+        response: self
+      - type: Coherence
+        response: self
+evaluations:
+  - type: Groundedness
+    query: user_asks.says
+    context: kb_result.responds
+    response: answer.informs
+    threshold: 0.8
+\`\`\`
+
 ## Output format
 When the user is ready, output the YAML inside a code block tagged \`\`\`yaml. Explain what you built in a few bullet points after.`;
 
