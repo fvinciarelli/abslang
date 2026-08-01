@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import * as yaml from 'js-yaml';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
@@ -9,6 +9,7 @@ import Tab from '@mui/material/Tab';
 import Chip from '@mui/material/Chip';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CodeIcon from '@mui/icons-material/Code';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 import { AddBehaviorBar } from './components/AddBehaviorBar';
@@ -16,6 +17,7 @@ import { BehaviorFlow } from './components/BehaviorFlow';
 import { BehaviorForm } from './components/BehaviorForm';
 import { YAMLPreview } from './components/YAMLPreview';
 import { RunPanel } from './components/RunPanel';
+import { AssistantPanel } from './components/AssistantPanel';
 import { useSession } from './hooks/useSession';
 import { behaviorToYAML, newId } from './types';
 
@@ -41,6 +43,7 @@ export default function App() {
     const doc: any = { session: s.session.session };
     if (s.session.description) doc.description = s.session.description;
     if (s.session.abs_version) doc.abs_version = s.session.abs_version;
+    if (s.session.dataset) doc.dataset = s.session.dataset;
     doc.behaviors = s.session.behaviors.map(behaviorToYAML);
     if (s.session.evaluations?.length) doc.evaluations = s.session.evaluations;
     const str = yaml.dump(doc, { indent: 2, lineWidth: -1, noRefs: true });
@@ -62,7 +65,7 @@ export default function App() {
         const expanded = expandFragments(docs[0]);
         s.setSession({
           ...expanded,
-          behaviors: expanded.behaviors.map((b: any) => ({ ...b, id: newId() })),
+          behaviors: expanded.behaviors.map((b: any) => ({ ...b, id: b.id || newId() })),
         });
       }
     } catch (err) {
@@ -88,10 +91,9 @@ export default function App() {
     [s.addBehavior, s.session.behaviors],
   );
 
-  // ── VSCode bridge: receive documents from extension host ──
+  // VSCode bridge: receive documents
   useEffect(() => {
     if (!IS_VSCODE) return;
-
     const handler = async (e: Event) => {
       const { yaml: yamlText } = (e as CustomEvent).detail;
       try {
@@ -101,7 +103,7 @@ export default function App() {
           const expanded = expandFragments(docs[0]);
           s.setSession({
             ...expanded,
-            behaviors: expanded.behaviors.map((b: any) => ({ ...b, id: newId() })),
+            behaviors: expanded.behaviors.map((b: any) => ({ ...b, id: b.id || newId() })),
           });
         }
       } catch (err) {
@@ -112,138 +114,105 @@ export default function App() {
     return () => window.removeEventListener('abs-load-document', handler);
   }, [s.setSession]);
 
-  // ── VSCode bridge: auto-save on session changes ──
+  // VSCode bridge: auto-save
   useEffect(() => {
     if (!IS_VSCODE) return;
-
     const doc: any = { session: s.session.session };
     if (s.session.description) doc.description = s.session.description;
     if (s.session.abs_version) doc.abs_version = s.session.abs_version;
+    if (s.session.dataset) doc.dataset = s.session.dataset;
     doc.behaviors = s.session.behaviors.map(behaviorToYAML);
     if (s.session.evaluations?.length) doc.evaluations = s.session.evaluations;
     const yamlStr = yaml.dump(doc, { indent: 2, lineWidth: -1, noRefs: true });
-
     const timer = setTimeout(() => {
-      window.dispatchEvent(
-        new CustomEvent('abs-save', { detail: { yaml: yamlStr } })
-      );
+      window.dispatchEvent(new CustomEvent('abs-save', { detail: { yaml: yamlStr } }));
     }, 300);
     return () => clearTimeout(timer);
   }, [s.session]);
+
+  const handleYamlFromAssistant = useCallback(async (yamlText: string) => {
+    try {
+      const { parseYaml, expandFragments } = await import('./yaml-parser');
+      const docs = parseYaml(yamlText);
+      if (docs.length > 0) {
+        const expanded = expandFragments(docs[0]);
+        s.setSession({
+          ...expanded,
+          behaviors: expanded.behaviors.map((b: any) => ({ ...b, id: b.id || newId() })),
+        });
+        setTab(0); // Switch to Properties so user sees the result
+      }
+    } catch (err) {
+      console.error('Failed to parse generated YAML:', err);
+    }
+  }, [s.setSession]);
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <Sidebar
         behaviors={s.session.behaviors}
         selectedId={s.selectedId}
-        onSelect={(id) => {
-          s.select(id);
-          setTab(0);
-        }}
+        onSelect={(id) => { s.select(id); setTab(0); }}
       />
 
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <Topbar
-          onNew={handleNew}
-          onExport={handleExport}
-          onImport={handleImport}
-          isVSCode={IS_VSCODE}
-        />
+        <Topbar onNew={handleNew} onExport={handleExport} onImport={handleImport} isVSCode={IS_VSCODE} />
 
         <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
           <Box sx={{ maxWidth: 700, mx: 'auto' }}>
-            {/* Session header */}
             <Box sx={{ mb: 2 }}>
               <TextField
-                variant="standard"
-                fullWidth
+                variant="standard" fullWidth
                 value={s.session.session}
                 onChange={(e) => s.updateSessionMeta({ session: e.target.value })}
                 placeholder="Session name"
-                slotProps={{
-                  input: {
-                    disableUnderline: true,
-                    sx: { fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.02em' },
-                  },
-                }}
+                slotProps={{ input: { disableUnderline: true, sx: { fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.02em' } } }}
               />
               <TextField
-                variant="standard"
-                fullWidth
+                variant="standard" fullWidth
                 value={s.session.description || ''}
                 onChange={(e) => s.updateSessionMeta({ description: e.target.value })}
                 placeholder="Describe what this session validates, models or simulates…"
-                multiline
-                maxRows={3}
-                slotProps={{
-                  input: {
-                    disableUnderline: true,
-                    sx: { fontSize: '0.8125rem', color: 'text.secondary' },
-                  },
-                }}
+                multiline maxRows={3}
+                slotProps={{ input: { disableUnderline: true, sx: { fontSize: '0.8125rem', color: 'text.secondary' } } }}
               />
             </Box>
 
-            {/* Add behavior bar */}
             <Box sx={{ mb: 2 }}>
               <AddBehaviorBar onAdd={addFromPalette} />
             </Box>
 
-            {/* Stats mini */}
             <Box sx={{ display: 'flex', gap: 1.5, mb: 2 }}>
               <Chip label={`${s.session.behaviors.length} steps`} size="small" color="primary" variant="outlined" />
               <Chip label={`${totalEvals} rules`} size="small" variant="outlined" sx={{ color: 'text.secondary' }} />
-              <Chip
-                label={s.session.behaviors.length > 0 ? 'Ready' : 'Empty'}
-                size="small"
-                color={s.session.behaviors.length > 0 ? 'success' : 'default'}
-                variant="outlined"
-              />
+              <Chip label={s.session.behaviors.length > 0 ? 'Ready' : 'Empty'} size="small" color={s.session.behaviors.length > 0 ? 'success' : 'default'} variant="outlined" />
             </Box>
 
-            {/* Flow */}
             <BehaviorFlow
               behaviors={s.session.behaviors}
               selectedId={s.selectedId}
-              onSelect={(id) => {
-                s.select(id);
-                setTab(0);
-              }}
+              onSelect={(id) => { s.select(id); setTab(0); }}
               onRemove={s.removeBehavior}
               onAdd={s.addBehavior}
             />
           </Box>
         </Box>
 
-        {/* Run panel — standalone only */}
         {!IS_VSCODE && <RunPanel session={s.session} />}
       </Box>
 
-      {/* Inspector */}
-      <Paper
-        square
-        elevation={0}
-        sx={{
-          width: 400,
-          flexShrink: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          borderLeft: '1px solid',
-          borderColor: 'divider',
-          overflow: 'hidden',
-        }}
-      >
-        <Tabs
-          value={tab}
-          onChange={(_, v) => setTab(v)}
-          sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 48 }}
-        >
+      {/* Inspector: Properties / YAML / Assistant */}
+      <Paper square elevation={0} sx={{ width: 400, flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 48 }}>
           <Tab icon={<SettingsIcon fontSize="small" />} iconPosition="start" label="Properties" />
           <Tab icon={<CodeIcon fontSize="small" />} iconPosition="start" label="YAML" />
+          <Tab icon={<AutoAwesomeIcon fontSize="small" />} iconPosition="start" label="Assistant" />
         </Tabs>
 
-        <Box sx={{ flex: 1, overflow: 'auto', p: 3 }}>
-          {tab === 1 ? (
+        <Box sx={{ flex: 1, overflow: 'auto', p: tab === 2 ? 0 : 3 }}>
+          {tab === 2 ? (
+            <AssistantPanel onYamlGenerated={handleYamlFromAssistant} isVSCode={IS_VSCODE} />
+          ) : tab === 1 ? (
             <YAMLPreview session={s.session} />
           ) : s.selected ? (
             <BehaviorForm
@@ -255,17 +224,7 @@ export default function App() {
               onRemoveEval={(idx) => s.removeEvaluation(s.selected!.id, idx)}
             />
           ) : (
-            <Box
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100%',
-                textAlign: 'center',
-                color: 'text.secondary',
-              }}
-            >
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', color: 'text.secondary' }}>
               <SettingsIcon sx={{ fontSize: 40, mb: 2, opacity: 0.3 }} />
               <Typography sx={{ fontWeight: 600 }}>No step selected</Typography>
               <Typography variant="body2" sx={{ mt: 0.5, maxWidth: 200 }}>
@@ -278,5 +237,3 @@ export default function App() {
     </Box>
   );
 }
-
-

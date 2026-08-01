@@ -752,6 +752,84 @@ jobs:
     }
   });
 
+// ── chat ──
+
+program
+  .command("chat")
+  .description("Start an ABS assistant chat session (uses DeepSeek)")
+  .option("--api-key <key>", "DeepSeek API key (or set DEEPSEEK_API_KEY env var)")
+  .action(async (options) => {
+    const apiKey = options.apiKey || process.env.DEEPSEEK_API_KEY;
+    if (!apiKey) {
+      console.error(chalk.red("❌ Set DEEPSEEK_API_KEY or pass --api-key."));
+      console.error("   Get one at https://platform.deepseek.com/api_keys");
+      process.exit(2);
+    }
+
+    const { chat, newConversation, extractYaml } = await import("./assistant");
+    const messages = newConversation();
+    const readline = await import("readline");
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    console.log(chalk.bold("\n🤖 ABS Assistant — describe the agent behavior you want to test\n"));
+    console.log(chalk.dim("  Type your message, or /save <path> to save the last YAML, /quit to exit.\n"));
+
+    let lastYaml: string | null = null;
+
+    const ask = () => {
+      rl.question(chalk.green("You: "), async (input: string) => {
+        const trimmed = input.trim();
+
+        if (trimmed === "/quit" || trimmed === "/q") {
+          console.log(chalk.dim("\nBye!\n"));
+          rl.close();
+          return;
+        }
+
+        if (trimmed.startsWith("/save")) {
+          const path = trimmed.split(/\s+/)[1];
+          if (!lastYaml) {
+            console.log(chalk.yellow("No YAML generated yet. Chat a bit first.\n"));
+          } else if (!path) {
+            console.log(chalk.yellow("Usage: /save <path>\n"));
+          } else {
+            const { writeFileSync } = await import("fs");
+            writeFileSync(path, lastYaml);
+            console.log(chalk.green(`✅ Saved to ${path}\n`));
+          }
+          ask();
+          return;
+        }
+
+        messages.push({ role: "user", content: trimmed });
+
+        try {
+          process.stdout.write(chalk.blue("Assistant: "));
+          const response = await chat(messages, { apiKey });
+          console.log(response);
+          console.log();
+
+          messages.push({ role: "assistant", content: response });
+
+          const yaml = extractYaml(response);
+          if (yaml) {
+            lastYaml = yaml;
+            console.log(chalk.dim("  💾 YAML extracted. Use /save <path> to write it.\n"));
+          }
+        } catch (err: any) {
+          console.error(chalk.red(`\nError: ${err.message}\n`));
+        }
+
+        ask();
+      });
+    };
+
+    ask();
+  });
+
 // ── Entry ──
 
 program.parse();

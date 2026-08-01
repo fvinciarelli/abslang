@@ -567,6 +567,77 @@ def login(api_key: Optional[str]):
 
 
 # ═══════════════════════════════════════════════════════════════════
+#  chat
+# ═══════════════════════════════════════════════════════════════════
+
+@main.command("chat")
+@click.option("--api-key", help="DeepSeek API key (or set DEEPSEEK_API_KEY env var)")
+def chat_cmd(api_key: str | None):
+    """Start an ABS assistant chat session (uses DeepSeek)."""
+    key = api_key or os.environ.get("DEEPSEEK_API_KEY")
+    if not key:
+        click.echo("❌ Set DEEPSEEK_API_KEY or pass --api-key.", err=True)
+        click.echo("   Get one at https://platform.deepseek.com/api_keys")
+        sys.exit(2)
+
+    from .assistant import chat, new_conversation, extract_yaml
+    messages = new_conversation()
+    last_yaml: str | None = None
+
+    click.echo("\n🤖 ABS Assistant — describe the agent behavior you want to test\n")
+    click.echo("  Type your message, or /save <path> to save the last YAML, /quit to exit.\n")
+
+    import asyncio
+
+    async def _chat_loop():
+        nonlocal last_yaml
+        loop = asyncio.get_event_loop()
+        while True:
+            try:
+                user_input = await loop.run_in_executor(None, input, click.style("You: ", fg="green"))
+            except (EOFError, KeyboardInterrupt):
+                click.echo("\nBye!")
+                break
+
+            trimmed = user_input.strip()
+
+            if trimmed in ("/quit", "/q"):
+                click.echo("Bye!")
+                break
+
+            if trimmed.startswith("/save"):
+                parts = trimmed.split(maxsplit=1)
+                path = parts[1] if len(parts) > 1 else ""
+                if not last_yaml:
+                    click.echo("No YAML generated yet. Chat a bit first.\n")
+                elif not path:
+                    click.echo("Usage: /save <path>\n")
+                else:
+                    from pathlib import Path
+                    Path(path).write_text(last_yaml)
+                    click.echo(f"✅ Saved to {path}\n")
+                continue
+
+            messages.append({"role": "user", "content": trimmed})
+
+            try:
+                click.echo(click.style("Assistant: ", fg="blue"), nl=False)
+                response = await chat(messages, key)
+                click.echo(response)
+                click.echo()
+                messages.append({"role": "assistant", "content": response})
+
+                yaml_content = extract_yaml(response)
+                if yaml_content:
+                    last_yaml = yaml_content
+                    click.echo(click.style("  💾 YAML extracted. Use /save <path> to write it.\n", dim=True))
+            except Exception as e:
+                click.echo(f"\nError: {e}\n", err=True)
+
+    asyncio.run(_chat_loop())
+
+
+# ═══════════════════════════════════════════════════════════════════
 #  generate-ci
 # ═══════════════════════════════════════════════════════════════════
 

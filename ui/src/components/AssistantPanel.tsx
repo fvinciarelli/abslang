@@ -1,0 +1,290 @@
+import { useState, useRef, useEffect, useCallback } from 'react';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import SendIcon from '@mui/icons-material/Send';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
+
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+interface Props {
+  onYamlGenerated?: (yaml: string) => void;
+  isVSCode?: boolean;
+}
+
+const DEEPSEEK_URL = 'https://api.deepseek.com/v1/chat/completions';
+
+export function AssistantPanel({ onYamlGenerated, isVSCode }: Props) {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [showKeyInput, setShowKeyInput] = useState(true);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const send = useCallback(async () => {
+    const text = input.trim();
+    if (!text || loading) return;
+
+    const userMsg: Message = { role: 'user', content: text };
+    setMessages((m) => [...m, userMsg]);
+    setInput('');
+    setLoading(true);
+
+    try {
+      const resp = await fetch(DEEPSEEK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'deepseek-chat',
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            ...messages.map((m) => ({ role: m.role, content: m.content })),
+            { role: 'user', content: text },
+          ],
+          temperature: 0.3,
+          max_tokens: 4096,
+        }),
+      });
+
+      if (!resp.ok) {
+        const errText = await resp.text();
+        throw new Error(`DeepSeek: ${resp.status} — ${errText.substring(0, 200)}`);
+      }
+
+      const data = await resp.json() as any;
+      const content = data.choices?.[0]?.message?.content ?? '';
+      const asstMsg: Message = { role: 'assistant', content };
+      setMessages((m) => [...m, asstMsg]);
+
+      // Extract YAML if present
+      const yaml = extractYaml(content);
+      if (yaml && onYamlGenerated) {
+        onYamlGenerated(yaml);
+      }
+    } catch (err: any) {
+      setMessages((m) => [...m, { role: 'assistant', content: `Error: ${err.message}` }]);
+    } finally {
+      setLoading(false);
+    }
+  }, [input, loading, messages, apiKey, onYamlGenerated]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      send();
+    }
+  };
+
+  if (showKeyInput) {
+    return (
+      <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        <Typography variant="body2" fontWeight={600}>
+          DeepSeek API Key
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          Get one at platform.deepseek.com/api_keys — stored only in this session.
+        </Typography>
+        <TextField
+          size="small"
+          type="password"
+          placeholder="sk-..."
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && apiKey && setShowKeyInput(false)}
+        />
+        <Chip
+          label="Start chatting"
+          color="primary"
+          disabled={!apiKey}
+          onClick={() => setShowKeyInput(false)}
+          sx={{ alignSelf: 'flex-start' }}
+        />
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Header */}
+      <Box
+        sx={{
+          px: 2,
+          py: 1,
+          borderBottom: 1,
+          borderColor: 'divider',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+        }}
+      >
+        <AutoAwesomeIcon fontSize="small" color="primary" />
+        <Typography variant="body2" fontWeight={600}>
+          ABS Assistant
+        </Typography>
+        <Box sx={{ flex: 1 }} />
+        <Chip
+          label="Key"
+          size="small"
+          variant="outlined"
+          onClick={() => { setShowKeyInput(true); setMessages([]); }}
+        />
+      </Box>
+
+      {/* Messages */}
+      <Box sx={{ flex: 1, overflow: 'auto', px: 2, py: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        {messages.length === 0 && (
+          <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 4 }}>
+            Describe the agent behavior you want to test.
+            <br />
+            I&apos;ll ask you questions and generate the .abs.yaml.
+          </Typography>
+        )}
+        {messages.map((m, i) => (
+          <Box
+            key={i}
+            sx={{
+              alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+              maxWidth: '85%',
+            }}
+          >
+            <Paper
+              variant="outlined"
+              sx={{
+                px: 1.5,
+                py: 1,
+                bgcolor: m.role === 'user' ? 'primary.50' : 'grey.50',
+                borderColor: m.role === 'user' ? 'primary.200' : 'divider',
+              }}
+            >
+              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                {m.content.length > 2000 ? m.content.substring(0, 2000) + '\n\n... (truncated)' : m.content}
+              </Typography>
+            </Paper>
+          </Box>
+        ))}
+        {loading && (
+          <Box sx={{ alignSelf: 'flex-start' }}>
+            <CircularProgress size={20} />
+          </Box>
+        )}
+        <div ref={bottomRef} />
+      </Box>
+
+      {/* Input */}
+      <Box sx={{ px: 2, py: 1.5, borderTop: 1, borderColor: 'divider', display: 'flex', gap: 1 }}>
+        <TextField
+          fullWidth
+          size="small"
+          multiline
+          maxRows={4}
+          placeholder="e.g. I need to test a refund flow with two API calls..."
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          disabled={loading}
+        />
+        <IconButton color="primary" onClick={send} disabled={loading || !input.trim()} size="small">
+          <SendIcon fontSize="small" />
+        </IconButton>
+      </Box>
+    </Box>
+  );
+}
+
+// ── Inline copies to keep this file self-contained (no Node deps in browser) ──
+
+function extractYaml(text: string): string | null {
+  const match = text.match(/```yaml\n([\s\S]*?)```/);
+  return match ? match[1].trim() : null;
+}
+
+const SYSTEM_PROMPT = `You are an ABS spec assistant. You help QA engineers, product owners, and PMs write Agent Behavior Specification files (YAML format). You know the ABS v0.1 spec perfectly.
+
+## Your job
+1. Ask the user what agent behavior they want to describe or test.
+2. Ask clarifying questions until you understand the flow.
+3. Generate a valid .abs.yaml file.
+4. Explain what you generated in plain language.
+
+## ABS v0.1 reference
+
+### Top-level structure
+\`\`\`yaml
+session: <string>              # REQUIRED — human-readable name
+description: <string>          # OPTIONAL
+abs_version: "0.1"             # OPTIONAL, RECOMMENDED
+dataset:                       # OPTIONAL — data-driven execution
+  id: <string>                 #   short name for {{id.column}} references
+  path: <string>               #   path to .json or .jsonl file
+behaviors:                     # REQUIRED — ordered list
+  - id: <string>               #   OPTIONAL unique id, used by evaluations
+    actor: <string>            #   REQUIRED — user, assistant, tool, system, human, external
+    action: <string>           #   REQUIRED — see vocabulary below
+    target: <string>           #   OPTIONAL — meaning depends on action category
+    content: <any>             #   OPTIONAL — text, structured data, or {{dataset.column}}
+    capture: <map>             #   OPTIONAL — names runtime values for reuse
+    with: <map>                #   OPTIONAL — parameters for calls (partial match)
+    with_only: <map>           #   OPTIONAL — parameters for calls (strict match)
+    evaluations: <list>        #   OPTIONAL — step-level checks
+evaluations: <list>            # OPTIONAL — session-level (chain) checks
+\`\`\`
+
+### Standard actions
+Communication: says, asks, responds, informs, greets, clarifies, confirms, rejects, suggests, shows
+Execution: calls, submits, retrieves, stores, updates
+Interaction: selects, uploads, downloads, approves
+Delegation: hands_off
+
+### Target semantics
+- Execution (calls, submits, etc.): target = system/tool/API being invoked
+- Delegation (hands_off): target = recipient of hand-off
+- Interaction (selects, uploads): target = UI element acted on
+- Communication (says, asks, informs, etc.): target normally omitted
+
+### Evaluators
+Built-in (no adapter needed): exact_match, contains, regex, schema, tool_call
+LLM-based: llm_judge (free-form criteria), Groundedness, Relevance, Coherence, Fluency
+Chain: sequence, eventually, never, count, within, variable_consistency
+Composition: all_of, any_of, none_of
+
+### Evaluation mapping for dimension types
+\`\`\`yaml
+- type: Groundedness
+  query: user_asks.says       # ref by behavior id.action
+  context: kb_result.responds
+  response: self              # 'self' = current behavior
+  threshold: 0.8
+\`\`\`
+
+### Key patterns
+- Tool round-trips: assistant calls → tool responds → assistant informs (3 behaviors)
+- Variables: capture values with \`capture:\`, reference with \`{{var}}\`
+- Dataset columns: \`{{dataset_id.column}}\` — e.g. \`{{cases.userQuery}}\`
+- No branching in v0.1 — alternate paths are separate sessions
+- Use chain evaluations (sequence, never, variable_consistency) for multi-step flows
+
+## Guidelines
+- One scenario per session. Start with the happy path.
+- Use ids on behaviors that evaluations reference.
+- For RAG/knowledge-base: Groundedness + Relevance + Coherence.
+- For conversational quality: llm_judge with criteria.
+- For routing guards: never + sequence.
+- Always suggest chain evaluations for completeness.
+
+## Output
+When done, output the YAML in \`\`\`yaml ... \`\`\`. Explain what you built in bullet points.`;
