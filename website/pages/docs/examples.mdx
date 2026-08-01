@@ -208,8 +208,8 @@ behaviors:
     action: says
     content: "Hi! How can I help you today?"
     evaluations:
-      - contains: "Hi"
-      - not_contains: "error"
+      - type: contains
+        value: "Hi"
 ```
 
 More examples are available in the [repository](https://github.com/fvinciarelli/abs/tree/main/examples).

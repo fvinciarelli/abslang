@@ -4,52 +4,57 @@ export const frontmatter = { title: 'Roadmap', description: 'Planned features an
 
 <DocsLayout frontmatter={frontmatter}>
 
-## Closed in v0.1
-
-The conceptual core is stable:
+## Closed in v0.1 (conceptual core)
 
 - Scope · Session · Behavior · Actor · Action · Target · Content
-- Variables · Capture · Runtime bindings
-- Evaluations · Step-level and session-level
-- Vocabulary · Four action categories
-- Sequencing · Ordered behaviors
-- Alternate flows as separate Sessions
+- Target semantics normativized: meaning is determined by Action category
+- Variables · Capture · Runtime bindings (dataset, CLI flag, env var)
+- Evaluations — step-level and session-level (chain), including `blocking: true`
+- Evaluator types: 7 step-level (`exact_match`, `contains`, `regex`, `schema`, `tool_call`, `llm_judge`, `custom`), 6 chain (`sequence`, `eventually`, `never`, `count`, `within`, `variable_consistency`), plus composition (`all_of`/`any_of`/`none_of`)
+- Vocabulary — four action categories (Communication, Execution, Interaction, Delegation)
+- Sequencing · Alternate flows as separate Sessions
+- Fragments (`include:`) for composition — inline, single-file, expanded before resolution
+- Tool interaction spec (`calls`, `responds`, `with`/`with_only`, `tool_call` evaluator)
+- JSON Schema (`schema/abs.schema.json`) — complete and validated by the CLI at parse time
+- TypeScript implementation: parser, runner, all evaluators, CLI, OpenAI/Claude/Gemini adapters, AI Evaluator adapter, table formatter, test suite
+- Python implementation: parser, runner, all evaluators, CLI, AI Evaluator adapter, table formatter
+- UI authoring tool (`ui/`): React + Material UI, drag & drop, property sheets, YAML export
+- Website: Next.js + Tailwind + MDX docs site
+- VSCode extension: visual editor + ▶ Run button
+- Mock agent (`tools/mock_agent.py`) for local testing
 
-## In progress for v0.2
+## Remaining open design questions (deferred to v0.2+)
 
-### Session composition
+- **Vocabulary extensibility.** Is `action` a closed enum or an open, extensible namespace? VOCABULARY.md currently recommends plain lowercase verbs as a stopgap; a formal extension syntax is still undecided.
+- **Actor/Action compatibility.** Should the spec enforce which actors can perform which actions, or leave it to implementer-defined validation layers?
+- **Session composition — `Background:` style.** Fragments already solve prefix deduplication, but a Gherkin-style `Background:` that auto-includes hasn't been designed.
+- **Parallel and retried behavior.** v0.1 assumes a strictly linear sequence. Real agents issue parallel tool calls and retries.
+- **Content typing.** `content` mixes free text, structured payloads, and "displayed" UI content under one untyped field.
+- **`llm_judge` calibration/reproducibility** across model versions.
+- **Chain-evaluator selector** — whether it needs partial/regex matching on `target`.
+- **`inconclusive` propagation algorithm** through variable dependency chains.
+- **Cross-Session variable sharing** — explicitly out of scope for v0.1.
+- **Parameterized fragments** — "same fragment, different values."
+- **Cross-file fragments** — shared fragment libraries across repositories.
 
-Fragments, `include` directives, reusable behavior blocks. The concept is described in [Composition](/docs/composition). The exact syntax and resolution semantics are being formalized.
+## Implementation status
 
-### Tool Interaction Specification
-
-Formal matching rules for `with` parameters (exact vs. subset vs. schema-based), tool response matching, wildcard patterns like `calls_any`. Currently described provisionally in [Tools & MCP](/docs/tools).
-
-### Variable/Context Specification
-
-Scope rules for captured variables across fragment boundaries, context injection, and runtime binding from structured datasets.
-
-### Official JSON Schema
-
-A normative JSON Schema for v0.1 document validation. A draft exists in the repository at `schema/abs.schema.json`. Formal publication at `abs-lang.org/schema/v0.1/abs.schema.json` is pending.
-
-### Parallel construct
-
-A `parallel:` block for modeling concurrent behaviors — e.g., an agent calling two tools at once. Currently, Behaviors are strictly ordered.
-
-## Under discussion
-
-### UI Authoring Model
-
-How to model UI interactions in ABS beyond the basic Interaction actions (`selects`, `uploads`, `approves`). Possible directions include screenshots, DOM selectors, or accessibility-tree-based selectors.
-
-### Streaming and partial responses
-
-Agents increasingly stream responses token-by-token. Should ABS model partial responses, or only final outputs?
-
-### Agent-to-agent protocols
-
-ABS currently models user↔agent and agent↔tool interactions. Multi-agent scenarios (agent delegates to sub-agent) need further work.
+| Component | TypeScript | Python |
+|---|---|---|
+| Parser (YAML, multi-doc, fragments, variables) | ✅ | ✅ |
+| JSON Schema validation | ✅ | ✅ |
+| Runner (OpenAI, Claude, Gemini adapters) | ✅ | ✅ |
+| All step-level evaluators | ✅ | ✅ |
+| All chain evaluators | ✅ | ✅ |
+| Composition (`all_of`/`any_of`/`none_of`) | ✅ | ✅ |
+| AI Evaluator adapter (LLM judge) | ✅ | ✅ |
+| CLI (`init`, `run`, `report`) | ✅ | ✅ |
+| Table formatter | ✅ | ✅ |
+| JSON/JUnit output | ✅ | ✅ |
+| Dataset loading (JSONL/JSON) | ✅ | ✅ |
+| Test suite | ✅ | ✅ |
+| E2E test suite | ✅ | — |
+| VSCode extension | ✅ | — |
 
 ## How to contribute
 
@@ -61,9 +66,9 @@ ABS is a draft standard. Issues and proposals should reference which document an
 
 | Version | Status | Key changes |
 |---|---|---|
-| v0.1 | **Current** — public review | Core model, vocabulary, evaluations, sequencing |
-| v0.2 | Planned | Composition, Tool Interaction Spec, JSON Schema |
-| v0.3 | Planned | Parallel, streaming, multi-agent |
+| v0.1 | **Current** — public review | Core model, vocabulary, evaluations, fragments, tool interaction, JSON Schema |
+| v0.2 | Planned | Parameterized fragments, cross-file fragments, parallel, streaming |
+| v0.3 | Planned | Multi-agent, content typing, vocabulary extensibility |
 | v1.0 | Target | Stable, ratified standard |
 
 </DocsLayout>

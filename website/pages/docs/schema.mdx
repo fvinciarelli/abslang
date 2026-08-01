@@ -1,83 +1,146 @@
 import DocsLayout from '@/components/layout/DocsLayout';
 
-export const frontmatter = { title: 'JSON Schema', description: 'Normative JSON Schema for document validation.' };
+export const frontmatter = { title: 'JSON Schema', description: 'Normative JSON Schema for ABS v0.1 document validation.' };
 
 <DocsLayout frontmatter={frontmatter}>
 
-Every ABS version has a normative JSON Schema. Implementations use it to validate documents before parsing.
-
-## Current schema (v0.1)
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://abs-lang.org/schema/v0.1/abs.schema.json",
-  "title": "ABS Document",
-  "type": "object",
-  "required": ["session", "behaviors"],
-  "properties": {
-    "session": {
-      "type": "string",
-      "description": "Human-readable session name"
-    },
-    "description": {
-      "type": "string"
-    },
-    "abs_version": {
-      "type": "string",
-      "enum": ["0.1"]
-    },
-    "behaviors": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/behavior" }
-    },
-    "evaluations": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/evaluation" }
-    }
-  },
-  "$defs": {
-    "behavior": {
-      "type": "object",
-      "required": ["actor", "action"],
-      "properties": {
-        "actor": { "type": "string" },
-        "action": { "type": "string" },
-        "target": { "type": "string" },
-        "content": {},
-        "capture": {
-          "type": "object",
-          "additionalProperties": { "type": "string" }
-        },
-        "with": { "type": "object" },
-        "evaluations": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/evaluation" }
-        }
-      }
-    },
-    "evaluation": {
-      "type": "object",
-      "minProperties": 1,
-      "maxProperties": 1
-    }
-  }
-}
-```
+Every ABS version has a normative JSON Schema. Implementations use it to validate documents before parsing. The full schema is 314 lines and covers all v0.1 constructs: sessions, behaviors, fragments, includes, evaluations, selectors, and dataset declarations.
 
 ## Schema locations
 
 ```
-https://abs-lang.org/schema/v0.1/abs.schema.json
-https://abs-lang.org/schema/v0.2/abs.schema.json  (future)
+https://github.com/fvinciarelli/abs/blob/main/schema/abs.schema.json   (source of truth)
 ```
+
+The schema's `$id` is `https://github.com/fvinciarelli/abs/blob/main/schema/abs.schema.json`. A versioned URI pattern (`abs-lang.org/schema/v0.1/abs.schema.json`) is planned for v0.2+.
+
+## Top-level structure
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/fvinciarelli/abs/blob/main/schema/abs.schema.json",
+  "type": "object",
+  "required": ["session", "behaviors"],
+  "properties": {
+    "session": { "type": "string" },
+    "description": { "type": "string" },
+    "abs_version": { "type": "string", "pattern": "^0\\.1$" },
+    "dataset": {
+      "type": "object",
+      "required": ["id", "path"],
+      "properties": {
+        "id": { "type": "string" },
+        "path": { "type": "string" }
+      }
+    },
+    "behaviors": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/behaviorOrInclude" }
+    },
+    "fragments": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/behaviorList" }
+    },
+    "evaluations": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/evaluation" }
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+## Behavior
+
+```json
+{
+  "behavior": {
+    "type": "object",
+    "required": ["actor", "action"],
+    "properties": {
+      "id": { "type": "string" },
+      "actor": { "type": "string" },
+      "action": { "type": "string" },
+      "target": { "type": "string" },
+      "content": {},
+      "capture": { "type": "object", "minProperties": 1 },
+      "with": { "type": "object", "minProperties": 1 },
+      "with_only": { "type": "object", "minProperties": 1 },
+      "evaluations": {
+        "type": "array",
+        "items": { "$ref": "#/definitions/evaluation" }
+      }
+    },
+    "additionalProperties": false,
+    "allOf": [
+      { "not": { "required": ["with", "with_only"] } }
+    ]
+  }
+}
+```
+
+Key constraint: `with` and `with_only` are mutually exclusive — a Behavior cannot declare both.
+
+## Fragment includes
+
+```json
+{
+  "include": {
+    "type": "object",
+    "required": ["include"],
+    "properties": {
+      "include": { "type": "string" }
+    },
+    "additionalProperties": false
+  },
+  "behaviorOrInclude": {
+    "oneOf": [
+      { "$ref": "#/definitions/behavior" },
+      { "$ref": "#/definitions/include" }
+    ]
+  }
+}
+```
+
+## Evaluations
+
+The schema defines 22 evaluator types and their parameters:
+
+- **Step-level**: `exact_match`, `contains`, `regex`, `schema`, `tool_call`, `llm_judge`, `custom`, `Groundedness`, `Relevance`, `Coherence`, `Fluency`
+- **Chain**: `sequence`, `eventually`, `never`, `count`, `within`, `variable_consistency`
+- **Composition**: `all_of`, `any_of`, `none_of`
+
+Common fields: `blocking` (boolean), `threshold` (0–1), `adapter` (string), `dataset`, `prompt`.
+
+Chain evaluator fields: `match` (selector), `order` (array of selectors), `variable` (string), `min`/`max` (integers), `after` (selector), `max_steps` (integer).
+
+## Selector
+
+```json
+{
+  "selector": {
+    "type": "object",
+    "properties": {
+      "actor": { "type": "string" },
+      "action": { "type": "string" },
+      "target": { "type": "string" }
+    },
+    "minProperties": 1,
+    "additionalProperties": false
+  }
+}
+```
+
+A field that's present must match exactly; a field omitted is a wildcard.
 
 ## Using the schema
 
-### In your ABS document
+### In your ABS document (VSCode / YAML LSP)
 
 ```yaml
-# yaml-language-server: $schema=https://abs-lang.org/schema/v0.1/abs.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/fvinciarelli/abs/main/schema/abs.schema.json
 session: My session
 behaviors:
   - actor: user
@@ -87,19 +150,11 @@ behaviors:
 
 ### Programmatic validation
 
-```javascript
-import Ajv from 'ajv';
-const schema = await fetch('https://abs-lang.org/schema/v0.1/abs.schema.json').then(r => r.json());
-const ajv = new Ajv();
-const validate = ajv.compile(schema);
-if (!validate(absDocument)) {
-  console.error(validate.errors);
-}
-```
+The TypeScript and Python CLI both validate against the schema in the parse pipeline using Ajv and a Python equivalent. The schema is functionally normative: a document that passes is syntactically valid ABS v0.1. Semantic rules (variable resolution, ordering, target interpretation) are defined in the Specification and are not enforced by the schema.
 
 ## See also
 
 - [Specification v0.1](/docs/specification) — the normative spec
-- [schema/abs.schema.json](https://github.com/fvinciarelli/abs/blob/main/schema/abs.schema.json) — source in the repository
+- [schema/abs.schema.json](https://github.com/fvinciarelli/abs/blob/main/schema/abs.schema.json) — full source in the repository
 
 </DocsLayout>

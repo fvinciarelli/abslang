@@ -1,6 +1,6 @@
 import DocsLayout from '@/components/layout/DocsLayout';
 
-export const frontmatter = { title: 'Vocabulary', description: 'Standard action vocabulary and extension mechanism.' };
+export const frontmatter = { title: 'Vocabulary', description: 'Standard action vocabulary organized by category, and extension mechanism.' };
 
 <DocsLayout frontmatter={frontmatter}>
 
@@ -35,18 +35,24 @@ flowchart LR
 
 ## Action categories
 
+The standard vocabulary is the set an implementation MUST recognize to claim v0.1 vocabulary support.
+
 ### Communication
 
 Information exchange between actors. These actions primarily use `content`:
 
 | Action | Meaning |
 |---|---|
-| `says` | Actor sends a message. |
-| `asks` | Actor requests information. |
-| `informs` | Actor provides information proactively. |
-| `shows` | Actor displays information visually. |
-| `prompts` | Actor presents a prompt requiring a response. |
-| `confirms` | Actor asks for confirmation. |
+| `says` | A plain statement or message. |
+| `asks` | A question expecting a reply. |
+| `responds` | A reply to a prior `says`/`asks`/`calls`. |
+| `informs` | Delivers information as a resolution, typically the outcome of a flow. |
+| `greets` | Opens an interaction. |
+| `clarifies` | Disambiguates a prior ambiguous statement. |
+| `confirms` | Affirms a proposed action or piece of information. |
+| `rejects` | Declines a proposed action or piece of information. |
+| `suggests` | Proposes an option without asserting it as fact. |
+| `shows` | Displays structured content (e.g. a list, a card, options) rather than saying it. |
 
 ### Execution
 
@@ -54,19 +60,11 @@ Invoking external systems, tools, or APIs. The `target` names the system; `with`
 
 | Action | Meaning |
 |---|---|
-| `calls` | Invoke a tool, API, or function. |
-| `submits` | Submit data to an external system. |
-| `retrieves` | Fetch data from a system. |
-| `stores` | Persist data to a system. |
-| `updates` | Modify existing data in a system. |
-
-### Delegation
-
-Transferring control:
-
-| Action | Meaning |
-|---|---|
-| `hands_off` | Transfer control to another agent or human. |
+| `calls` | Invokes an external system, tool, or API. Pair with a `responds` from `tool`/`external` to capture the return value. |
+| `submits` | Sends a completed input (e.g. a form) to a target. |
+| `retrieves` | Fetches data without side effects. |
+| `stores` | Persists data. |
+| `updates` | Modifies existing data. |
 
 ### Interaction
 
@@ -74,19 +72,32 @@ Acting on UI elements:
 
 | Action | Meaning |
 |---|---|
-| `selects` | Choose an item from a set. |
-| `uploads` | Upload a file through a UI. |
-| `approves` | Approve or confirm a UI action. |
+| `selects` | Chooses among presented options. |
+| `uploads` | Provides a file or attachment. |
+| `downloads` | Retrieves a file or attachment. |
+| `approves` | Grants explicit approval for a proposed action. |
+
+### Delegation
+
+Transferring control:
+
+| Action | Meaning |
+|---|---|
+| `hands_off` | Transfers the interaction to another actor, typically `human`. |
 
 ## Extending the vocabulary
 
-The vocabulary above is a starting point, not a closed set. To add a custom action:
+Real deployments will need domain-specific actions (`refunds`, `escalates`, `schedules`, ...). Custom actions:
 
-1. Declare which category it belongs to (so `target` semantics are unambiguous).
-2. Document its meaning and expected fields.
-3. If your tooling uses a JSON Schema, register it in the schema's action enum.
+- MUST declare which of the four categories above they belong to, since that category determines how `target` is interpreted (Specification §4, normative).
+- SHOULD be documented alongside the Session that uses them.
+- SHOULD be written as plain lowercase verbs consistent with the style of this table.
 
 A custom action follows the same five-field Behavior shape as any standard action.
+
+## Actor/Action compatibility
+
+The "typical actor" for each action is guidance, not a hard constraint in v0.1 — nothing in the conformance rules currently rejects an unusual pairing (e.g. `tool` performing `says`). Implementers who want stricter validation should layer additional constraints on top.
 
 ## Design rationale
 

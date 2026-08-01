@@ -1,94 +1,183 @@
 import DocsLayout from '@/components/layout/DocsLayout';
 
-export const frontmatter = { title: 'CLI Reference', description: 'Command-line interface — init, run, report, and validate.' };
+export const frontmatter = { title: 'CLI Reference', description: 'abs init, abs run, abs report — the three commands that take ABS from a file to a quality gate in CI.' };
 
 <DocsLayout frontmatter={frontmatter}>
 
-The ABS CLI provides a unified interface for creating, running, and reporting on ABS sessions.
+The CLI is the first thing anyone touches. It has to make two people happy at the same time:
 
-## Commands
+- **QA**: "I want to run this against staging and see if it passed or not, now."
+- **Data**: "I have 200 cases in a JSONL. Give me an aggregated report."
 
-### `abs init`
+Both should succeed on their first try.
 
-Initialize a new ABS project:
+---
+
+## The three commands
+
+```
+abs init                    # Scaffold a project
+abs run                     # Execute sessions against an agent
+abs report                  # View results from a previous run
+```
+
+---
+
+## abs init
+
+Creates a project skeleton in the current directory:
 
 ```bash
-abs init [directory]
-
-# Options
-#   --template <name>    Use a starter template
-#   --python             Set up for Python runner
-#   --typescript         Set up for TypeScript runner (default)
+abs init
 ```
 
 Creates:
+
 ```
-<directory>/
-├── abs.config.yaml
+.
+├── abs.config.yaml              # Project-level config (gitignored)
 ├── sessions/
-└── README.md
+│   └── order-status.abs.yaml    # Example session with {{placeholders}}
+└── datasets/
+    └── order-status.jsonl       # 3 rows that bind those placeholders
 ```
 
-### `abs run`
+---
 
-Execute one or more sessions against an agent:
+## abs run
+
+Executes one or more Sessions against an agent.
+
+### Simplest invocation
 
 ```bash
-abs run <file.abs.yaml...>
-
-# Options
-#   --adapter <name>     Adapter to use (cli, http)
-#   --command <cmd>      Command for CLI adapter
-#   --endpoint <url>     URL for HTTP adapter
-#   --var <key=value>    Runtime variable binding (repeatable)
-#   --dataset <file>     CSV/JSON dataset for parameterized runs
-#   --parallel <n>       Run N sessions in parallel
-#   --timeout <ms>       Per-session timeout
+abs run sessions/order-status.abs.yaml --agent http://localhost:8080/chat
 ```
 
-### `abs report`
-
-Generate a report from a trace:
+### With a single variable override
 
 ```bash
-abs report <trace.abs.yaml>
-
-# Options
-#   --format <fmt>       Output format (terminal, json, html, junit)
-#   --output <file>      Write to file instead of stdout
+abs run sessions/order-status.abs.yaml --agent $URL --var orderId=12345
 ```
 
-### `abs validate`
-
-Validate an ABS document against the JSON Schema:
+### With a dataset
 
 ```bash
-abs validate <file.abs.yaml>
-
-# Options
-#   --schema <version>   Schema version (default: declared abs_version or latest)
+abs run sessions/order-status.abs.yaml --agent $URL --dataset datasets/order-status.jsonl
 ```
 
-## Configuration file
+Runs the session once per row in the dataset. The report aggregates everything.
 
-`abs.config.yaml`:
+### With a dataset and a filter
+
+```bash
+abs run sessions/order-status.abs.yaml --agent $URL --dataset datasets/order-status.jsonl --filter "orderId:12345"
+```
+
+### Multiple sessions at once
+
+```bash
+abs run sessions/ --agent $URL --dataset datasets/
+```
+
+Runs every `.abs.yaml` in the directory against every `.jsonl` whose filename starts with the same prefix.
+
+### All flags
+
+| Flag | Required | Default | Description |
+|------|----------|---------|-------------|
+| `[session]` | Yes | — | Path to a `.abs.yaml` file or a directory of sessions |
+| `--agent` | Yes | — | Agent endpoint URL |
+| `--dataset` | No | — | Path to a `.json` or `.jsonl` dataset file or directory |
+| `--var` | No | — | Single variable binding (repeatable) |
+| `--filter` | No | — | Filter rows by key:value |
+| `--agent-format` | No | `openai` | `openai`, `claude`, `gemini`, or `custom` |
+| `--agent-auth` | No | `none` | `none`, `api_key`, `bearer`, `oauth2` |
+| `--agent-token` | No | — | Token or API key value |
+| `--agent-refresh-url` | No | — | OAuth2 token refresh URL |
+| `--agent-refresh-token` | No | — | OAuth2 refresh token |
+| `--adapter` | No | — | Evaluator adapter binding (repeatable: `--adapter llm_judge=azure`) |
+| `--format` | No | `table` | `table`, `json`, `junit` |
+| `--ci` | No | `false` | CI mode (no colors, no prompts) |
+| `--timeout` | No | `300` | Timeout per session run in seconds |
+| `--output` | No | — | Write report to file instead of stdout |
+| `--parallel` | No | `1` | Number of dataset rows to run in parallel |
+
+### Environment variables
+
+Every flag can also be set via environment variable:
+
+| Variable | Equivalent flag |
+|----------|----------------|
+| `ABS_AGENT_URL` | `--agent` |
+| `ABS_AGENT_FORMAT` | `--agent-format` |
+| `ABS_AGENT_AUTH` | `--agent-auth` |
+| `ABS_AGENT_TOKEN` | `--agent-token` |
+| `ABS_ADAPTER_LLM_JUDGE` | `--adapter llm_judge=...` |
+| `ABS_VAR_orderId` | `--var orderId=...` |
+
+---
+
+## abs report
+
+Reads a JSON report from a previous `abs run --output` and displays it.
+
+```bash
+abs run session.abs.yaml --agent $URL --output report.json
+abs report report.json
+```
+
+```bash
+abs report report.json --format table   # Default, human-readable
+abs report report.json --format json    # Machine-readable
+abs report report.json --format junit   # CI integration
+abs report report.json --failed         # Show only failed cases
+abs report report.json --detail 3       # Show full trace for case #3
+```
+
+---
+
+## Config file
+
+`abs.config.yaml` stores project-level settings:
 
 ```yaml
-abs_version: "0.1"
-default_adapter: cli
-default_command: "./my-agent"
-timeout: 30000
-variables:
-  base_url: "http://localhost:8080"
+agent:
+  url: http://localhost:8080/chat
+  format: openai
+  auth: none
+
+adapters:
+  llm_judge: aievaluator
+
+defaults:
+  dataset: datasets/
+  timeout: 120
 ```
 
-## Exit codes
+Precedence: `CLI flag > environment variable > config file > built-in default`.
 
-| Code | Meaning |
-|---|---|
-| 0 | All evaluations passed. |
-| 1 | One or more evaluations failed. |
-| 2 | Parse or execution error. |
-| 3 | Invalid arguments or configuration. |
+---
+
+## CI/CD integration
+
+```bash
+abs run sessions/ --agent $STAGING_AGENT --dataset datasets/ --format junit --ci > report.xml
+```
+
+Exit code 0 if all sessions passed. Exit code 1 if any failed. Drops straight into any CI system.
+
+---
+
+## The four personas the CLI serves
+
+| Persona | What they type | What they get |
+|---------|---------------|---------------|
+| **QA engineer** | `abs run session.abs.yaml --agent $STAGING --dataset regression.jsonl --format junit --ci` | A JUnit report that blocks the deploy if it fails |
+| **Data scientist** | `abs run session.abs.yaml --agent $URL --dataset 200-cases.jsonl --output report.json` | A JSON artifact to analyze offline |
+| **Product owner** | `abs report report.json` | A table that says 197/200 passed, with failures explained |
+| **Developer** | `abs run session.abs.yaml --agent localhost:8080 --var orderId=12345` | Instant feedback during development |
+
+One file. Four use cases.
 
 </DocsLayout>

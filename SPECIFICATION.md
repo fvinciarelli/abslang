@@ -17,15 +17,22 @@ abs_version: "0.1"           # OPTIONAL in v0.1, RECOMMENDED, will be REQUIRED i
 dataset:                     # OPTIONAL — dataset that feeds this session
   id: <string>               #   REQUIRED if dataset present — short name for column references
   path: <string>             #   REQUIRED if dataset present — path to .json or .jsonl file
-behaviors:                   # REQUIRED — ordered list of Behavior objects
+fragments:                   # OPTIONAL — named reusable lists of Behaviors. See COMPOSITION.md.
+  <fragment_name>:           #   Each key names a fragment, referenced by include: in behaviors
+    - actor: <string>
+      action: <string>
+      # ... any Behavior fields
+behaviors:                   # REQUIRED — ordered list of Behavior objects and/or fragment includes
   - id: <string>             #   OPTIONAL — unique id for this behavior, used by evaluations
     actor: <string>
     action: <string>
     target: <string>         # OPTIONAL
     content: <any>           # OPTIONAL
     capture: <map>           # OPTIONAL
-    with: <map>               # OPTIONAL
+    with: <map>              # OPTIONAL — parameters, partial match (default)
+    with_only: <map>         # OPTIONAL — parameters, strict match (mutually exclusive with with)
     evaluations: <list>       # OPTIONAL — step-level, checks this Behavior only
+  - include: <fragment_name> # OPTIONAL — inserts a fragment's Behaviors here
 evaluations: <list>           # OPTIONAL — session-level (chain), checks the whole trace. See EVALUATIONS.md.
 ```
 
@@ -52,7 +59,8 @@ This is **not valid YAML** — a block mapping (`session: ...`) cannot be direct
 | `target` | string | No | Object or destination of the action. Semantics are determined by the Action category — normative rule in §4. |
 | `content` | any | No | Payload of the Behavior: text, structured data, or displayed information. |
 | `capture` | map | No | Names runtime values observed in this Behavior for later reuse. See VARIABLES.md. |
-| `with` | map | No | Parameters passed on an outbound Action (typically `calls`), MAY reference captured variables. |
+| `with` | map | No | Parameters passed on an outbound Action (typically `calls`), MAY reference captured variables. Partial match by default — observed arguments must contain all declared keys but may include extras. |
+| `with_only` | map | No | Parameters passed on an outbound Action. Strict match — observed arguments must contain exactly the declared keys and no others. Mutually exclusive with `with`. See TOOLS.md. |
 | `evaluations` (on a Behavior) | list | No | Step-level verification rules for that Behavior only. See EVALUATIONS.md. |
 | `evaluations` (top-level, sibling of `behaviors`) | list | No | Session-level (chain) verification rules over the whole trace — ordering, variable consistency, things that must never/eventually happen. See EVALUATIONS.md. |
 

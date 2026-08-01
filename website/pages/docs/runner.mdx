@@ -1,10 +1,25 @@
 import DocsLayout from '@/components/layout/DocsLayout';
 
-export const frontmatter = { title: 'Runner', description: 'Executing ABS sessions against a real agent.' };
+export const frontmatter = { title: 'Runner', description: 'Executing ABS sessions against a real agent — HTTP adapters, auth, streaming, and reports.' };
 
 <DocsLayout frontmatter={frontmatter}>
 
-The Runner is the component that takes an ABS document and executes it against a real agent, capturing the trace and evaluating it against the spec.
+The Runner takes an ABS session, plays it against a real agent, and tells you whether the agent behaved as expected. It is the piece that makes ABS not just documentation, but a test.
+
+---
+
+## The two things you need
+
+To run an ABS session you only need two things:
+
+1. **A session file** — your `.abs.yaml`
+2. **An agent URL** — an HTTP endpoint that speaks a simple chat protocol
+
+```bash
+abs run ./order-status.abs.yaml --agent http://localhost:8080/chat
+```
+
+---
 
 ## Architecture
 
@@ -15,7 +30,7 @@ flowchart LR
     C --> D[Trace]
     D --> E[Evaluations]
     E --> F[Report]
-    
+
     style A fill:#e0e7ff,stroke:#6366f1
     style F fill:#d1fae5,stroke:#10b981
 `} />
@@ -26,77 +41,222 @@ flowchart LR
 4. **Evaluate** by comparing expected vs. actual, running all evaluations.
 5. **Report** the results.
 
-## Adapters
+---
 
-The Runner uses adapters to talk to different agent frameworks:
+## The Agent Contract
 
-| Adapter | Status |
-|---|---|
-| CLI / stdin-stdout | v0.1 — stable |
-| HTTP / WebSocket | Planned for v0.2 |
-| LangChain callback | Community interest |
-| MCP-native | Planned |
+For the Runner to talk to an agent, the agent needs one HTTP endpoint:
 
-## Running a session
+### Request
+
+```
+POST /chat
+Content-Type: application/json
+
+{
+  "messages": [
+    { "role": "user", "content": "Where is my order?" }
+  ]
+}
+```
+
+### Response (text)
+
+```json
+{
+  "message": {
+    "role": "assistant",
+    "content": "Please provide your order number"
+  }
+}
+```
+
+### Response (tool call)
+
+```json
+{
+  "message": {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_1",
+        "type": "function",
+        "function": {
+          "name": "get_order",
+          "arguments": "{\"orderId\": \"12345\"}"
+        }
+      }
+    ]
+  }
+}
+```
+
+The Runner will send the tool result back and continue. This is the same shape used by OpenAI, Anthropic, and most open-source models.
+
+---
+
+## Agent adapters
+
+Agents speak different protocols. The Runner ships with built-in adapters:
+
+| Adapter | Protocol |
+|---------|----------|
+| `openai` (default) | OpenAI Chat Completions API |
+| `claude` | Anthropic Messages API |
+| `gemini` | Google Gemini API |
 
 ```bash
-# Against a local CLI agent
-abs run session.abs.yaml --adapter cli --command "./my-agent"
-
-# Against an HTTP endpoint
-abs run session.abs.yaml --adapter http --endpoint "http://localhost:8080/agent"
+abs run session.abs.yaml --agent $URL --agent-format openai
+abs run session.abs.yaml --agent $URL --agent-format claude
+abs run session.abs.yaml --agent $URL --agent-format gemini
 ```
 
-## The trace
+If your agent speaks a different protocol, write a thin adapter implementing `send(messages) → response`.
 
-After execution, the Runner produces a **trace** — the actual sequence of observed Behaviors:
+### Authentication
 
-```yaml
-# trace.abs.yaml (generated)
-session: Refund request — approved [TRACE]
-behaviors:
-  - actor: user
-    action: says
-    content: "I want to return order #8291, it arrived damaged"
-  - actor: assistant
-    action: asks
-    content: "I'm sorry about that. Can you confirm your name and order date?"
-  - actor: user
-    action: says
-    content: "Franco Vinciarelli, ordered last Tuesday"
-  - actor: assistant
-    action: calls
-    target: Orders API
-    with:
-      orderId: "8291"
-  - actor: Orders API
-    action: responds
-    content:
-      orderId: "8291"
-      status: "delivered"
-      eligibleForRefund: true
-  - actor: assistant
-    action: calls
-    target: Refunds API
-    with:
-      orderId: "8291"
-      reason: "damaged"
-  - actor: Refunds API
-    action: responds
-    content:
-      refundId: "R-5512"
-      amount: 47.50
-      status: "processed"
-  - actor: assistant
-    action: informs
-    content: "Refund of €47.50 processed, Franco. You'll receive it in 3-5 days. Your refund ID is R-5512."
+| Method | Flag |
+|--------|------|
+| `none` (default) | No auth |
+| `api_key` | `--agent-auth api_key --agent-token $KEY` |
+| `bearer` | `--agent-auth bearer --agent-token $TOKEN` |
+| `oauth2` | `--agent-auth oauth2 --agent-token $TOKEN` |
+
+---
+
+## How the Runner thinks
+
+The Runner has one simple rule:
+
+> **Everything with `actor: user` goes to the agent. Everything else is what the agent should do in response.**
+
+```
+Session (what you wrote)          Reality (what the agent did)
+═══════════════════════           ═══════════════════════════
+
+user says "Hi"          ──────→   POST /chat
+assistant greets        ←──────   { "role": "assistant", "content": "Hello!" }
+                                    ✅  matched
+
+user says "Order 12345" ──────→   POST /chat
+assistant calls          ←──────   { "tool_calls": [{"function": {"name": "Order MCP"}}] }
+  Order MCP                           ✅  matched
+
+tool responds            ←──────   { "role": "tool", "content": "{\"status\": \"shipped\"}" }
+                                    ✅  matched
+
+assistant informs        ←──────   { "role": "assistant", "content": "Your order has shipped!" }
+  "Your order..."                    ✅  matched
+     │
+     └── evaluation: contains "shipped"  →  ✅  PASS
 ```
 
-The trace is then compared against the original spec's evaluations.
+---
+
+## Execution model
+
+```
+1. Parse the session YAML
+2. Expand fragments into a flat list of Behaviors
+3. Create an empty trace
+4. For each Behavior, in order:
+   a. If actor is "user":
+      - Send the content to the agent
+      - Collect the agent's response
+      - Append both to the trace
+   b. If actor is "assistant" and action is "calls":
+      - Match the agent's tool_calls against target and with
+      - If a tool response follows, send it back to continue
+   c. If actor is "tool":
+      - Skip — handled as the tool response payload in (b)
+      - Its evaluations still run against the observed response
+   d. If actor is anything else (assistant says/informs/asks/etc):
+      - Match the agent's response against this Behavior
+5. Run all step-level evaluations against the trace
+6. Run all session-level (chain) evaluations against the full trace
+7. Print the report
+8. Exit 0 if everything passed, exit 1 otherwise
+```
+
+### Matching rules
+
+- `actor` and `action` must match exactly (communication actions are equivalent: `says`/`asks`/`informs`/etc. all match each other)
+- `target` (if present) must match the observed tool name, recipient, or UI element
+- `with` (if present) must match the observed tool arguments — partial by default, strict with `with_only`
+- `content` is checked for structural compatibility
+
+---
+
+## Evaluator adapters
+
+ABS defines *what* to check. An evaluator adapter defines *how* to check it. The built-in evaluators (`exact_match`, `contains`, `regex`, `schema`, `tool_call`, `sequence`, `eventually`, `never`, `count`, `within`, `variable_consistency`) ship with the Runner. `llm_judge`, `Groundedness`, `Relevance`, `Coherence`, `Fluency`, and `custom` go through adapters.
+
+The default adapter for `llm_judge` is [AI Evaluator](https://aievaluator.dev). Other providers (Azure AI, LangSmith, Promptfoo) can ship adapters implementing the same interface.
+
+```bash
+abs run session.abs.yaml \
+  --adapter llm_judge=azure \
+  --adapter llm_judge=langsmith
+```
+
+---
+
+## Report formats
+
+### Table (default, human)
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  ABS — Results                                           │
+├──────────────────────────────────────────────────────────┤
+│  Session:  Order status requires order number            │
+│  Agent:    http://localhost:8080/chat                     │
+│  Result:   ✅ PASSED                                     │
+│  Steps:    5/5 matched · 4/4 evaluations passed          │
+├────┬────────────────────────────────────┬────────┬───────┤
+│  # │ Step                               │ Result │       │
+├────┼────────────────────────────────────┼────────┼───────┤
+│  1 │ user says "Where is my order?"     │   →    │  sent │
+│  2 │ assistant asks "order number"      │   ✅   │ match │
+│  3 │ user says "12345"                  │   →    │  sent │
+│  4 │ assistant calls Order MCP          │   ✅   │ match │
+│  5 │ assistant informs "on the way"     │   ✅   │ match │
+│    │   └─ contains "on the way"         │   ✅   │  pass │
+│  C │ sequence: asks → calls → informs   │   ✅   │  pass │
+│  C │ variable_consistency: orderId      │   ✅   │  pass │
+│  C │ never: hands_off                   │   ✅   │  pass │
+└────┴────────────────────────────────────┴────────┴───────┘
+```
+
+### JSON (`--format json`)
+
+Machine-readable output for downstream tooling and dashboards.
+
+### JUnit XML (`--format junit`)
+
+For CI pipelines (GitHub Actions, GitLab CI, Jenkins).
+
+---
+
+## What the Runner does NOT do
+
+The Runner is not an agent framework. It does not:
+
+- Write prompts or orchestrate chains of thought
+- Modify the agent under test
+- Decide which model or framework the agent should use
+- Require the agent to be built a certain way
+
+It only plays the user's part, watches the agent, and reports what happened.
+
+---
 
 ## See also
 
 - [CLI Reference](/docs/cli) — full command-line reference
-- [Evaluations](/docs/evaluations) — how the evaluation step works
+- [Evaluations](/docs/evaluations) — all evaluator types and semantics
+- [Tools & MCP](/docs/tools) — tool call matching rules
+- [Variables](/docs/variables) — capture, reuse, and runtime binding
 
 </DocsLayout>

@@ -1,51 +1,90 @@
 import DocsLayout from '@/components/layout/DocsLayout';
 
-export const frontmatter = { title: 'Composition', description: 'Fragments and reusable Behaviors across sessions.' };
+export const frontmatter = { title: 'Composition', description: 'Fragments — reusable Behavior blocks within a session file.' };
 
 <DocsLayout frontmatter={frontmatter}>
 
-Composition lets you reuse behavior fragments across multiple sessions, reducing duplication and making specs easier to maintain.
+Composition lets you reuse behavior fragments across multiple sessions in the same file, reducing duplication and making specs easier to maintain.
 
 ## Motivation
 
-Many sessions share common steps. A "user authenticates" sequence, a "check for errors" evaluation block, or a "handoff to human" pattern might appear in dozens of sessions. Copy-pasting those steps creates maintenance burden — change the pattern once, and every copy needs updating.
+Many sessions share common prefixes, suffixes, or middle sequences. A "user authenticates" sequence, a "check for errors" evaluation block, or a "handoff to human" pattern might appear in multiple Sessions. Copy-pasting those steps creates maintenance burden — change the pattern once, and every copy needs updating.
 
-## Reusable fragments
+## The mechanism: fragments
 
-A fragment is a standalone `.abs.yaml` file containing a list of Behaviors:
-
-```yaml
-# fragments/auth.abs.yaml
-fragment: User authentication
-behaviors:
-  - actor: user
-    action: says
-    content: "I need to log in"
-  - actor: assistant
-    action: asks
-    content: "What is your account ID?"
-```
-
-## Including fragments
-
-A session can include a fragment:
+A **fragment** is a named, reusable list of Behaviors. It is declared once under a top-level `fragments:` key and inserted into a Session with an `include:` entry in the `behaviors:` list.
 
 ```yaml
-session: Order status (authenticated)
+fragments:
+  request-dentist-appointment:
+    - actor: user
+      action: says
+      content: "I need to book a dentist appointment"
+    - actor: assistant
+      action: calls
+      target: Calendar API
+      with:
+        service: "dentist"
+    - actor: tool
+      action: responds
+      target: Calendar API
+      content:
+        slots: ["2026-08-03T09:00", "2026-08-03T14:00"]
+
+---
+session: Appointment booking, slot accepted
 behaviors:
-  - include: fragments/auth.abs.yaml
+  - include: request-dentist-appointment
   - actor: user
-    action: says
-    content: "Where is my order {{order_id}}?"
-  - actor: assistant
-    action: calls
-    target: Order MCP
+    action: selects
+    target: Appointment Options
+    content: "2026-08-03T09:00"
+  # ...
+
+---
+session: Appointment booking, no slot fits
+behaviors:
+  - include: request-dentist-appointment
+  - actor: user
+    action: rejects
+    target: Appointment Options
+  # ...
 ```
 
-The `include` directive is expanded at parse time. The final trace is as if the Behaviors had been written inline.
+The shared opening exists once. Both Sessions still read top to bottom. And because `include:` is an ordinary entry in the `behaviors:` list, it can appear at **any** position — not only first.
 
-## Status
+## Expansion is the whole design
 
-Fragment composition is described conceptually in v0.1. The exact `include` syntax and resolution rules are being formalized for v0.2. See the [Roadmap](/docs/roadmap) for details.
+The single rule that makes composition safe: **fragments are expanded away before anything else happens**. An implementation replaces each `include:` with a copy of the fragment's Behaviors, in place, recursively, and what remains is an ordinary linear v0.1 Session. Only then does it interpret ordering, resolve variables, or run any evaluation.
+
+Everything already closed in v0.1 therefore stays closed:
+
+- **Sequencing** still applies to a flat, ordered list.
+- **Variable resolution** still means "nearest prior `capture:` in the same Session" — a Session that, post-expansion, contains the fragment's steps as its own.
+- **Chain evaluations** (`sequence`, `never`, `variable_consistency`, …) still operate on *one* trace, because a Session still describes exactly one path.
+
+Composition is a **writing convenience, not a new concept in the model**. A human reader sees the shortcut; an evaluator never does.
+
+## What a fragment may contain
+
+A fragment holds Behaviors, and those Behaviors are ordinary in every respect: they may carry `target`, `content`, `with`, `capture`, `{{variable}}` references, and **step-level** `evaluations`. Those assertions travel with the step into every Session that includes it.
+
+A fragment **may not** carry **session-level** `evaluations`. Chain evaluators are statements about a complete trace, and a fragment is not a trace.
+
+## Fragments and variables
+
+Fragments introduce **no new scoping rules**. After expansion there is one Session, and VARIABLES.md applies verbatim.
+
+**A fragment can capture for its includer.** If the shared opening captures `orderId`, a Session can reference `{{orderId}}` ten steps later.
+
+**A fragment can also reference what it does not capture.** A fragment is free to use `{{orderId}}` and leave the capturing to whoever includes it. Authors should document which variables a fragment expects to already exist.
+
+## Deliberately out of scope for v0.1
+
+- **Parameterized fragments** — "the same opening but for an optometrist instead of a dentist." Deferred until real documents demonstrate the need.
+- **Cross-file fragments** — a shared library of fragments across repositories. Requires resolution paths and versioning. v0.1 scopes fragment names to a single file.
+- **Fragments as a unit of reuse across Sessions of different agents** — belongs with the Variable/Context Specification.
+
+See the [Roadmap](/docs/roadmap) for what's planned for v0.2+.
 
 </DocsLayout>
