@@ -4,7 +4,7 @@ import withMDX from '@next/mdx';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  basePath: '/abs',
+  basePath: '/abslang',
   pageExtensions: ['tsx', 'ts', 'md', 'mdx'],
   eslint: {
     ignoreDuringBuilds: true
