@@ -15,9 +15,7 @@ export default function NavBar() {
           <Link href="/" className="flex items-center gap-2 group">
             <span className="text-xl font-bold text-gray-900 tracking-tight">
               <span className="text-primary-600">ABS</span>
-            </span>
-            <span className="hidden sm:inline text-sm text-gray-400 font-medium border-l border-gray-300 pl-2">
-              Agent Behavior Specification
+              <span className="text-primary-600 font-normal">Spec</span>
             </span>
           </Link>
 

@@ -43,29 +43,31 @@ export default function Hero() {
               <div className="w-3 h-3 rounded-full bg-green-500/80" />
               <span className="ml-2 text-xs text-gray-400 font-mono">session.abs.yaml</span>
             </div>
-            <pre className="p-4 text-sm text-gray-200 font-mono leading-relaxed overflow-x-auto">
-              <code>{`<span class="text-primary-400">session</span>: <span class="text-green-400">Refund request — approved</span>
-<span class="text-primary-400">behaviors</span>:
-  - <span class="text-primary-400">actor</span>: <span class="text-green-400">user</span>
-    <span class="text-primary-400">action</span>: <span class="text-green-400">says</span>
-    <span class="text-primary-400">content</span>: <span class="text-green-400">"I want to return order #8291, it arrived damaged"</span>
-  - <span class="text-primary-400">actor</span>: <span class="text-green-400">assistant</span>
-    <span class="text-primary-400">action</span>: <span class="text-green-400">asks</span>
-    <span class="text-primary-400">content</span>: <span class="text-green-400">"Can you confirm your name and order date?"</span>
-    <span class="text-primary-400">evaluations</span>:
-      - <span class="text-primary-400">type</span>: <span class="text-green-400">llm_judge</span>
-        <span class="text-primary-400">criteria</span>: <span class="text-green-400">|</span>
-          <span class="text-green-400">1. Shows empathy</span>
-          <span class="text-green-400">2. References order #8291</span>
-          <span class="text-green-400">3. Asks for verification</span>
-  - <span class="text-primary-400">actor</span>: <span class="text-green-400">assistant</span>
-    <span class="text-primary-400">action</span>: <span class="text-green-400">calls</span>
-    <span class="text-primary-400">target</span>: <span class="text-green-400">Orders API</span>
-<span class="text-gray-500">  # ... tool round-trips, chain evaluations, variable checks</span>
-<span class="text-primary-400">evaluations</span>:
-  - <span class="text-primary-400">type</span>: <span class="text-green-400">sequence</span>
-  - <span class="text-primary-400">type</span>: <span class="text-green-400">variable_consistency</span>
-  - <span class="text-primary-400">type</span>: <span class="text-green-400">never</span>`}</code>
+            <pre className="p-4 text-sm font-mono leading-relaxed overflow-x-auto">
+              <code>
+<div className="text-primary-400">session<span className="text-gray-200">: </span><span className="text-green-400">Refund request — approved</span></div>
+<div className="text-primary-400">behaviors<span className="text-gray-200">:</span></div>
+<div>  - <span className="text-primary-400">actor</span><span className="text-gray-200">: </span><span className="text-green-400">user</span></div>
+<div>    <span className="text-primary-400">action</span><span className="text-gray-200">: </span><span className="text-green-400">says</span></div>
+<div>    <span className="text-primary-400">content</span><span className="text-gray-200">: </span><span className="text-green-400">"I want to return order #8291, it arrived damaged"</span></div>
+<div>  - <span className="text-primary-400">actor</span><span className="text-gray-200">: </span><span className="text-green-400">assistant</span></div>
+<div>    <span className="text-primary-400">action</span><span className="text-gray-200">: </span><span className="text-green-400">asks</span></div>
+<div>    <span className="text-primary-400">content</span><span className="text-gray-200">: </span><span className="text-green-400">"Can you confirm your name and order date?"</span></div>
+<div>    <span className="text-primary-400">evaluations</span><span className="text-gray-200">:</span></div>
+<div>      - <span className="text-primary-400">type</span><span className="text-gray-200">: </span><span className="text-green-400">llm_judge</span></div>
+<div>        <span className="text-primary-400">criteria</span><span className="text-gray-200">: </span><span className="text-green-400">|</span></div>
+<div>          <span className="text-green-400">1. Shows empathy</span></div>
+<div>          <span className="text-green-400">2. References order #8291</span></div>
+<div>          <span className="text-green-400">3. Asks for verification</span></div>
+<div>  - <span className="text-primary-400">actor</span><span className="text-gray-200">: </span><span className="text-green-400">assistant</span></div>
+<div>    <span className="text-primary-400">action</span><span className="text-gray-200">: </span><span className="text-green-400">calls</span></div>
+<div>    <span className="text-primary-400">target</span><span className="text-gray-200">: </span><span className="text-green-400">Orders API</span></div>
+<div className="text-gray-500">  # ... tool round-trips, chain evaluations, variable checks</div>
+<div className="text-primary-400">evaluations<span className="text-gray-200">:</span></div>
+<div>  - <span className="text-primary-400">type</span><span className="text-gray-200">: </span><span className="text-green-400">sequence</span></div>
+<div>  - <span className="text-primary-400">type</span><span className="text-gray-200">: </span><span className="text-green-400">variable_consistency</span></div>
+<div>  - <span className="text-primary-400">type</span><span className="text-gray-200">: </span><span className="text-green-400">never</span></div>
+              </code>
             </pre>
           </div>
 
