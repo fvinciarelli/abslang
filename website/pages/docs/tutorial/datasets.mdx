@@ -1,0 +1,199 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: '6. Datasets and golden data', description: 'From one happy-path test to 100 parameterized runs with .jsonl datasets.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+So far we've run **a single case**. The happy path with fixed data. That's fine to start, but with AI agents you need more: what about 100 different orders? What if the name has accents? What if the amount is zero?
+
+ABS has an answer: **datasets**. Turn your Session into a template with `{{placeholders}}` and run it against a data file.
+
+### Step 1: Turn fixed values into placeholders
+
+Instead of hardcoding `"8291"` and `"R-5512"`, use `{{variables}}`:
+
+```yaml
+session: Refund — damaged item
+behaviors:
+  - actor: user
+    action: says
+    content: "I received order #{{orderId}} damaged, I want to return it"
+
+  - actor: assistant
+    action: asks
+    content: "I'm sorry about the damage. Can you confirm your name and order date?"
+    evaluations:
+      - type: llm_judge
+        criteria: |
+          1. Shows empathy for the damaged item
+          2. Mentions the order number
+          3. Asks for verification before taking action
+
+  - actor: user
+    action: says
+    content: "{{customerName}}, ordered last Tuesday"
+
+  - actor: assistant
+    action: calls
+    target: Orders API
+    with:
+      orderId: "{{orderId}}"
+
+  # ... rest of the flow with {{expectedAmount}}, {{expectedKeyword}}, etc.
+
+  - actor: assistant
+    action: informs
+    content: "Refund of {{expectedAmount}} processed, {{customerName}}. Reference: {{refundId}}."
+    capture:
+      refundId: "{{refundId}}"
+    evaluations:
+      - type: contains
+        value: "{{expectedKeyword}}"
+      - type: llm_judge
+        criteria: |
+          1. States the amount ({{expectedAmount}}) and timeline (3-5 days)
+          2. Uses the customer's name ({{customerName}})
+          3. Reassuring tone, no upsells or deflections
+```
+
+### Step 2: Create your golden dataset
+
+A `.jsonl` file where each line is a different case:
+
+```jsonl
+{"orderId": "8291", "customerName": "Franco", "expectedAmount": "€47.50", "refundId": "R-5512", "expectedKeyword": "processed"}
+{"orderId": "4456", "customerName": "María José", "expectedAmount": "€128.00", "refundId": "R-7813", "expectedKeyword": "authorized"}
+{"orderId": "1023", "customerName": "Åsmund", "expectedAmount": "€9.99", "refundId": "R-2004", "expectedKeyword": "completed"}
+```
+
+### Step 3: Run everything together
+
+```bash
+abs run refund.abs.yaml --agent $URL --dataset golden-cases.jsonl
+```
+
+The Runner executes the Session **once per row**. If you have 100 rows, it runs 100 tests:
+
+```
+Session:  Refund — damaged item
+Agent:    http://localhost:8080/chat
+Dataset:  golden-cases.jsonl (100 rows)
+Result:   ❌ FAILED
+Rows:     97/100 passed · 3 failed
+
+❌ Row 42 (orderId=5555):
+  Step 8 — assistant informs:
+    Expected keyword: "processed"
+    Observed: "Your refund was rejected"
+    ❌ contains "processed" → FAILED
+```
+
+**This is what you want as QA:** the same spec, run against diverse real data, catching regressions. The Session is the *what*. The dataset is the *with what data*.
+
+### Bonus: run a single row while developing
+
+```bash
+abs run refund.abs.yaml --agent $URL --dataset golden-cases.jsonl --filter "orderId:8291"
+```
+
+`--filter` lets you iterate on a single case without waiting for all 100.
+
+### Advanced: quality evaluations with dataset columns
+
+Beyond exact assertions like `contains`, your golden dataset can feed more sophisticated evaluations. For example, verifying the bot's response **doesn't hallucinate** (Groundedness), **answers what the user asked** (Relevance), or **isn't biased** (bias check with `llm_judge`).
+
+Imagine a customer support bot with a knowledge base. The dataset includes the context the bot should use:
+
+```jsonl
+{"userQuery": "What's the return policy?", "kbContext": "Returns are accepted within 30 days. Opened items have a 15% surcharge.", "expectedPolicy": "30 days"}
+{"userQuery": "Do you ship to Uruguay?", "kbContext": "We ship to Argentina, Chile, Uruguay, and Paraguay. Cost depends on weight.", "expectedPolicy": "Uruguay"}
+{"userQuery": "Do you offer extended warranty?", "kbContext": "We offer a 1-year warranty on all products. Extension to 3 years at 15% additional cost.", "expectedPolicy": "3 years"}
+```
+
+Now the Session references those columns both in the input and in the evaluations:
+
+```yaml
+session: Knowledge base query
+dataset:
+  id: cases
+  path: kb-cases.jsonl
+behaviors:
+  - id: user_asks
+    actor: user
+    action: says
+    content: "{{cases.userQuery}}"
+
+  - id: kb_result
+    actor: tool
+    action: responds
+    target: Knowledge Base
+    content: "{{cases.kbContext}}"
+
+  - id: answer
+    actor: assistant
+    action: informs
+    evaluations:
+      # Does the response rely on the context or invent facts?
+      - type: Groundedness
+        query: user_asks.says
+        context: kb_result.responds
+        response: self
+        threshold: 0.8
+
+      # Does it answer what the user asked?
+      - type: Relevance
+        query: user_asks.says
+        response: self
+        threshold: 0.7
+
+      # Is the response internally coherent?
+      - type: Coherence
+        response: self
+
+      # Hard fact: does it mention the right policy?
+      - type: contains
+        value: "{{cases.expectedPolicy}}"
+
+      # Right tone? No bias?
+      - type: llm_judge
+        criteria: |
+          1. Answers the user's question: {{cases.userQuery}}
+          2. Doesn't make up information not in the context
+          3. Shows no bias or favoritism
+          4. Professional and helpful tone
+        threshold: 0.7
+```
+
+### Where do these evaluations run? — Adapters
+
+Simple evaluations (`contains`, `exact_match`, `regex`, `schema`, `tool_call`) run **locally** on your machine, with no external calls. They're instant and free.
+
+Evaluations that need an LLM (`llm_judge`, `Groundedness`, `Relevance`, `Coherence`, `Fluency`) go through an **adapter**. The adapter is a bridge between ABS and *wherever you want to run the judgment*. ABS doesn't lock you into a provider:
+
+| Option | How to configure | Best for |
+|---|---|---|
+| **AI Evaluator (default)** | Already configured. 5 free evaluations/day without API key. | Getting started with zero infrastructure |
+| **Your own local LLM** | `--adapter llm_judge=local --adapter-url http://localhost:11434` | Full privacy, no usage limits |
+| **OpenAI / Azure / Vertex AI** | `--adapter llm_judge=azure --adapter-key $KEY` | Integration with your existing provider |
+| **LangSmith / Promptfoo / Galileo** | Each publishes its own adapter. Configure with `--adapter`. | If you already use an observability platform |
+
+```bash
+# With AI Evaluator (default, no configuration needed)
+abs run kb-session.abs.yaml --agent $URL --dataset kb-cases.jsonl
+
+# With your own local LLM (Ollama, llama.cpp, etc.)
+abs run kb-session.abs.yaml --agent $URL --dataset kb-cases.jsonl \
+  --adapter llm_judge=local --adapter-url http://localhost:11434
+
+# With Azure AI Foundry
+abs run kb-session.abs.yaml --agent $URL --dataset kb-cases.jsonl \
+  --adapter llm_judge=azure --adapter-key $AZURE_KEY
+```
+
+**The Session is the same. The dataset is the same.** You only change the adapter depending on the environment: local while developing, AI Evaluator in staging, Azure in production. The *what* doesn't change; the *where* is resolved with a flag.
+
+---
+
+**Next: [Common mistakes →](/docs/tutorial/common-mistakes)**
+
+</DocsLayout>

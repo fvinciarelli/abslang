@@ -1,14 +1,14 @@
-# ABS Tutorial for QA
+# **Agent Behavior Specification** Tutorial for QA
 
 > A step-by-step guide to writing agent specifications that everyone understands — and that run as automated tests.
 
 ---
 
-## What ABS is and why you should care
+## What **Agent Behavior Specification** is and why you should care
 
 A developer tells you *"the refund bot is ready, test it."* You open the chat, type *"I want to return an item,"* and the bot replies. Is it correct? Did it do everything it should? Did it skip a step?
 
-Right now you probably have a Word doc with test cases and you run through them manually. ABS replaces that: **a single YAML file that describes what the agent should do, and can be executed as an automated test.**
+Right now you probably have a Word doc with test cases and you run through them manually. **Agent Behavior Specification** replaces that: **a single YAML file that describes what the agent should do, and can be executed as an automated test.**
 
 In a Three Amigos session (QA + Dev + PO), this file is the artifact all three of you read, debate, and sign off on. Dev uses it to know what to build. PO reads it as a behavioral contract. You use it to know exactly what to verify.
 
@@ -16,7 +16,7 @@ In a Three Amigos session (QA + Dev + PO), this file is the artifact all three o
 
 ## First 5 minutes: the structure
 
-An ABS document describes a **conversation**. It has two parts per step: who is speaking and what they're doing.
+An **Agent Behavior Specification** document describes a **conversation**. It has two parts per step: who is speaking and what they're doing.
 
 ```yaml
 session: Customer checks order status
@@ -160,7 +160,7 @@ evaluations:
     match: { actor: assistant, action: hands_off }
 ```
 
-This is where ABS earns its keep over manual test scripts. `sequence` checks ordering without you having to trace through step numbers. `variable_consistency` catches a subtle bug: the agent saying "R-5512" early but "R-5513" later. `never` is a safety guard: if this flow hands off to a human, something went wrong.
+This is where **Agent Behavior Specification** earns its keep over manual test scripts. `sequence` checks ordering without you having to trace through step numbers. `variable_consistency` catches a subtle bug: the agent saying "R-5512" early but "R-5513" later. `never` is a safety guard: if this flow hands off to a human, something went wrong.
 
 ---
 
@@ -183,7 +183,7 @@ Go to the **[ABS Designer](/abs-designer/)**, paste your YAML, enter your agent 
 ### 2. Terminal
 
 ```bash
-abs run session.abs.yaml --agent http://localhost:8080/chat
+abslang run session.abs.yaml --agent http://localhost:8080/chat
 ```
 
 Prints step-by-step: what matched, what failed, and why.
@@ -226,7 +226,7 @@ Open any `.abs.yaml` — the editor panel opens automatically. Edit visually, ru
 
 ## The Three Amigos session
 
-**Before the session:** PO writes the user story. No ABS yet.
+**Before the session:** PO writes the user story. No **Agent Behavior Specification** yet.
 
 **During the session (60-90 minutes):**
 
@@ -248,6 +248,6 @@ Open any `.abs.yaml` — the editor panel opens automatically. Edit visually, ru
 |---|---|
 | *"I used `says` but the agent was calling an API"* | Use `calls` + `target` for APIs. `says`/`informs`/`asks` is for talking. |
 | *"`sequence` fails but all steps are present"* | `sequence` checks relative order, not adjacency. If A is before B, it matches even with steps in between. |
-| *"I want an IF branch in the conversation"* | ABS v0.1 has no branching. Two paths = two Sessions. Write one for the happy path, another for the alternative. |
+| *"I want an IF branch in the conversation"* | **Agent Behavior Specification** v0.1 has no branching. Two paths = two Sessions. Write one for the happy path, another for the alternative. |
 | *"My `llm_judge` passes sometimes and fails other times"* | Vague criteria ("be friendly") produce inconsistent results. Be specific: "greets, introduces itself, doesn't interrupt." |
 | *"I don't know which actor to use"* | `user` = the tester. `assistant` = the bot. `tool` = external API/system. `human` = real person (for hand-offs). |

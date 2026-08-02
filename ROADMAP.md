@@ -17,7 +17,7 @@
 - Alternate flows modeled as separate Sessions
 - Fragments (`include:`) for composition — see COMPOSITION.md
 - Tool interaction spec (`calls`, `responds`, `with`/`with_only`, `tool_call` evaluator) — see TOOLS.md
-- JSON Schema (`schema/abs.schema.json`) — complete and validated by the CLI at parse time; `$id` at https://github.com/fvinciarelli/abs/blob/main/schema/abs.schema.json
+- JSON Schema (`schema/abs.schema.json`) — complete and validated by the CLI at parse time; `$id` at https://github.com/fvinciarelli/abslang/blob/main/schema/abs.schema.json
 - TypeScript implementation: parser, runner, all evaluators, CLI, OpenAI/Claude/Gemini adapters, AI Evaluator adapter, table formatter, test suite
 - Python implementation: parser, runner, all evaluators, CLI, AI Evaluator adapter, table formatter
 - UI authoring tool (`ui/`): React + Material UI, drag & drop, property sheets, YAML export

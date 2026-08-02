@@ -1,4 +1,4 @@
-# ABS Guide for Product Owners
+# **Agent Behavior Specification** Guide for Product Owners
 
 > How to specify what an agent should do — without writing code, without writing tests.
 > Someone else will add the evaluations later. Your job is the behavior.
@@ -7,13 +7,13 @@
 
 ## You don't need to learn a new tool
 
-ABS is YAML. It's plain text. If you can write a bullet list, you can write an ABS spec.
+**Agent Behavior Specification** is YAML. It's plain text. If you can write a bullet list, you can write a **Agent Behavior Specification** spec.
 
 Here's a user story you might write today:
 
 > *As a customer, I want to return a damaged item so I can get my money back. The agent asks for my order number, verifies it, processes the refund, and tells me the amount and timeline.*
 
-That story has a sequence in it: **asks → verifies → processes → tells**. ABS just makes that sequence explicit and machine-readable. Here's the same story in ABS:
+That story has a sequence in it: **asks → verifies → processes → tells**. **Agent Behavior Specification** just makes that sequence explicit and machine-readable. Here's the same story in **Agent Behavior Specification**:
 
 ```yaml
 session: Return a damaged item
@@ -173,7 +173,7 @@ What should the agent tell the user based on that API response?
 
 ## What about branching? "If the user says X, the agent does Y"
 
-ABS v0.1 is linear — one path per file. If your flow has a decision point, you write one file for each branch.
+**Agent Behavior Specification** v0.1 is linear — one path per file. If your flow has a decision point, you write one file for each branch.
 
 For example, if the agent hands off to different specialists depending on what the user needs:
 
@@ -235,13 +235,13 @@ That's the whole thing. 15 lines. A dev can build from it. QA can test from it. 
 ## FAQ
 
 **Do I need to install anything?**
-No. ABS files are plain YAML. You can write them in Notepad. But the [ABS Designer](/abs-designer/) gives you a visual editor if you prefer that.
+No. **Agent Behavior Specification** files are plain YAML. You can write them in Notepad. But the [**Agent Behavior Specification** Designer](/abs-designer/) gives you a visual editor if you prefer that.
 
 **What if I don't know the exact API responses?**
 Use placeholder data. The dev will replace it with real payloads during the Three Amigos session.
 
 **Can I use this for non-chat agents?**
-Yes. ABS describes observable behavior. If your agent sends emails, processes files, or updates a database, those are all `calls` with a `target`.
+Yes. **Agent Behavior Specification** describes observable behavior. If your agent sends emails, processes files, or updates a database, those are all `calls` with a `target`.
 
 **What if the agent does different things for different users?**
 Each scenario is its own file. Think of them as "the conversation when X happens." You can have as many as you need.

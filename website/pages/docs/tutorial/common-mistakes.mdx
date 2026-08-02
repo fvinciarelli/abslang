@@ -1,0 +1,19 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: '7. Common mistakes', description: 'Pitfalls every QA hits the first time — and how to avoid them.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+| Mistake | Fix |
+|---|---|
+| *I used `says` for an API call* | Use `calls` + `target`. `says` is for talking. |
+| *`sequence` fails but the steps are there* | `sequence` checks relative order, not adjacency. If A is before B, it passes. |
+| *I want an IF branch in the conversation* | v0.1 has no branching. Two paths = two separate Sessions. |
+| *`llm_judge` passes sometimes and fails others* | Vague criteria ("be friendly") produce inconsistent results. Be specific. |
+| *I don't know which actor to use* | `user` = the tester. `assistant` = the bot. `tool` = external API/system. `human` = real person. |
+
+---
+
+**Next: [Available tools →](/docs/tutorial/tools)**
+
+</DocsLayout>

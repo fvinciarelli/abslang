@@ -74,8 +74,8 @@ When the Runner executes with `--dataset`, it runs the Session once per row, bin
 A Session that uses runtime bindings is a template. The same Session file works for:
 
 - **Documentation** — a PO reads it and sees the shape of the interaction
-- **A single smoke test** — `abs run --var orderId=12345`
-- **A full regression suite** — `abs run --dataset 200-cases.jsonl`
+- **A single smoke test** — `abslang run --var orderId=12345`
+- **A full regression suite** — `abslang run --dataset 200-cases.jsonl`
 
 The Session doesn't change. The data does.
 

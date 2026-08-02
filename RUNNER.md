@@ -1,14 +1,14 @@
 # Runner
 
-> How ABS goes from a file on disk to a green checkmark in CI.
+> How **Agent Behavior Specification** goes from a file on disk to a green checkmark in CI.
 
-The Runner takes an ABS session, plays it against a real agent, and tells you whether the agent behaved as expected. It is the piece that makes ABS not just documentation, but a test.
+The Runner takes a **Agent Behavior Specification** session, plays it against a real agent, and tells you whether the agent behaved as expected. It is the piece that makes **Agent Behavior Specification** not just documentation, but a test.
 
 ---
 
 ## The two things you need
 
-To run an ABS session you only need two things:
+To run a **Agent Behavior Specification** session you only need two things:
 
 1. **A session file** — your `.abs.yaml`
 2. **An agent URL** — an HTTP endpoint that speaks a simple chat protocol
@@ -121,7 +121,7 @@ The spec deliberately does not mandate a specific API format — `openai` is the
 
 ## The Evaluator Adapter
 
-ABS defines *what* to check. An evaluator adapter defines *how* to check it. The built-in evaluators (`exact_match`, `contains`, `regex`, `schema`, `tool_call`, `sequence`, `eventually`, `never`, `count`, `within`, `variable_consistency`) ship with the Runner. `llm_judge` and `custom` go through adapters.
+**Agent Behavior Specification** defines *what* to check. An evaluator adapter defines *how* to check it. The built-in evaluators (`exact_match`, `contains`, `regex`, `schema`, `tool_call`, `sequence`, `eventually`, `never`, `count`, `within`, `variable_consistency`) ship with the Runner. `llm_judge` and `custom` go through adapters.
 
 ### Adapter interface
 
@@ -231,7 +231,7 @@ adapters:
 
 ## AI Evaluator as the first adapter
 
-AI Evaluator ([aievaluator.dev](https://aievaluator.dev)) provides LLM-as-a-judge with multiple judge models (DeepSeek, GPT-4, Gemini, Mistral) and metrics (faithfulness, groundedness, toxicity, and custom evaluators). It already has the infrastructure ABS needs — a judge factory, BYOK support, and a sync evaluation API.
+AI Evaluator ([aievaluator.dev](https://aievaluator.dev)) provides LLM-as-a-judge with multiple judge models (DeepSeek, GPT-4, Gemini, Mistral) and metrics (faithfulness, groundedness, toxicity, and custom evaluators). It already has the infrastructure **Agent Behavior Specification** needs — a judge factory, BYOK support, and a sync evaluation API.
 
 When the Runner starts with the AI Evaluator adapter configured, it sends `llm_judge` evaluations to the AI Evaluator API with the trace and criteria. The adapter handles the rest.
 
@@ -246,7 +246,7 @@ abs run session.abs.yaml --agent $AGENT_URL
 abs login
 ```
 
-Other evaluator providers (Azure AI, LangSmith, Promptfoo, Galileo, Arize) can ship adapters that implement the same interface. ABS doesn't care which one you use — it just calls `adapter.evaluate(trace, rule)` and expects an `EvalResult` back.
+Other evaluator providers (Azure AI, LangSmith, Promptfoo, Galileo, Arize) can ship adapters that implement the same interface. **Agent Behavior Specification** doesn't care which one you use — it just calls `adapter.evaluate(trace, rule)` and expects an `EvalResult` back.
 
 For the full evaluator type reference, see [EVALUATIONS.md](./EVALUATIONS.md).
 
@@ -254,13 +254,13 @@ For the full evaluator type reference, see [EVALUATIONS.md](./EVALUATIONS.md).
 
 ## Report format
 
-`abs run` produces three output formats, following the same pattern as the AI Evaluator CLI:
+`abslang run` produces three output formats, following the same pattern as the AI Evaluator CLI:
 
 ### Table (default, human)
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│  ABS — Results                                           │
+│  **Agent Behavior Specification** — Results                                           │
 ├──────────────────────────────────────────────────────────┤
 │  Session:  Order status requires order number            │
 │  Agent:    http://localhost:8080/chat                     │
@@ -488,4 +488,4 @@ This means the Runner sees the full round-trip: the assistant asking for the too
 
 RUNNER.md is a companion to SPECIFICATION.md, not part of the normative spec. It describes the reference implementation's behavior. Other Runner implementations may make different choices (streaming, different agent protocols, different report formats) while remaining ABS-conformant as long as they parse sessions per SPECIFICATION.md and implement the evaluation types per EVALUATIONS.md.
 
-ABS the specification says *what to describe and how to verify it*. The Runner says *how to execute it against a real agent*. They are designed together but versioned separately.
+**Agent Behavior Specification** the specification says *what to describe and how to verify it*. The Runner says *how to execute it against a real agent*. They are designed together but versioned separately.

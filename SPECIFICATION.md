@@ -1,4 +1,4 @@
-# ABS Specification v0.1
+# **Agent Behavior Specification** Specification v0.1
 
 This document is the normative entry point for the Agent Behavior Specification. It defines document format, required and optional fields, and conformance rules. Conceptual definitions and rationale live in [CORE_MODEL.md](./CORE_MODEL.md); this document is the formal reference for implementers.
 
@@ -6,7 +6,7 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHOULD", "SHOULD NOT", and "MAY" 
 
 ## 1. Document format
 
-An ABS document is valid YAML. (JSON is also valid, being a syntactic subset of YAML.) The recommended file extension is `.abs.yaml`; plain `.yaml` is also acceptable.
+An **Agent Behavior Specification** document is valid YAML. (JSON is also valid, being a syntactic subset of YAML.) The recommended file extension is `.abs.yaml`; plain `.yaml` is also acceptable.
 
 ## 2. Top-level structure
 
@@ -38,7 +38,7 @@ evaluations: <list>           # OPTIONAL — session-level (chain), checks the w
 
 A document with no `evaluations` anywhere (step-level or session-level) is purely descriptive. Adding `evaluations` at either level makes the same document executable as a test — see EVALUATIONS.md, "Design decision."
 
-**Note on the informal shorthand seen in early drafts.** Early discussion of ABS used a compact notation where a bare list of Behaviors follows `session:` directly, with no `behaviors:` key:
+**Note on the informal shorthand seen in early drafts.** Early discussion of **Agent Behavior Specification** used a compact notation where a bare list of Behaviors follows `session:` directly, with no `behaviors:` key:
 
 ```yaml
 session: Order status
@@ -101,7 +101,7 @@ v0.1 does not model branching within a single Session. Alternate paths (e.g. "us
 
 ## 8. Conformance
 
-An implementation is ABS v0.1 conformant if it:
+An implementation is **Agent Behavior Specification** v0.1 conformant if it:
 
 1. Parses a document per §2, resolving `target` per §4;
 2. Resolves variables per §6;
@@ -114,7 +114,7 @@ Conformance to evaluator types beyond (3) and (4), and to the not-yet-closed Too
 
 ### Version numbers
 
-ABS uses simple integer versions: `0.1`, `0.2`, `0.3`, …, `1.0`. No patch numbers. Every version is a breaking-change boundary until 1.0.
+**Agent Behavior Specification** uses simple integer versions: `0.1`, `0.2`, `0.3`, …, `1.0`. No patch numbers. Every version is a breaking-change boundary until 1.0.
 
 A change is **breaking** if a document that was valid under version N could be rejected or misinterpreted under version N+1. Examples:
 
@@ -139,7 +139,7 @@ Documents SHOULD declare `abs_version: "0.1"`. This becomes REQUIRED in v0.2. Im
 The normative JSON Schema for each version is published at:
 
 ```
-https://github.com/fvinciarelli/abs/blob/main/schema/abs.schema.json
+https://github.com/fvinciarelli/abslang/blob/main/schema/abs.schema.json
 (versioned URI pattern TBD for v0.2+)
 ```
 
@@ -153,4 +153,4 @@ This is the same strategy used by OpenAPI (`openapi: 3.0.3`) and AsyncAPI (`asyn
 
 ## 10. Non-goals
 
-See MANIFESTO.md, "What ABS is not."
+See MANIFESTO.md, "What **Agent Behavior Specification** is not."

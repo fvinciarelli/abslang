@@ -73,7 +73,7 @@ Everything already closed in v0.1 therefore stays closed, untouched:
 
 Composition is a **writing convenience, not a new concept in the model**. A human reader sees the shortcut; an evaluator never does.
 
-This is also the reason ABS does not put branches inside a Session. A branch would mean a Session no longer describes a single trace, and every chain evaluator — each defined in terms of "the observed trace" — would have to be redefined. Fragments buy the deduplication without reopening any of that.
+This is also the reason **Agent Behavior Specification** does not put branches inside a Session. A branch would mean a Session no longer describes a single trace, and every chain evaluator — each defined in terms of "the observed trace" — would have to be redefined. Fragments buy the deduplication without reopening any of that.
 
 ## What a fragment may contain
 

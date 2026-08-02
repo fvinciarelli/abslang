@@ -1,0 +1,50 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: '1. What ABS is and its structure', description: 'Minute 0–5: the acronym, the YAML format, the three fields, and the four actors.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+**ABS stands for Agent Behavior Specification.** It's a spec for describing the **observable** behavior of an AI agent: what it says, what tools it calls, what it responds. It's the equivalent of what OpenAPI is for REST APIs: a shared format, readable by both humans and machines, that a PO, a dev, and a QA can all read and sign off on together.
+
+ABS is **YAML**. Plain text. Not code. It's a way of writing:
+
+> *"The user says this, the assistant does that, and I want to verify it went well."*
+
+Here's the smallest possible ABS document:
+
+```yaml
+session: Customer checks order status
+behaviors:
+  - actor: user
+    action: says
+    content: "Where is my order #8291?"
+
+  - actor: assistant
+    action: calls
+    target: Orders API
+
+  - actor: assistant
+    action: informs
+    content: "Your order is on the way"
+```
+
+That's already a complete specification. Three fields per step:
+
+| Field | Meaning | Example |
+|---|---|---|
+| `actor` | **Who** is acting | `user`, `assistant`, `tool` |
+| `action` | **What** they do | `says`, `calls`, `informs`, `asks` |
+| `content` / `target` | **The details** | the message, or the system being called |
+
+**The four actors you'll always use:**
+
+- `user` → the customer, the one talking to the bot
+- `assistant` → the bot you're testing
+- `tool` → an external API or database the bot queries
+- `human` → a real person (for when the bot transfers)
+
+---
+
+**Next: [Write a real conversation →](/docs/tutorial/write-a-conversation)**
+
+</DocsLayout>

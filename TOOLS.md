@@ -1,12 +1,12 @@
 # Tool Interaction
 
-> How ABS describes, matches, and verifies tool calls — the invisible half of agent behavior.
+> How **Agent Behavior Specification** describes, matches, and verifies tool calls — the invisible half of agent behavior.
 
-A user sees a conversation. A tester sees the full round-trip: the assistant deciding to call a tool, what parameters it passes, what comes back, and what the assistant says about it afterward. ABS makes every step of that round-trip assertable.
+A user sees a conversation. A tester sees the full round-trip: the assistant deciding to call a tool, what parameters it passes, what comes back, and what the assistant says about it afterward. **Agent Behavior Specification** makes every step of that round-trip assertable.
 
 ---
 
-## The tool round-trip in ABS
+## The tool round-trip in **Agent Behavior Specification**
 
 A tool call is two Behaviors, not one:
 
@@ -75,7 +75,7 @@ Use `with_only` when the exact set of parameters matters — security-critical c
 
 ## Multiple tool calls in one turn
 
-An agent can call several tools before saying anything to the user. ABS represents this as consecutive `calls` Behaviors:
+An agent can call several tools before saying anything to the user. **Agent Behavior Specification** represents this as consecutive `calls` Behaviors:
 
 ```yaml
 - actor: assistant

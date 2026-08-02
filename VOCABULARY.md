@@ -1,6 +1,6 @@
 # Behavior Vocabulary
 
-ABS defines a standard action vocabulary, grouped by category. This is the set an implementation MUST recognize to claim v0.1 vocabulary support; it is not meant to be exhaustive of every domain-specific action a real agent might perform (see "Extending the vocabulary" below).
+**Agent Behavior Specification** defines a standard action vocabulary, grouped by category. This is the set an implementation MUST recognize to claim v0.1 vocabulary support; it is not meant to be exhaustive of every domain-specific action a real agent might perform (see "Extending the vocabulary" below).
 
 ## Communication
 

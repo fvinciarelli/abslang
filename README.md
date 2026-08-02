@@ -1,12 +1,12 @@
-# ABS — Agent Behavior Specification
+# **Agent Behavior Specification** (ABS)
 
 > A vendor-neutral, human-readable format for describing the observable behavior of AI agents: what users say, what agents do, and how it should be evaluated.
 
 **Status:** v0.1 — draft, open for review.
 
-## What is ABS?
+## What is **Agent Behavior Specification**?
 
-ABS is a plain-text (YAML) specification format for describing agent behavior as an ordered sequence of observable actions — messages, tool calls, UI interactions, hand-offs — independent of the LLM provider, agent framework, orchestration engine, or tool protocol used to implement it.
+**Agent Behavior Specification** (ABS) is a plain-text (YAML) format for describing agent behavior as an ordered sequence of observable actions — messages, tool calls, UI interactions, hand-offs — independent of the LLM provider, agent framework, orchestration engine, or tool protocol used to implement it.
 
 It plays a role for agent behavior similar to what OpenAPI plays for HTTP APIs: a shared contract that developers, QA, product owners, and tooling can all read and act on.
 
@@ -104,10 +104,10 @@ This single file describes the full interaction and verifies it automatically.
 
 | Document | Purpose |
 |---|---|
-| [TUTORIAL.md](./TUTORIAL.md) | Step-by-step guide for QA — learn ABS in 20 minutes |
+| [TUTORIAL.md](./TUTORIAL.md) | Step-by-step guide for QA — learn **Agent Behavior Specification** in 20 minutes |
 | [PO-GUIDE.md](./PO-GUIDE.md) | Guide for Product Owners — specify behavior without code |
 | [DEV-GUIDE.md](./DEV-GUIDE.md) | Guide for Developers — tool calls, API contracts, runner |
-| [MANIFESTO.md](./MANIFESTO.md) | Why ABS exists, principles, what it is and isn't |
+| [MANIFESTO.md](./MANIFESTO.md) | Why **Agent Behavior Specification** exists, principles, what it is and isn't |
 | [SPECIFICATION.md](./SPECIFICATION.md) | Formal v0.1 spec — document format, conformance |
 | [CORE_MODEL.md](./CORE_MODEL.md) | Session, Behavior, Actor, Action, Target, Content, Variables, Evaluations |
 | [VOCABULARY.md](./VOCABULARY.md) | Standard action vocabulary and semantics |
@@ -115,8 +115,8 @@ This single file describes the full interaction and verifies it automatically.
 | [VARIABLES.md](./VARIABLES.md) | Capture, reuse, and runtime binding of values |
 | [COMPOSITION.md](./COMPOSITION.md) | Fragments and reusable Behaviors |
 | [TOOLS.md](./TOOLS.md) | Tool interaction — `calls`, `responds`, matching rules |
-| [RUNNER.md](./RUNNER.md) | How ABS sessions get executed against a real agent |
-| [CLI.md](./CLI.md) | `abs init`, `abs run`, `abs report` — the command-line interface |
+| [RUNNER.md](./RUNNER.md) | How **Agent Behavior Specification** sessions get executed against a real agent |
+| [CLI.md](./CLI.md) | `abslang init`, `abslang run`, `abslang report` — the command-line interface |
 | [PATTERNS.md](./PATTERNS.md) | How to model real agent behaviors — recipes, not reference |
 | [EXAMPLES.md](./EXAMPLES.md) | Worked, narrated examples |
 | [ROADMAP.md](./ROADMAP.md) | What's next, and open design questions |

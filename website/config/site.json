@@ -20,11 +20,22 @@
         "heading": "Getting Started",
         "items": [
           { "label": "Introduction", "href": "/docs" },
-          { "label": "Tutorial (QA)", "href": "/docs/tutorial" },
-          { "label": "Guide for POs", "href": "/docs/po-guide" },
-          { "label": "Guide for Devs", "href": "/docs/dev-guide" },
-          { "label": "Quick Example", "href": "/docs/quick-example" },
+          { "label": "Tutorial", "href": "/docs/tutorial" },
           { "label": "Installation", "href": "/docs/installation" }
+        ]
+      },
+      {
+        "heading": "Tutorial",
+        "items": [
+          { "label": "1. What ABS is", "href": "/docs/tutorial/what-is-abs" },
+          { "label": "2. Write a conversation", "href": "/docs/tutorial/write-a-conversation" },
+          { "label": "3. Step-level evals", "href": "/docs/tutorial/step-evaluations" },
+          { "label": "4. Chain evals", "href": "/docs/tutorial/chain-evaluations" },
+          { "label": "5. Run it", "href": "/docs/tutorial/run-it" },
+          { "label": "6. Datasets", "href": "/docs/tutorial/datasets" },
+          { "label": "7. Common mistakes", "href": "/docs/tutorial/common-mistakes" },
+          { "label": "8. Tools", "href": "/docs/tutorial/tools" },
+          { "label": "9. Cheat sheet", "href": "/docs/tutorial/cheat-sheet" }
         ]
       },
       {

@@ -1,0 +1,31 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: '5. Run it', description: 'Browser, terminal, or VSCode — three ways to execute your spec against a real agent.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+You've written your spec. Now let's run it.
+
+Three options, from simplest to most integrated:
+
+### 1. Browser — zero install
+
+Open the **[ABS Designer](/abs-designer/)**, paste your YAML, enter your agent URL, ▶ Run. No installation needed.
+
+### 2. Terminal
+
+```bash
+abs run session.abs.yaml --agent http://localhost:8080/chat
+```
+
+Prints step-by-step: what matched, what failed, and why.
+
+### 3. VSCode
+
+Open any `.abs.yaml` → the visual editor opens automatically → ▶ Run. Edit visually, save, and run against your agent — all in one place.
+
+---
+
+**Next: [Datasets and golden data →](/docs/tutorial/datasets)**
+
+</DocsLayout>

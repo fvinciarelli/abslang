@@ -1,6 +1,6 @@
 # Patterns
 
-> How to model real agent behaviors with ABS v0.1 — recipes, not reference.
+> How to model real agent behaviors with **Agent Behavior Specification** v0.1 — recipes, not reference.
 
 The spec tells you what's valid. This document tells you how to combine those pieces
 to model the things you actually need: routing, round-trips, multi-step verification,
@@ -75,7 +75,7 @@ evaluations:
 ```
 
 The `sequence` doesn't care that the `greets` step comes from a different agent
-instance than the `clarifies` step — ABS tracks `actor` and `action`, not agent
+instance than the `clarifies` step — **Agent Behavior Specification** tracks `actor` and `action`, not agent
 identity. As long as both are `actor: assistant`, the chain is unbroken.
 
 #### 3. Add step-level evaluations on the key decision points

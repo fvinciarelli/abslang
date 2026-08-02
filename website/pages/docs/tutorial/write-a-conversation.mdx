@@ -1,0 +1,78 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: '2. Write a real conversation', description: 'Minute 5–10: model a refund bot step by step — user says, bot asks, APIs are called, bot confirms.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+Imagine you're QA for a refund bot. The PO gives you this story:
+
+> *"A customer returns a damaged item. The bot asks to verify name and date. It queries two APIs. Processes the refund. Confirms amount and timeline."*
+
+Let's write it in ABS, step by step:
+
+```yaml
+session: Refund — damaged item
+behaviors:
+  # Step 1: the customer complains
+  - actor: user
+    action: says
+    content: "I received order #8291 damaged, I want to return it"
+
+  # Step 2: the bot asks for verification
+  - actor: assistant
+    action: asks
+    content: "I'm sorry about the damage. Can you confirm your name and order date?"
+
+  # Step 3: the customer responds
+  - actor: user
+    action: says
+    content: "Franco Vinciarelli, ordered last Tuesday"
+
+  # Step 4: the bot queries the Orders API
+  - actor: assistant
+    action: calls
+    target: Orders API
+    with:
+      orderId: "8291"
+
+  # Step 5: the API responds
+  - actor: tool
+    action: responds
+    target: Orders API
+    content:
+      orderId: "8291"
+      status: "delivered"
+      eligibleForRefund: true
+
+  # Step 6: the bot calls the Refunds API
+  - actor: assistant
+    action: calls
+    target: Refunds API
+    with:
+      orderId: "8291"
+      reason: "damaged"
+
+  # Step 7: the Refunds API responds
+  - actor: tool
+    action: responds
+    target: Refunds API
+    content:
+      refundId: "R-5512"
+      amount: 47.50
+      status: "processed"
+
+  # Step 8: the bot confirms to the customer
+  - actor: assistant
+    action: informs
+    content: "Refund of €47.50 processed, Franco. You'll receive it in 3-5 days. Reference: R-5512."
+```
+
+**Important:** Notice steps 4-5 and 6-7? Every time the bot calls an API, it's **two separate Behaviors**: the call and the response. This is intentional: you can verify separately whether it called correctly and whether what the API returned is correct.
+
+At this point **you already have a specification**. Your PO can read it and understand the flow. Your dev knows which APIs to call. No code, no tests.
+
+---
+
+**Next: [Step-level evaluations →](/docs/tutorial/step-evaluations)**
+
+</DocsLayout>

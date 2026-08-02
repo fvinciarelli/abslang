@@ -1,16 +1,16 @@
-# ABS Guide for Developers
+# **Agent Behavior Specification** Guide for Developers
 
 > How to read, write, and implement agent specs — with a focus on tool calls, API contracts, and the execution model.
 
 ---
 
-## Your role with ABS
+## Your role with **Agent Behavior Specification**
 
-As a developer, you interact with ABS in three ways:
+As a developer, you interact with **Agent Behavior Specification** in three ways:
 
 1. **You read specs** written by QA and PO during Three Amigos. The spec tells you what APIs to call, with what parameters, and what the agent should say.
 2. **You write specs** when you're designing a new flow and want to nail down the tool interactions before coding.
-3. **You build agents** that pass ABS evaluations. The spec is your acceptance criteria.
+3. **You build agents** that pass **Agent Behavior Specification** evaluations. The spec is your acceptance criteria.
 
 This guide focuses on the parts that matter most to you: tool calls, API contracts, parameter matching, and the runner.
 
@@ -18,7 +18,7 @@ This guide focuses on the parts that matter most to you: tool calls, API contrac
 
 ## The tool round-trip: three Behaviors, independently assertable
 
-When your agent calls an API, ABS represents it as three separate steps:
+When your agent calls an API, **Agent Behavior Specification** represents it as three separate steps:
 
 ```yaml
 # 1. The agent calls the tool
@@ -97,7 +97,7 @@ Use `with_only` for security-critical or compliance-sensitive calls where an ext
 
 ## Multiple tool calls
 
-Agents often call several tools before responding to the user. ABS represents this as consecutive `calls` Behaviors:
+Agents often call several tools before responding to the user. **Agent Behavior Specification** represents this as consecutive `calls` Behaviors:
 
 ```yaml
 - actor: assistant
@@ -174,7 +174,7 @@ Variables let the spec capture values from the conversation and reuse them in la
 
 ### For developers building agents
 
-Your agent doesn't need to know about ABS variables. They're a spec-side concern. The runner resolves `{{orderId}}` before comparing against your agent's actual output. You just need to call the right API with the right parameters.
+Your agent doesn't need to know about **Agent Behavior Specification** variables. They're a spec-side concern. The runner resolves `{{orderId}}` before comparing against your agent's actual output. You just need to call the right API with the right parameters.
 
 ---
 
@@ -183,7 +183,7 @@ Your agent doesn't need to know about ABS variables. They're a spec-side concern
 When QA runs a spec against your agent, here's what happens:
 
 ```
-1. Parse the ABS YAML
+1. Parse the **Agent Behavior Specification** YAML
 2. For each Behavior in order:
    a. user says → POST to your agent's /chat endpoint
    b. assistant calls → check your agent's tool_calls against the spec
@@ -297,14 +297,14 @@ This checks that your API returns all required fields, with the right types, and
 
 ## Integrating with MCP, REST, or custom backends
 
-ABS doesn't care how your agent implements tool calls. The spec just says "the agent called Orders API with these parameters." Under the hood you can use:
+**Agent Behavior Specification** doesn't care how your agent implements tool calls. The spec just says "the agent called Orders API with these parameters." Under the hood you can use:
 
 - **MCP (Model Context Protocol)** — `target` is the MCP server name
 - **REST** — `target` is the API name, `with` is the JSON body
 - **Function calling** — `target` is the function name, `with` is the arguments
 - **Custom orchestration** — as long as your agent's `tool_calls` block matches the spec
 
-The contract between ABS and your agent is the `tool_calls` shape. Everything else is your implementation.
+The contract between **Agent Behavior Specification** and your agent is the `tool_calls` shape. Everything else is your implementation.
 
 ---
 
@@ -342,8 +342,8 @@ The spec is your acceptance criteria. You're done when it's green.
 
 ## Common developer questions
 
-**Do I need to install ABS to build my agent?**
-No. The spec is YAML. Read it, implement against it. QA runs ABS.
+**Do I need to install **Agent Behavior Specification** to build my agent?**
+No. The spec is YAML. Read it, implement against it. QA runs **Agent Behavior Specification**.
 
 **What if my agent does things between steps that aren't in the spec?**
 Extra steps between spec Behaviors are fine. The runner only checks that the expected steps happen in order — other stuff can happen between them.
@@ -365,9 +365,9 @@ The mock agent returns predefined responses so you can verify your spec parses a
 **What if my agent needs auth?**
 The runner supports `api_key`, `bearer`, and `oauth2` auth. QA configures it via CLI flags or environment variables. Your agent just needs to accept the standard headers.
 
-**Can I run ABS in CI?**
-Yes. `abs run --format junit --ci` produces a JUnit XML report that GitHub Actions, GitLab CI, and Jenkins understand natively.
+**Can I run **Agent Behavior Specification** in CI?**
+Yes. `abslang run --format junit --ci` produces a JUnit XML report that GitHub Actions, GitLab CI, and Jenkins understand natively.
 
 ```bash
-abs run sessions/ --agent $STAGING_URL --format junit --ci > report.xml
+abslang run sessions/ --agent $STAGING_URL --format junit --ci > report.xml
 ```

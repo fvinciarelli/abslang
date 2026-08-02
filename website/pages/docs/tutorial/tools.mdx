@@ -1,0 +1,79 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: '8. Available tools', description: 'CLI, Designer, VSCode extension, mock agent, and chatbot — the full ABS tool ecosystem.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+ABS isn't just a format: you have a tool ecosystem to write, run, and debug specifications.
+
+### CLI — the Swiss Army knife
+
+Install with npm or pip:
+
+```bash
+npm install -g abs-cli
+# or
+pip install abs-cli
+```
+
+Three commands:
+
+```bash
+abs init                               # Scaffold a project from scratch
+abs run session.abs.yaml --agent $URL  # Run against your agent
+abs report report.json                 # Read a previous report
+```
+
+### ABS Designer — visual editor in the browser
+
+Zero install. Open the **[Designer](/abs-designer/)** and build Sessions by dragging blocks. Ideal for Three Amigos sessions with PO and dev. Export YAML ready to run.
+
+### VSCode extension
+
+Install from the VSCode marketplace. Open any `.abs.yaml` and the visual editor opens automatically. Edit visually, save, and run against your agent with ▶ Run. All in one place.
+
+### Mock agent — test without a real agent
+
+If you're writing the spec and your agent doesn't exist yet or isn't available, use the mock agent to verify your YAML parses and evaluates correctly:
+
+```bash
+python tools/mock_agent.py --port 8080
+abs run session.abs.yaml --agent http://localhost:8080/chat
+```
+
+The mock agent returns predefined responses, so you can validate the entire chain — parsing, execution, evaluations — without depending on a real agent.
+
+### Chatbot — generate specs by chatting
+
+You already know how to write specs by hand. But ABS can do more: instead of remembering every field and action, **tell the chatbot what you want to test and it generates the file for you.**
+
+It's available in two places:
+
+**On the website.** Go to the **[ABS Designer](/abs-designer/)** and open the chat. Type something like:
+
+> *"I want to test a refund bot: the customer asks to return a damaged item, the bot verifies with Orders API and Refunds API, and confirms the amount and timeline."*
+
+The chatbot returns a complete `.abs.yaml` with Behaviors, tool calls, and suggested evaluations. Review it, tweak what you need, and run it.
+
+**In the CLI.** The same chat is integrated:
+
+```bash
+abs chat
+```
+
+It works the same way: describe the scenario in natural language, and the chatbot generates the spec.
+
+**Why does this matter?** Because you can go from an idea to an executable test in two minutes. You tell the chatbot the same thing you'd tell a coworker at standup, and you get a file ready for `abs run`. Then you refine it with datasets, advanced evaluations, and everything you learned in this tutorial. But 80% of the initial work is already done.
+
+### Full documentation
+
+- **[Specification](/docs/specification)** — normative reference
+- **[Evaluations](/docs/evaluations)** — all evaluators with examples
+- **[Patterns](/docs/patterns)** — recipes for real-world cases (routing, escalation, multi-step verification)
+- **[GitHub](https://github.com/fvinciarelli/abs)** — source code, examples, issues
+
+---
+
+**Next: [Cheat sheet →](/docs/tutorial/cheat-sheet)**
+
+</DocsLayout>

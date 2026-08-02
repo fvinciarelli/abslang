@@ -1,0 +1,41 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: '9. Cheat sheet', description: 'All ABS actions and evaluators on one page.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+## Actions
+
+| Category | Actions | When to use |
+|---|---|---|
+| Communication | `says`, `asks`, `informs`, `greets`, `clarifies`, `confirms`, `rejects`, `suggests`, `shows` | Bot or user speaks |
+| Execution | `calls`, `submits`, `retrieves`, `stores`, `updates` | Bot invokes tools |
+| Interaction | `selects`, `uploads`, `approves` | User interacts with UI |
+| Delegation | `hands_off` | Bot transfers to a human |
+
+## Evaluations
+
+| Type | Level | What it verifies |
+|---|---|---|
+| `contains` | Step | Text includes substring |
+| `exact_match` | Step | Exact text match |
+| `regex` | Step | Pattern match |
+| `schema` | Step | Valid JSON structure |
+| `tool_call` | Step | Correct tool call |
+| `llm_judge` | Step | Qualitative criteria |
+| `Groundedness` | Step | Response supported by context |
+| `Relevance` | Step | Response addresses the query |
+| `Coherence` | Step | Logical flow and consistency |
+| `Fluency` | Step | Natural language quality |
+| `sequence` | Chain | Step order |
+| `eventually` | Chain | Something happens at least once |
+| `never` | Chain | Something never happens |
+| `count` | Chain | Something happens N times |
+| `within` | Chain | A happens within N steps of B |
+| `variable_consistency` | Chain | A value stays unchanged |
+
+---
+
+**[← Back to tutorial index](/docs/tutorial)**
+
+</DocsLayout>

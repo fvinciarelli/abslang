@@ -5,3 +5,22 @@ __pycache__/
 *.egg-info/
 *.whl
 python/.venv/
+
+# Environment
+.env
+.env.local
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# TypeScript
+*.tsbuildinfo
+
+# Website
+website/.next/
+website/out/

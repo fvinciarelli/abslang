@@ -1,8 +1,8 @@
 # Evaluations
 
-## Design decision: ABS is descriptive and testable, by the same document
+## Design decision: **Agent Behavior Specification** is descriptive and testable, by the same document
 
-**Resolved in v0.1.** ABS does not have two modes with two syntaxes. A document with no `evaluations` anywhere is a pure behavioral description — useful as documentation, as a spec to review, as training material. The same document, with `evaluations` added at the Behavior and/or Session level, becomes executable as an automated test. Nothing about the document's shape changes; `evaluations` is simply optional annotation. A tool that only wants documentation can ignore `evaluations` entirely.
+**Resolved in v0.1.** **Agent Behavior Specification** does not have two modes with two syntaxes. A document with no `evaluations` anywhere is a pure behavioral description — useful as documentation, as a spec to review, as training material. The same document, with `evaluations` added at the Behavior and/or Session level, becomes executable as an automated test. Nothing about the document's shape changes; `evaluations` is simply optional annotation. A tool that only wants documentation can ignore `evaluations` entirely.
 
 ## Two levels of evaluation
 

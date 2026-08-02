@@ -1,6 +1,6 @@
 # Core Model
 
-ABS has three core concepts:
+**Agent Behavior Specification** has three core concepts:
 
 ```
 Session
@@ -30,7 +30,7 @@ Examples: checking order status, booking an appointment, requesting a refund, a 
 
 ## Behavior
 
-A Behavior is the smallest unit of observable behavior described by ABS: something performed by an Actor.
+A Behavior is the smallest unit of observable behavior described by **Agent Behavior Specification**: something performed by an Actor.
 
 ### Actor (required)
 
@@ -92,6 +92,6 @@ Examples of evaluation kinds: exact match, contains, schema validation, tool inv
 
 ## Design decision: description and assertion are the same document
 
-ABS documents serve two purposes at once — describing intended behavior, and (optionally, via `evaluations`) asserting it should hold true when run against a real implementation. A Behavior with no `evaluations` is purely descriptive. A Behavior with `evaluations` is also a test. A single Session can freely mix descriptive and asserted Behaviors.
+**Agent Behavior Specification** documents serve two purposes at once — describing intended behavior, and (optionally, via `evaluations`) asserting it should hold true when run against a real implementation. A Behavior with no `evaluations` is purely descriptive. A Behavior with `evaluations` is also a test. A single Session can freely mix descriptive and asserted Behaviors.
 
-This applies at **two levels**. Step-level `evaluations` (on a Behavior) check one observed step in isolation — useful, but the easy case. The more valuable case is **session-level (chain) evaluations**: a top-level `evaluations` block, sibling to `behaviors`, that checks properties of the *whole trace* — relative ordering between steps, a captured variable staying consistent everywhere it's reused, an action that must never or must eventually occur. This is where ABS earns its place over doing checks by hand, since chain-level properties are exactly what's tedious to verify manually once a Session has more than a handful of steps. See EVALUATIONS.md for the full evaluator vocabulary at both levels, and its resolved default for failure propagation (non-blocking / best-effort, with an opt-in `blocking: true` checkpoint).
+This applies at **two levels**. Step-level `evaluations` (on a Behavior) check one observed step in isolation — useful, but the easy case. The more valuable case is **session-level (chain) evaluations**: a top-level `evaluations` block, sibling to `behaviors`, that checks properties of the *whole trace* — relative ordering between steps, a captured variable staying consistent everywhere it's reused, an action that must never or must eventually occur. This is where **Agent Behavior Specification** earns its place over doing checks by hand, since chain-level properties are exactly what's tedious to verify manually once a Session has more than a handful of steps. See EVALUATIONS.md for the full evaluator vocabulary at both levels, and its resolved default for failure propagation (non-blocking / best-effort, with an opt-in `blocking: true` checkpoint).

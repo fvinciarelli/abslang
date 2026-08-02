@@ -1,6 +1,6 @@
 # CLI
 
-> `abs init`, `abs run`, `abs report`. Three commands that take ABS from a file on disk to a quality gate in CI.
+> `abslang init`, `abslang run`, `abslang report`. Three commands that take **Agent Behavior Specification** from a file on disk to a quality gate in CI.
 
 The CLI is the first thing anyone touches. It has to make two people happy at the same time:
 
@@ -14,21 +14,21 @@ Both should succeed on their first try.
 ## The three commands
 
 ```
-abs init                    # Scaffold a project
-abs run                     # Execute sessions against an agent
-abs report                  # View results from a previous run
+abslang init               # Scaffold a project
+abslang run                # Execute sessions against an agent
+abslang report             # View results from a previous run
 ```
 
 That's the surface. Everything else is flags.
 
 ---
 
-## abs init
+## abslang init
 
 Creates a project skeleton in the current directory:
 
 ```bash
-abs init
+abslang init
 ```
 
 ```
@@ -49,7 +49,7 @@ What gets created:
     └── order-status.jsonl       # 3 rows that bind those placeholders
 ```
 
-The example session and dataset are deliberately small but real. Someone can run `abs run` immediately after `abs init` and see a result.
+The example session and dataset are deliberately small but real. Someone can run `abslang run` immediately after `abslang init` and see a result.
 
 ### The example session
 
@@ -96,14 +96,14 @@ behaviors:
 
 ---
 
-## abs run
+## abslang run
 
 Executes one or more Sessions against an agent.
 
 ### Simplest invocation
 
 ```bash
-abs run sessions/order-status.abs.yaml --agent http://localhost:8080/chat
+abslang run sessions/order-status.abs.yaml --agent http://localhost:8080/chat
 ```
 
 Runs the session once. The `{{orderId}}` placeholder resolves to nothing (empty string) — useful for a smoke test where the session is fully self-contained.
@@ -111,7 +111,7 @@ Runs the session once. The `{{orderId}}` placeholder resolves to nothing (empty 
 ### With a single variable override
 
 ```bash
-abs run sessions/order-status.abs.yaml --agent $URL --var orderId=12345
+abslang run sessions/order-status.abs.yaml --agent $URL --var orderId=12345
 ```
 
 Runs once with `orderId` bound to `12345`. Quick one-off, no dataset file needed.
@@ -119,7 +119,7 @@ Runs once with `orderId` bound to `12345`. Quick one-off, no dataset file needed
 ### With a dataset — the big one
 
 ```bash
-abs run sessions/order-status.abs.yaml --agent $URL --dataset datasets/order-status.jsonl
+abslang run sessions/order-status.abs.yaml --agent $URL --dataset datasets/order-status.jsonl
 ```
 
 Runs the session once per row in the dataset. Three rows, three runs. The report aggregates everything.
@@ -127,7 +127,7 @@ Runs the session once per row in the dataset. Three rows, three runs. The report
 ### With a dataset and a filter
 
 ```bash
-abs run sessions/order-status.abs.yaml --agent $URL --dataset datasets/order-status.jsonl --filter "orderId:12345"
+abslang run sessions/order-status.abs.yaml --agent $URL --dataset datasets/order-status.jsonl --filter "orderId:12345"
 ```
 
 Runs only rows where `orderId` equals `12345`. Useful during development.
@@ -135,7 +135,7 @@ Runs only rows where `orderId` equals `12345`. Useful during development.
 ### Multiple sessions at once
 
 ```bash
-abs run sessions/ --agent $URL --dataset datasets/
+abslang run sessions/ --agent $URL --dataset datasets/
 ```
 
 Runs every `.abs.yaml` in the directory against every `.jsonl` whose filename starts with the same prefix. `order-status.abs.yaml` pairs with `order-status.jsonl`, `booking.abs.yaml` pairs with `booking.jsonl`.
@@ -176,38 +176,38 @@ Every flag can also be set via environment variable:
 
 ---
 
-## abs report
+## abslang report
 
-Reads a JSON report from a previous `abs run --output` and displays it.
+Reads a JSON report from a previous `abslang run --output` and displays it.
 
 ```bash
-abs run session.abs.yaml --agent $URL --output report.json
-abs report report.json
+abslang run session.abs.yaml --agent $URL --output report.json
+abslang report report.json
 ```
 
 ```bash
-abs report report.json --format table   # Default, human-readable
-abs report report.json --format json    # Machine-readable, same as the input
-abs report report.json --format junit   # CI integration
-abs report report.json --failed         # Show only failed cases
-abs report report.json --detail 3       # Show full trace for case #3
+abslang report report.json --format table   # Default, human-readable
+abslang report report.json --format json    # Machine-readable, same as the input
+abslang report report.json --format junit   # CI integration
+abslang report report.json --failed         # Show only failed cases
+abslang report report.json --detail 3       # Show full trace for case #3
 ```
 
 ---
 
 ## The report: one or many runs
 
-When a dataset has multiple rows, `abs run` produces an aggregated report.
+When a dataset has multiple rows, `abslang run` produces an aggregated report.
 
 ### One row, passed
 
 ```bash
-abs run session.abs.yaml --agent $URL --var orderId=12345
+abslang run session.abs.yaml --agent $URL --var orderId=12345
 ```
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  ABS — Results                                               │
+│  Agent Behavior Specification — Results                                               │
 ├──────────────────────────────────────────────────────────────┤
 │  Session:  order-status                                      │
 │  Agent:    http://localhost:8080/chat                         │
@@ -231,12 +231,12 @@ abs run session.abs.yaml --agent $URL --var orderId=12345
 ### Multiple rows (dataset), aggregated
 
 ```bash
-abs run session.abs.yaml --agent $URL --dataset cases.jsonl
+abslang run session.abs.yaml --agent $URL --dataset cases.jsonl
 ```
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  ABS — Results                                               │
+│  Agent Behavior Specification — Results                                               │
 ├──────────────────────────────────────────────────────────────┤
 │  Session:  order-status                                      │
 │  Agent:    http://localhost:8080/chat                         │
@@ -274,7 +274,7 @@ abs run session.abs.yaml --agent $URL --dataset cases.jsonl
     Step 5 — assistant informs:
       ❌ contains "on the way" → FAILED
 
-Run `abs report --detail 3` to see the full trace for row 3.
+Run `abslang report --detail 3` to see the full trace for row 3.
 ```
 
 ### JSON output (`--format json`)
@@ -356,16 +356,16 @@ CLI flag  >  environment variable  >  config file  >  built-in default
 ### Generate a workflow
 
 ```bash
-abs generate-ci --platform github
-abs generate-ci --platform gitlab
+abslang generate-ci --platform github
+abslang generate-ci --platform gitlab
 ```
 
-Produces a workflow file that runs `abs run` on every PR. Same pattern as the AI Evaluator CLI's `generate-ci` command.
+Produces a workflow file that runs `abslang run` on every PR. Same pattern as the AI Evaluator CLI's `generate-ci` command.
 
 ### Direct use in any pipeline
 
 ```bash
-abs run sessions/ --agent $STAGING_AGENT --dataset datasets/ --format junit --ci > report.xml
+abslang run sessions/ --agent $STAGING_AGENT --dataset datasets/ --format junit --ci > report.xml
 ```
 
 Exit code 0 if all sessions passed. Exit code 1 if any failed. Standard Unix semantics — drops straight into any CI system.
@@ -374,9 +374,9 @@ Exit code 0 if all sessions passed. Exit code 1 if any failed. Standard Unix sem
 
 ## What the CLI is not
 
-- Not a dashboard. `abs report` gives you a terminal view; for dashboards, use the JSON output and pipe it anywhere.
+- Not a dashboard. `abslang report` gives you a terminal view; for dashboards, use the JSON output and pipe it anywhere.
 - Not an agent builder. It tests agents, it doesn't create them.
-- Not a replacement for the AI Evaluator CLI. AI Evaluator evaluates prompt/response pairs with LLM-as-judge metrics. ABS evaluates full conversational sequences with behavioral assertions. They complement each other — and ABS can use AI Evaluator as its LLM-judge adapter.
+- Not a replacement for the AI Evaluator CLI. AI Evaluator evaluates prompt/response pairs with LLM-as-judge metrics. **Agent Behavior Specification** evaluates full conversational sequences with behavioral assertions. They complement each other — and **Agent Behavior Specification** can use AI Evaluator as its LLM-judge adapter.
 
 ---
 
@@ -384,9 +384,9 @@ Exit code 0 if all sessions passed. Exit code 1 if any failed. Standard Unix sem
 
 | Persona | What they type | What they get |
 |---------|---------------|---------------|
-| **QA engineer** | `abs run session.abs.yaml --agent $STAGING --dataset regression.jsonl --format junit --ci` | A JUnit report that blocks the deploy if it fails |
-| **Data scientist** | `abs run session.abs.yaml --agent $URL --dataset 200-cases.jsonl --output report.json` | A JSON artifact to analyze offline |
-| **Product owner** | `abs report report.json` | A table that says 197/200 passed, with the 3 failures explained in plain English |
-| **Developer** | `abs run session.abs.yaml --agent localhost:8080 --var orderId=12345` | Instant feedback during development, no dataset needed |
+| **QA engineer** | `abslang run session.abs.yaml --agent $STAGING --dataset regression.jsonl --format junit --ci` | A JUnit report that blocks the deploy if it fails |
+| **Data scientist** | `abslang run session.abs.yaml --agent $URL --dataset 200-cases.jsonl --output report.json` | A JSON artifact to analyze offline |
+| **Product owner** | `abslang report report.json` | A table that says 197/200 passed, with the 3 failures explained in plain English |
+| **Developer** | `abslang run session.abs.yaml --agent localhost:8080 --var orderId=12345` | Instant feedback during development, no dataset needed |
 
 One file. Four use cases. That's the goal.

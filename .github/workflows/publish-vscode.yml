@@ -1,0 +1,49 @@
+name: Publish VS Code Extension
+
+on:
+  push:
+    tags: ['vscode-v*']
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 1. Build the UI (React app bundled into vscode/media/ui)
+      - name: Build UI
+        working-directory: ui
+        run: |
+          npm ci
+          npm run build
+
+      - name: Copy UI assets
+        run: cp -r ui/dist vscode/media/ui
+
+      # 2. Build TypeScript CLI
+      - name: Build TypeScript CLI
+        working-directory: typescript
+        run: |
+          npm ci
+          npm run build
+
+      # 3. Bundle CLI for extension
+      - name: Bundle CLI for extension
+        run: node scripts/bundle.mjs
+
+      # 4. Build extension TypeScript
+      - name: Build extension
+        working-directory: vscode
+        run: |
+          npm ci
+          npm run build
+
+      # 5. Package and publish
+      - name: Publish to VS Code Marketplace
+        working-directory: vscode
+        run: |
+          npx @vscode/vsce publish -p ${{ secrets.VSCE_TOKEN }}

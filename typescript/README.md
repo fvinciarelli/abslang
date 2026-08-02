@@ -1,27 +1,27 @@
 # ABS — TypeScript
 
-> Agent Behavior Specification CLI for Node.js. Describe, run, and evaluate AI agent interactions.
+> **Agent Behavior Specification** CLI for Node.js. Describe, run, and evaluate AI agent interactions.
 
 ## Install
 
 ```bash
-npm install -g abs
+npm install -g abslang
 ```
 
 ## Quick start
 
 ```bash
 # Scaffold a project
-abs init
+abslang init
 
 # Run a session against a local agent
-abs run sessions/order-status.abs.yaml --agent http://localhost:8080/chat
+abslang run sessions/order-status.abs.yaml --agent http://localhost:8080/chat
 
 # Run with a dataset (parametrized testing)
-abs run sessions/order-status.abs.yaml --agent $URL --dataset datasets/order-status.jsonl
+abslang run sessions/order-status.abs.yaml --agent $URL --dataset datasets/order-status.jsonl
 
 # View a previous report
-abs report report.json
+abslang report report.json
 ```
 
 ## Test with the mock agent
@@ -31,13 +31,13 @@ abs report report.json
 python3 tools/mock_agent.py --scenario happy
 
 # Terminal 2: run the example
-abs run examples/order-status.yaml --agent http://localhost:8080/chat
+abslang run examples/order-status.yaml --agent http://localhost:8080/chat
 ```
 
 ## Library usage
 
 ```typescript
-import { parse, run } from 'abs';
+import { parse, run } from 'abslang';
 
 const session = parse('session.abs.yaml');
 const result = await run(session, {
