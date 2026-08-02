@@ -81,7 +81,7 @@ export default function Hero() {
               </svg>
             </Link>
             <a
-              href="https://github.com/fvinciarelli/abs"
+              href="https://github.com/fvinciarelli/abslang"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center px-6 py-3 rounded-lg border border-gray-600 text-gray-300 font-semibold text-sm hover:border-gray-400 hover:text-white transition-colors"

@@ -38,7 +38,7 @@ export default function DocsLayout({
             {/* Edit this page */}
             <div className="mt-12 pt-6 border-t border-gray-200">
               <a
-                href="https://github.com/fvinciarelli/abs"
+                href="https://github.com/fvinciarelli/abslang"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-sm text-gray-400 hover:text-primary-600 transition-colors"

@@ -3,15 +3,15 @@
     "name": "ABS",
     "title": "Agent Behavior Specification",
     "description": "A vendor-neutral, human-readable format for describing the observable behavior of AI agents.",
-    "url": "https://github.com/fvinciarelli/abs",
-    "github": "https://github.com/fvinciarelli/abs"
+    "url": "https://github.com/fvinciarelli/abslang",
+    "github": "https://github.com/fvinciarelli/abslang"
   },
   "navigation": {
     "main": [
       { "label": "Docs", "href": "/docs" },
       { "label": "Spec", "href": "/docs/specification" },
       { "label": "Examples", "href": "/docs/examples" },
-      { "label": "GitHub", "href": "https://github.com/fvinciarelli/abs", "external": true }
+      { "label": "GitHub", "href": "https://github.com/fvinciarelli/abslang", "external": true }
     ]
   },
   "docs": {

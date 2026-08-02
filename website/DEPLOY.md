@@ -70,7 +70,7 @@ Repo → Settings → Pages → Source: "GitHub Actions"
 
 If you need to redeploy without pushing:
 
-1. Go to `https://github.com/fvinciarelli/abs/actions`
+1. Go to `https://github.com/fvinciarelli/abslang/actions`
 2. Click **Deploy website to GitHub Pages** in the left sidebar
 3. Click **Run workflow** → **Run workflow**
 
