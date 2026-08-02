@@ -1,6 +1,6 @@
 import DocsLayout from '@/components/layout/DocsLayout';
 
-export const frontmatter = { title: 'CLI Reference', description: 'abs init, abs run, abs report — the three commands that take ABS from a file to a quality gate in CI.' };
+export const frontmatter = { title: 'CLI Reference', description: 'abs init, abs run, abslang report — the three commands that take ABS from a file to a quality gate in CI.' };
 
 <DocsLayout frontmatter={frontmatter}>
 
@@ -16,14 +16,14 @@ Both should succeed on their first try.
 ## The three commands
 
 ```
-abs init                    # Scaffold a project
-abs run                     # Execute sessions against an agent
-abs report                  # View results from a previous run
+abslang init                    # Scaffold a project
+abslang run                     # Execute sessions against an agent
+abslang report                  # View results from a previous run
 ```
 
 ---
 
-## abs init
+## abslang init
 
 Creates a project skeleton in the current directory:
 
@@ -44,26 +44,26 @@ Creates:
 
 ---
 
-## abs run
+## abslang run
 
 Executes one or more Sessions against an agent.
 
 ### Simplest invocation
 
 ```bash
-abs run sessions/order-status.abs.yaml --agent http://localhost:8080/chat
+abslang run sessions/order-status.abs.yaml --agent http://localhost:8080/chat
 ```
 
 ### With a single variable override
 
 ```bash
-abs run sessions/order-status.abs.yaml --agent $URL --var orderId=12345
+abslang run sessions/order-status.abs.yaml --agent $URL --var orderId=12345
 ```
 
 ### With a dataset
 
 ```bash
-abs run sessions/order-status.abs.yaml --agent $URL --dataset datasets/order-status.jsonl
+abslang run sessions/order-status.abs.yaml --agent $URL --dataset datasets/order-status.jsonl
 ```
 
 Runs the session once per row in the dataset. The report aggregates everything.
@@ -71,13 +71,13 @@ Runs the session once per row in the dataset. The report aggregates everything.
 ### With a dataset and a filter
 
 ```bash
-abs run sessions/order-status.abs.yaml --agent $URL --dataset datasets/order-status.jsonl --filter "orderId:12345"
+abslang run sessions/order-status.abs.yaml --agent $URL --dataset datasets/order-status.jsonl --filter "orderId:12345"
 ```
 
 ### Multiple sessions at once
 
 ```bash
-abs run sessions/ --agent $URL --dataset datasets/
+abslang run sessions/ --agent $URL --dataset datasets/
 ```
 
 Runs every `.abs.yaml` in the directory against every `.jsonl` whose filename starts with the same prefix.
@@ -118,21 +118,21 @@ Every flag can also be set via environment variable:
 
 ---
 
-## abs report
+## abslang report
 
-Reads a JSON report from a previous `abs run --output` and displays it.
+Reads a JSON report from a previous `abslang run --output` and displays it.
 
 ```bash
-abs run session.abs.yaml --agent $URL --output report.json
-abs report report.json
+abslang run session.abs.yaml --agent $URL --output report.json
+abslang report report.json
 ```
 
 ```bash
-abs report report.json --format table   # Default, human-readable
-abs report report.json --format json    # Machine-readable
-abs report report.json --format junit   # CI integration
-abs report report.json --failed         # Show only failed cases
-abs report report.json --detail 3       # Show full trace for case #3
+abslang report report.json --format table   # Default, human-readable
+abslang report report.json --format json    # Machine-readable
+abslang report report.json --format junit   # CI integration
+abslang report report.json --failed         # Show only failed cases
+abslang report report.json --detail 3       # Show full trace for case #3
 ```
 
 ---
@@ -162,7 +162,7 @@ Precedence: `CLI flag > environment variable > config file > built-in default`.
 ## CI/CD integration
 
 ```bash
-abs run sessions/ --agent $STAGING_AGENT --dataset datasets/ --format junit --ci > report.xml
+abslang run sessions/ --agent $STAGING_AGENT --dataset datasets/ --format junit --ci > report.xml
 ```
 
 Exit code 0 if all sessions passed. Exit code 1 if any failed. Drops straight into any CI system.
@@ -173,10 +173,10 @@ Exit code 0 if all sessions passed. Exit code 1 if any failed. Drops straight in
 
 | Persona | What they type | What they get |
 |---------|---------------|---------------|
-| **QA engineer** | `abs run session.abs.yaml --agent $STAGING --dataset regression.jsonl --format junit --ci` | A JUnit report that blocks the deploy if it fails |
-| **Data scientist** | `abs run session.abs.yaml --agent $URL --dataset 200-cases.jsonl --output report.json` | A JSON artifact to analyze offline |
-| **Product owner** | `abs report report.json` | A table that says 197/200 passed, with failures explained |
-| **Developer** | `abs run session.abs.yaml --agent localhost:8080 --var orderId=12345` | Instant feedback during development |
+| **QA engineer** | `abslang run session.abs.yaml --agent $STAGING --dataset regression.jsonl --format junit --ci` | A JUnit report that blocks the deploy if it fails |
+| **Data scientist** | `abslang run session.abs.yaml --agent $URL --dataset 200-cases.jsonl --output report.json` | A JSON artifact to analyze offline |
+| **Product owner** | `abslang report report.json` | A table that says 197/200 passed, with failures explained |
+| **Developer** | `abslang run session.abs.yaml --agent localhost:8080 --var orderId=12345` | Instant feedback during development |
 
 One file. Four use cases.
 

@@ -16,7 +16,7 @@ To run an ABS session you only need two things:
 2. **An agent URL** — an HTTP endpoint that speaks a simple chat protocol
 
 ```bash
-abs run ./order-status.abs.yaml --agent http://localhost:8080/chat
+abslang run ./order-status.abs.yaml --agent http://localhost:8080/chat
 ```
 
 ---
@@ -107,9 +107,9 @@ Agents speak different protocols. The Runner ships with built-in adapters:
 | `gemini` | Google Gemini API |
 
 ```bash
-abs run session.abs.yaml --agent $URL --agent-format openai
-abs run session.abs.yaml --agent $URL --agent-format claude
-abs run session.abs.yaml --agent $URL --agent-format gemini
+abslang run session.abs.yaml --agent $URL --agent-format openai
+abslang run session.abs.yaml --agent $URL --agent-format claude
+abslang run session.abs.yaml --agent $URL --agent-format gemini
 ```
 
 If your agent speaks a different protocol, write a thin adapter implementing `send(messages) → response`.
@@ -195,7 +195,7 @@ ABS defines *what* to check. An evaluator adapter defines *how* to check it. The
 The default adapter for `llm_judge` is [AI Evaluator](https://aievaluator.dev). Other providers (Azure AI, LangSmith, Promptfoo) can ship adapters implementing the same interface.
 
 ```bash
-abs run session.abs.yaml \
+abslang run session.abs.yaml \
   --adapter llm_judge=azure \
   --adapter llm_judge=langsmith
 ```

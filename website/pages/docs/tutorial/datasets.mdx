@@ -69,7 +69,7 @@ A `.jsonl` file where each line is a different case:
 ### Step 3: Run everything together
 
 ```bash
-abs run refund.abs.yaml --agent $URL --dataset golden-cases.jsonl
+abslang run refund.abs.yaml --agent $URL --dataset golden-cases.jsonl
 ```
 
 The Runner executes the Session **once per row**. If you have 100 rows, it runs 100 tests:
@@ -93,7 +93,7 @@ Rows:     97/100 passed · 3 failed
 ### Bonus: run a single row while developing
 
 ```bash
-abs run refund.abs.yaml --agent $URL --dataset golden-cases.jsonl --filter "orderId:8291"
+abslang run refund.abs.yaml --agent $URL --dataset golden-cases.jsonl --filter "orderId:8291"
 ```
 
 `--filter` lets you iterate on a single case without waiting for all 100.
@@ -179,14 +179,14 @@ Evaluations that need an LLM (`llm_judge`, `Groundedness`, `Relevance`, `Coheren
 
 ```bash
 # With AI Evaluator (default, no configuration needed)
-abs run kb-session.abs.yaml --agent $URL --dataset kb-cases.jsonl
+abslang run kb-session.abs.yaml --agent $URL --dataset kb-cases.jsonl
 
 # With your own local LLM (Ollama, llama.cpp, etc.)
-abs run kb-session.abs.yaml --agent $URL --dataset kb-cases.jsonl \
+abslang run kb-session.abs.yaml --agent $URL --dataset kb-cases.jsonl \
   --adapter llm_judge=local --adapter-url http://localhost:11434
 
 # With Azure AI Foundry
-abs run kb-session.abs.yaml --agent $URL --dataset kb-cases.jsonl \
+abslang run kb-session.abs.yaml --agent $URL --dataset kb-cases.jsonl \
   --adapter llm_judge=azure --adapter-key $AZURE_KEY
 ```
 

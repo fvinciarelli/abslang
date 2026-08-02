@@ -11,17 +11,17 @@ ABS isn't just a format: you have a tool ecosystem to write, run, and debug spec
 Install with npm or pip:
 
 ```bash
-npm install -g abs-cli
+npm install -g abslang
 # or
-pip install abs-cli
+pip install abslang
 ```
 
 Three commands:
 
 ```bash
-abs init                               # Scaffold a project from scratch
-abs run session.abs.yaml --agent $URL  # Run against your agent
-abs report report.json                 # Read a previous report
+abslang init                               # Scaffold a project from scratch
+abslang run session.abs.yaml --agent $URL  # Run against your agent
+abslang report report.json                 # Read a previous report
 ```
 
 ### ABS Designer — visual editor in the browser
@@ -38,7 +38,7 @@ If you're writing the spec and your agent doesn't exist yet or isn't available, 
 
 ```bash
 python tools/mock_agent.py --port 8080
-abs run session.abs.yaml --agent http://localhost:8080/chat
+abslang run session.abs.yaml --agent http://localhost:8080/chat
 ```
 
 The mock agent returns predefined responses, so you can validate the entire chain — parsing, execution, evaluations — without depending on a real agent.
@@ -63,7 +63,7 @@ abs chat
 
 It works the same way: describe the scenario in natural language, and the chatbot generates the spec.
 
-**Why does this matter?** Because you can go from an idea to an executable test in two minutes. You tell the chatbot the same thing you'd tell a coworker at standup, and you get a file ready for `abs run`. Then you refine it with datasets, advanced evaluations, and everything you learned in this tutorial. But 80% of the initial work is already done.
+**Why does this matter?** Because you can go from an idea to an executable test in two minutes. You tell the chatbot the same thing you'd tell a coworker at standup, and you get a file ready for `abslang run`. Then you refine it with datasets, advanced evaluations, and everything you learned in this tutorial. But 80% of the initial work is already done.
 
 ### Full documentation
 
