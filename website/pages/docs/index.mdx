@@ -9,63 +9,23 @@ ABS plays a role for agent behavior similar to what OpenAPI plays for HTTP APIs 
 ## Quick example
 
 ```yaml
-session: Refund request — approved
+session: Customer checks order status
 behaviors:
   - actor: user
     action: says
-    content: "I want to return order #8291, it arrived damaged"
-  - actor: assistant
-    action: asks
-    content: "I'm sorry about that. Can you confirm your name and order date?"
-    evaluations:
-      - type: llm_judge
-        criteria: |
-          1. Shows empathy for the damaged item
-          2. References the order number #8291
-          3. Asks for verification info before taking action
-  - actor: user
-    action: says
-    content: "Franco Vinciarelli, ordered last Tuesday"
-    capture:
-      customerName: "Franco Vinciarelli"
+    content: "Where is my order #8291?"
   - actor: assistant
     action: calls
     target: Orders API
-  - actor: tool
-    action: responds
-    target: Orders API
-  - actor: assistant
-    action: calls
-    target: Refunds API
-  - actor: tool
-    action: responds
-    target: Refunds API
   - actor: assistant
     action: informs
-    content: "Refund of €47.50 processed, Franco. Refund ID: R-5512."
+    content: "Your order is on the way"
     evaluations:
       - type: contains
-        value: "R-5512"
-      - type: llm_judge
-        criteria: |
-          1. States refund amount and timeline
-          2. Provides refund reference
-          3. Uses customer's name
-          4. Reassuring tone, no upsells
-evaluations:
-  - type: sequence
-    order:
-      - { actor: assistant, action: asks }
-      - { actor: assistant, action: calls, target: "Orders API" }
-      - { actor: assistant, action: calls, target: "Refunds API" }
-      - { actor: assistant, action: informs }
-  - type: variable_consistency
-    variable: refundId
-  - type: never
-    match: { actor: assistant, action: hands_off }
+        value: "on the way"
 ```
 
-This single file describes a full refund workflow — two API calls, tool round-trips, LLM judge evaluations with multi-criteria rubrics, variable capture, chain sequence verification, and invariant guards.
+Three behaviors, one evaluation. Anyone can read it — PO, dev, QA.
 
 ## How the docs are organized
 
