@@ -6,6 +6,7 @@ import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
+import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CodeIcon from '@mui/icons-material/Code';
@@ -178,23 +179,46 @@ export default function App() {
               />
             </Box>
 
-            <Box sx={{ mb: 2 }}>
+            {s.session.behaviors.length === 0 ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', py: 8, textAlign: 'center', color: 'text.secondary' }}>
+                <AutoAwesomeIcon sx={{ fontSize: 48, mb: 2, opacity: 0.4 }} />
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+                  Describe what the agent should do
+                </Typography>
+                <Typography variant="body2" sx={{ maxWidth: 400, mb: 3 }}>
+                  You don't need to know the YAML format. Open the assistant, describe the behavior in plain language, and it builds the file for you — with evaluations, datasets, and chain checks included.
+                </Typography>
+                <Button
+                  variant="contained"
+                  startIcon={<AutoAwesomeIcon />}
+                  onClick={() => setTab(2)}
+                >
+                  Use ABS Assistant
+                </Button>
+                <Typography variant="caption" sx={{ mt: 3, color: 'text.disabled' }}>
+                  Prefer to build manually? Use the bar below to add steps one by one.
+                </Typography>
+              </Box>
+            ) : (
+              <>
+                <Box sx={{ display: 'flex', gap: 1.5, mb: 2 }}>
+                  <Chip label={`${s.session.behaviors.length} steps`} size="small" color="primary" variant="outlined" />
+                  <Chip label={`${totalEvals} rules`} size="small" variant="outlined" sx={{ color: 'text.secondary' }} />
+                  <Chip label="Ready" size="small" color="success" variant="outlined" />
+                </Box>
+                <BehaviorFlow
+                  behaviors={s.session.behaviors}
+                  selectedId={s.selectedId}
+                  onSelect={(id) => { s.select(id); setTab(0); }}
+                  onRemove={s.removeBehavior}
+                  onAdd={s.addBehavior}
+                />
+              </>
+            )}
+
+            <Box sx={{ mb: 2, mt: s.session.behaviors.length === 0 ? 0 : 2 }}>
               <AddBehaviorBar onAdd={addFromPalette} />
             </Box>
-
-            <Box sx={{ display: 'flex', gap: 1.5, mb: 2 }}>
-              <Chip label={`${s.session.behaviors.length} steps`} size="small" color="primary" variant="outlined" />
-              <Chip label={`${totalEvals} rules`} size="small" variant="outlined" sx={{ color: 'text.secondary' }} />
-              <Chip label={s.session.behaviors.length > 0 ? 'Ready' : 'Empty'} size="small" color={s.session.behaviors.length > 0 ? 'success' : 'default'} variant="outlined" />
-            </Box>
-
-            <BehaviorFlow
-              behaviors={s.session.behaviors}
-              selectedId={s.selectedId}
-              onSelect={(id) => { s.select(id); setTab(0); }}
-              onRemove={s.removeBehavior}
-              onAdd={s.addBehavior}
-            />
           </Box>
         </Box>
 
@@ -224,13 +248,23 @@ export default function App() {
               onRemoveEval={(idx) => s.removeEvaluation(s.selected!.id, idx)}
             />
           ) : (
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', color: 'text.secondary' }}>
-              <SettingsIcon sx={{ fontSize: 40, mb: 2, opacity: 0.3 }} />
-              <Typography sx={{ fontWeight: 600 }}>No step selected</Typography>
-              <Typography variant="body2" sx={{ mt: 0.5, maxWidth: 200 }}>
-                Click a behavior in the flow to edit its properties.
-              </Typography>
-            </Box>
+            s.session.behaviors.length === 0 ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', color: 'text.secondary', px: 2 }}>
+                <AutoAwesomeIcon sx={{ fontSize: 40, mb: 2, opacity: 0.3 }} />
+                <Typography sx={{ fontWeight: 600, mb: 0.5 }}>Start with the Assistant</Typography>
+                <Typography variant="body2" sx={{ maxWidth: 260 }}>
+                  Switch to the ✨ <strong>Assistant</strong> tab and describe the behavior in plain language.
+                </Typography>
+              </Box>
+            ) : (
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', color: 'text.secondary' }}>
+                <SettingsIcon sx={{ fontSize: 40, mb: 2, opacity: 0.3 }} />
+                <Typography sx={{ fontWeight: 600 }}>No step selected</Typography>
+                <Typography variant="body2" sx={{ mt: 0.5, maxWidth: 200 }}>
+                  Click a behavior in the flow to edit its properties.
+                </Typography>
+              </Box>
+            )
           )}
         </Box>
       </Paper>

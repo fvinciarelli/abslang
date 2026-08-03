@@ -172,15 +172,25 @@ Putting it all together, the file is about 70 lines. PO understands the conversa
 
 ---
 
-## How to run it
+## How to create and run it
 
-Three ways, simplest to most integrated:
+Four ways, from zero effort to full integration:
 
-### 1. Browser — zero install
+### 1. Chat — describe it, it writes the file for you
 
-Go to the **[ABS Designer](/abs-designer/)**, paste your YAML, enter your agent URL, hit ▶ Run. Results appear inline.
+You don't need to know the YAML format. Open a terminal and describe what the agent should do:
 
-### 2. Terminal
+```bash
+DEEPSEEK_API_KEY=sk-... abslang chat
+```
+
+The assistant asks you guided questions, generates a complete `.abs.yaml` with evaluations, dataset placeholders, and chain checks — then validates it before saving. [Full details →](./CLI.md#abslang-chat)
+
+### 2. Browser — zero install
+
+Go to the **[ABS Designer](/abs-designer/)**. In the right panel, click the ✨ **Assistant** tab and describe the behavior in plain language — it generates the YAML and loads it into the visual editor. Enter your agent URL, hit ▶ Run. Results appear inline.
+
+### 3. Terminal
 
 ```bash
 abslang run session.abs.yaml --agent http://localhost:8080/chat
@@ -188,9 +198,66 @@ abslang run session.abs.yaml --agent http://localhost:8080/chat
 
 Prints step-by-step: what matched, what failed, and why.
 
-### 3. VSCode
+> 💡 If your session uses `llm_judge` evaluations, you'll need an LLM API key — see [What backs `llm_judge`](#what-backs-llm_judge) below.
+
+### 4. VSCode
 
 Open any `.abs.yaml` — the editor panel opens automatically. Edit visually, run with ▶ Run.
+
+---
+
+## What backs `llm_judge`
+
+When you add an `llm_judge` evaluation, someone has to actually call an LLM to judge the response. `abslang` gives you two paths, and you don't have to change your session file to switch between them.
+
+### Default: built-in judge (zero setup)
+
+Out of the box, `abslang` detects which LLM provider you have available and uses it automatically:
+
+```bash
+# If you have an OpenAI key, it just works:
+OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
+
+# Same with Anthropic:
+ANTHROPIC_API_KEY=sk-ant-... abslang run session.abs.yaml --agent $URL
+
+# Or Gemini:
+GEMINI_API_KEY=... abslang run session.abs.yaml --agent $URL
+```
+
+Set `ABS_JUDGE_PROVIDER` if you have more than one and want to pick:
+
+```bash
+ABS_JUDGE_PROVIDER=openai abslang run session.abs.yaml --agent $URL
+```
+
+No API key? Use the mock judge for testing — returns a fixed score based on response length:
+
+```bash
+ABS_MOCK_JUDGE=true abslang run session.abs.yaml --agent $URL
+```
+
+### External adapter: AI Evaluator
+
+If you use [AI Evaluator](https://aievaluator.dev), pass `--adapter` to route `llm_judge` evaluations through it instead:
+
+```bash
+# With API key (100 free evals/month):
+AIEVALUATOR_API_KEY=... abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
+
+# Without API key (playground, 5 free evals/day):
+abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
+```
+
+This also works from `abs.config.yaml` so you don't retype it:
+
+```yaml
+# abs.config.yaml
+adapters:
+  llm_judge: aievaluator
+```
+
+Other providers (Azure AI, LangSmith, Galileo) can ship their own adapters too. `abslang` doesn't care which one you use — your session file stays the same, only the `--adapter` flag or config changes.
 
 ---
 

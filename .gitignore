@@ -24,3 +24,5 @@ Thumbs.db
 # Website
 website/.next/
 website/out/
+
+.plans

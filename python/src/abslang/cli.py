@@ -5,7 +5,6 @@ Commands:
     abs init         Scaffold a new ABS project
     abs run          Execute sessions against an agent
     abs report       View results from a previous run
-    abs login        Log in to AI Evaluator for LLM-as-judge
 """
 
 import asyncio
@@ -542,28 +541,6 @@ def report(file: str, output_format: str, failed: bool, detail: Optional[int]):
                 actual = results.index(r) + 1
                 status = "✅" if r.get("passed") else "❌"
                 click.echo(f"  Row {actual}: {r.get('session', '')} {status}")
-
-
-# ═══════════════════════════════════════════════════════════════════
-#  login
-# ═══════════════════════════════════════════════════════════════════
-
-@main.command()
-@click.option("--api-key", help="AI Evaluator API key", default=None)
-def login(api_key: Optional[str]):
-    """Log in to AI Evaluator for LLM-as-judge evaluations."""
-    key = api_key or os.environ.get("AIEVALUATOR_API_KEY")
-    if not key:
-        click.echo("Enter your AI Evaluator API key:")
-        click.echo("(Get one at https://aievaluator.dev/settings)")
-        key = click.prompt("API key", hide_input=False).strip()
-
-    if not key:
-        click.echo("❌ API key cannot be empty.", err=True)
-        sys.exit(2)
-
-    __import__('abslang.evaluators.adapters.aievaluator', fromlist=['configure']).configure(api_key=key)
-    click.echo("✅ Logged in to AI Evaluator")
 
 
 # ═══════════════════════════════════════════════════════════════════

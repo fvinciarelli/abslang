@@ -210,7 +210,7 @@ Adapters implement these evaluator types (the runner dispatches to the configure
 
 ### Adapter registry
 
-Adapters are registered by evaluator type. The Runner ships with a default adapter for `llm_judge` (AI Evaluator, see below), but you can override it or add your own:
+Adapters are registered by evaluator type. The Runner ships with a built-in judge that auto-detects OpenAI, Anthropic, or Gemini from your environment. You can override it with an external adapter like AI Evaluator:
 
 ```bash
 abs run session.abs.yaml \
@@ -235,15 +235,22 @@ AI Evaluator ([aievaluator.dev](https://aievaluator.dev)) provides LLM-as-a-judg
 
 When the Runner starts with the AI Evaluator adapter configured, it sends `llm_judge` evaluations to the AI Evaluator API with the trace and criteria. The adapter handles the rest.
 
-This makes `llm_judge` work out of the box with zero configuration:
+The built-in judge works out of the box — just set your LLM provider's API key:
 
 ```bash
-# Default adapter is aievaluator for llm_judge
-abs run session.abs.yaml --agent $AGENT_URL
+# Built-in judge auto-detects your provider:
+OPENAI_API_KEY=sk-... abs run session.abs.yaml --agent $AGENT_URL
+ANTHROPIC_API_KEY=sk-ant-... abs run session.abs.yaml --agent $AGENT_URL
+```
+
+To use AI Evaluator instead, opt in with `--adapter`:
+
+```bash
+# Route llm_judge through AI Evaluator:
+abslang run session.abs.yaml --agent $AGENT_URL --adapter llm_judge=aievaluator
 
 # Uses AI Evaluator's playground (5 free evals/day, no API key)
-# Or log in for 100 free evals/month:
-abs login
+# Or set AIEVALUATOR_API_KEY for 100 free evals/month
 ```
 
 Other evaluator providers (Azure AI, LangSmith, Promptfoo, Galileo, Arize) can ship adapters that implement the same interface. **Agent Behavior Specification** doesn't care which one you use — it just calls `adapter.evaluate(trace, rule)` and expects an `EvalResult` back.

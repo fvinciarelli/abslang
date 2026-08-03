@@ -114,7 +114,7 @@ export async function llmJudgeAdapter(
 }
 
 // Only register when user opts in via configureAIEvaluator()
-// (called by abs login or --adapter llm_judge=aievaluator)
+// (called via --adapter llm_judge=aievaluator)
 export function configureAIEvaluator(cfg: {
   apiKey?: string;
   engineUrl?: string;

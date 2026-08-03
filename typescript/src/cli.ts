@@ -595,37 +595,6 @@ program
     }
   });
 
-// ── login ──
-
-program
-  .command("login")
-  .description("Log in to AI Evaluator for LLM-as-judge")
-  .option("--api-key <key>", "AI Evaluator API key")
-  .action(async (options) => {
-    let apiKey = options.apiKey || process.env.AIEVALUATOR_API_KEY;
-    if (!apiKey) {
-      console.log("Enter your AI Evaluator API key:");
-      console.log("(Get one at https://aievaluator.dev/settings)");
-      // Simple prompt (no readline needed for MVP)
-      process.stdout.write("API key: ");
-      const chunks: Buffer[] = [];
-      for await (const chunk of process.stdin) {
-        chunks.push(chunk);
-        break;
-      }
-      apiKey = Buffer.concat(chunks).toString().trim();
-    }
-
-    if (!apiKey) {
-      console.error(chalk.red("❌ API key cannot be empty."));
-      process.exit(2);
-    }
-
-    const { configureAIEvaluator } = require("./evaluators/adapters/aievaluator");
-    configureAIEvaluator({ apiKey });
-    console.log(chalk.green("✅ Logged in to AI Evaluator"));
-  });
-
 // ── helpers ──
 
 function collectVar(value: string, previous: Record<string, string>): Record<string, string> {

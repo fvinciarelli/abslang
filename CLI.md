@@ -1,20 +1,22 @@
 # CLI
 
-> `abslang init`, `abslang run`, `abslang report`. Three commands that take **Agent Behavior Specification** from a file on disk to a quality gate in CI.
+> `abslang init`, `abslang run`, `abslang report`, `abslang chat`. Four commands that take **Agent Behavior Specification** from idea to quality gate.
 
-The CLI is the first thing anyone touches. It has to make two people happy at the same time:
+The CLI is the first thing anyone touches. It has to make three people happy at the same time:
 
 - **QA**: "Quiero correr esto contra staging y ver si pasó o no, ya."
 - **Data**: "Tengo 200 casos en un JSONL. Dame un reporte agregado."
+- **Everyone**: "No quiero aprender YAML. Solo dime cómo se usa y genera el archivo por mí."
 
-Both should succeed on their first try.
+All three should succeed on their first try.
 
 ---
 
-## The three commands
+## The four commands
 
 ```
 abslang init               # Scaffold a project
+abslang chat               # Generate a session by describing it in plain language
 abslang run                # Execute sessions against an agent
 abslang report             # View results from a previous run
 ```
@@ -93,6 +95,73 @@ behaviors:
 {"orderId": "67890", "expectedResponse": "Your order is being prepared", "expectedKeyword": "prepared"}
 {"orderId": "99999", "expectedResponse": "Your order has been delivered", "expectedKeyword": "delivered"}
 ```
+
+---
+
+## abslang chat
+
+You don't need to know the YAML format. You don't need to memorize the vocabulary. You don't need to remember which evaluator goes where.
+
+**You just describe what the agent should do, in plain language. `abslang chat` builds the file for you.**
+
+The same assistant is also built into the [ABS Designer](/abs-designer/) — open the ✨ **Assistant** tab in the right panel for the same chat, but with the generated YAML loaded directly into the visual editor.
+
+```bash
+abslang chat
+```
+
+```
+🤖 ABS Assistant — describe the agent behavior you want to test
+
+  I'll ask you guided questions to understand your flow and build
+  the best possible test.
+  Some questions may feel extra — they're there to make sure we
+  don't miss edge cases.
+
+  Type /save <path> to save the generated YAML, /quit to exit.
+
+You: A customer asks for a refund on a damaged item.
+     The agent should verify the order, process the refund,
+     and confirm with the amount and reference.
+
+Assistant: I'll draft a refund flow with tool calls…
+           [generates complete .abs.yaml with evaluations,
+            dataset placeholders, and chain checks]
+
+  ✅ Valid YAML extracted. Use /save <path> to write it.
+```
+
+### What it does for you
+
+| You provide | It generates |
+|-------------|-------------|
+| The scenario in plain language | Complete `.abs.yaml` with `behaviors` |
+| Nothing — it asks you guided questions | Step-level evaluations (`contains`, `llm_judge`) |
+| Nothing — it infers from the flow | Chain evaluations (`sequence`, `never`, `variable_consistency`) |
+| Nothing — it's dataset-first by default | `dataset:` block + `{{cases.column}}` placeholders |
+| Nothing — it suggests edge cases | 2-3 alternate scenarios to test next |
+
+### How it works
+
+The assistant knows the full ABS v0.1 spec — every action, every evaluator type, every pattern. It asks you what the agent should do, fills in the YAML, and validates it before saving. You can ask it to refine anything: *"add a contains check for the refund ID"*, *"switch to Groundedness for the RAG part"*, *"make this dataset-driven"*.
+
+### Commands inside chat
+
+| Command | What it does |
+|---------|-------------|
+| `/save <path>` | Validates the YAML and writes it to disk |
+| `/force <path>` | Saves without validation (if you want to fix it manually) |
+| `/quit` or `/q` | Ends the session |
+
+### Requirements
+
+Needs a DeepSeek API key:
+
+```bash
+DEEPSEEK_API_KEY=sk-... abslang chat
+```
+
+Get one at [platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys). DeepSeek is cheap (~$0.14/1M tokens) and excellent at structured generation.
 
 ---
 
