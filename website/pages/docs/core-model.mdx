@@ -4,7 +4,7 @@ export const frontmatter = { title: 'Core Model', description: 'Session, Behavio
 
 <DocsLayout frontmatter={frontmatter}>
 
-The Core Model defines the conceptual building blocks of ABS. It is intentionally abstract — the formal grammar and conformance rules are in the [Specification](/docs/specification).
+The Core Model defines the conceptual building blocks of ABS. It is intentionally abstract — the formal grammar and conformance rules are in the [Specification](/abslang/docs/specification).
 
 <Mermaid chart={`
 sequenceDiagram
@@ -57,11 +57,11 @@ An **Action** is what the Actor does. ABS defines a standard vocabulary organize
 | Delegation | `hands_off` | Transferring control to another agent or human. |
 | Interaction | `selects`, `uploads`, `approves` | Acting on UI elements. |
 
-The full vocabulary with definitions is in [Vocabulary](/docs/vocabulary).
+The full vocabulary with definitions is in [Vocabulary](/abslang/docs/vocabulary).
 
 ## Target
 
-**Target** is the object or destination of the action. Its meaning depends on the action category — see the [Specification §4](/docs/specification#4-target-semantics-normative) for the normative rules.
+**Target** is the object or destination of the action. Its meaning depends on the action category — see the [Specification §4](/abslang/docs/specification#4-target-semantics-normative) for the normative rules.
 
 ## Content
 
@@ -69,7 +69,7 @@ The full vocabulary with definitions is in [Vocabulary](/docs/vocabulary).
 
 ## Variables
 
-Variables let you capture values at runtime and reuse them later. See [Variables](/docs/variables) for the full rules on capture, reuse, and runtime binding.
+Variables let you capture values at runtime and reuse them later. See [Variables](/abslang/docs/variables) for the full rules on capture, reuse, and runtime binding.
 
 ## Evaluations
 
@@ -78,6 +78,6 @@ Evaluations make a descriptive spec executable. They can be:
 - **Step-level**: attached to a single Behavior, checking it in isolation.
 - **Session-level**: at the top of the document, checking the whole trace (ordering, consistency, invariants).
 
-See [Evaluations](/docs/evaluations) for all evaluator types and semantics.
+See [Evaluations](/abslang/docs/evaluations) for all evaluator types and semantics.
 
 </DocsLayout>

@@ -163,7 +163,7 @@ The split makes both the raw payload and the assistant's paraphrasing separately
 - **`with`** — partial match. Extra params OK. Use when the agent may add contextual fields.
 - **`with_only`** — strict match. No extra keys. Use for security-critical calls.
 
-See [Tools & MCP](/docs/tools) for the full rules.
+See [Tools & MCP](/abslang/docs/tools) for the full rules.
 
 ---
 
@@ -267,7 +267,7 @@ evaluations:
 
 ## What's not covered here
 
-- **Parallel tool calls.** v0.1 is strictly linear. Parallelism is on the [Roadmap](/docs/roadmap) for v0.2+.
+- **Parallel tool calls.** v0.1 is strictly linear. Parallelism is on the [Roadmap](/abslang/docs/roadmap) for v0.2+.
 - **Parameterized fragments.** `{{variables}}` work inside fragments today but can't easily adapt content across sessions without dataset bindings. Deferred to v0.2+.
 - **Cross-session variables.** Variables are scoped to one Session. No shared state across Sessions in v0.1.
 
