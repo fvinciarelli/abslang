@@ -70,7 +70,9 @@ evaluations:
 
 Four behaviors, three step-level evaluations (Groundedness, Relevance, Coherence) and one chain evaluation (sequence). The `query`, `context`, and `response` fields reference behaviors by their `id` — `user_asks.says`, `kb_result.responds`, `answer.informs` — so the adapter knows exactly which parts of the trace to evaluate. `sequence` guarantees the agent calls the KB *before* answering, every time.
 
-## Get started in 30 seconds
+## Get testing in 30 seconds
+
+Once you have a spec, run it against your agent:
 
 ```bash
 npm install -g abslang
@@ -78,7 +80,7 @@ abslang init
 abslang run sessions/order-status.abs.yaml --agent http://localhost:8080/chat
 ```
 
-Don't want to write YAML? Just describe the behavior in plain language:
+Prefer to describe the behavior instead of writing YAML?
 
 ```bash
 abslang chat
