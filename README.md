@@ -19,46 +19,46 @@ A RAG agent answers a question using a knowledge base. The spec verifies every c
 
 ```yaml
 session: Return policy RAG
-dataset:                                  # SPEC §2
-  id: cases                               #   SPEC §2
+dataset:
+  id: cases
   path: cases.jsonl
-behaviors:                                # SPEC §2
-  - id: user_asks                         # SPEC §3 — id for evaluation references
-    actor: user                           # SPEC §3
-    action: says                          # VOCABULARY — Communication
-    content: "{{cases.userQuery}}"        # SPEC §6 — variable from dataset row
+behaviors:
+  - id: user_asks
+    actor: user
+    action: says
+    content: "{{cases.userQuery}}"           # e.g. "Can I return sale items?"
 
   - id: kb_call
     actor: assistant
-    action: calls                         # VOCABULARY — Execution
-    target: Knowledge Base                # SPEC §4 — target = system invoked
+    action: calls
+    target: Knowledge Base
 
   - id: kb_result
-    actor: tool                           # SPEC §3 — actor: tool
-    action: responds                      # VOCABULARY — Communication
+    actor: tool
+    action: responds
     target: Knowledge Base
 
   - id: answer
     actor: assistant
-    action: informs                       # VOCABULARY — Communication
+    action: informs
     content: "{{cases.expectedAnswer}}"
-    evaluations:                          # SPEC §3, EVALUATIONS.md
-      - type: Groundedness                # EVALUATIONS.md — dimension type
-        query: user_asks.says             #   EVALUATIONS.md — id.action reference
-        context: kb_result.responds       #   EVALUATIONS.md — id.action reference
-        response: self                    #   EVALUATIONS.md — current behavior
-        threshold: 0.8                    #   EVALUATIONS.md — min score to pass
+    evaluations:
+      - type: Groundedness
+        query: user_asks.says
+        context: kb_result.responds
+        response: self
+        threshold: 0.8
 
-      - type: Relevance                   # EVALUATIONS.md — dimension type
+      - type: Relevance
         query: user_asks.says
         response: self
 
-      - type: Coherence                   # EVALUATIONS.md — dimension type
+      - type: Coherence
         response: self
 
-evaluations:                              # SPEC §3 — session-level (chain)
-  - type: sequence                        # EVALUATIONS.md — chain evaluator
-    order:                                #   EVALUATIONS.md — behavior selector
+evaluations:
+  - type: sequence
+    order:
       - { actor: assistant, action: calls, target: "Knowledge Base" }
       - { actor: assistant, action: informs }
 ```
