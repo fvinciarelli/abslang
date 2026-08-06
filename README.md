@@ -61,14 +61,14 @@ behaviors:
         response: self
 
 evaluations:
-  - type: Groundedness
-    query: user_asks.says
-    context: kb_result.responds
-    response: answer.informs
-    threshold: 0.8
+  # Chain check: the agent must call the KB before answering — every time
+  - type: sequence
+    order:
+      - { actor: assistant, action: calls, target: "Knowledge Base" }
+      - { actor: assistant, action: informs }
 ```
 
-Four behaviors, four evaluations across three dimension types. The `query`, `context`, and `response` fields reference behaviors by their `id` — `user_asks.says`, `kb_result.responds`, `answer.informs` — so the adapter knows exactly which parts of the trace to evaluate.
+Four behaviors, three step-level evaluations (Groundedness, Relevance, Coherence) and one chain evaluation (sequence). The `query`, `context`, and `response` fields reference behaviors by their `id` — `user_asks.says`, `kb_result.responds`, `answer.informs` — so the adapter knows exactly which parts of the trace to evaluate. `sequence` guarantees the agent calls the KB *before* answering, every time.
 
 ## Get started in 30 seconds
 

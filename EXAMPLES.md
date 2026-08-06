@@ -52,24 +52,24 @@ behaviors:
         response: self
 
 evaluations:
-  # Hard guard: must never claim something is non-returnable unless the KB says so
-  - type: Groundedness
-    query: user_asks.says
-    context: kb_result.responds
-    response: answer.informs
-    threshold: 0.8
+  # Chain check: the agent must call the KB before answering — every time
+  - type: sequence
+    order:
+      - { actor: assistant, action: calls, target: "Knowledge Base" }
+      - { actor: assistant, action: informs }
 ```
 
 ### What this example shows
 
 | Feature | Where |
 |---|---|
-| `Groundedness` — anti-hallucination | Step-level on `answer`, chain-level on full trace |
+| `Groundedness` — anti-hallucination | Step-level on `answer` |
 | `Relevance` — response matches query | Step-level on `answer` |
 | `Coherence` — logical flow | Step-level on `answer` |
-| Id-based references | `query: user_asks.says`, `context: kb_result.responds`, `response: self`, `response: answer.informs` |
+| `sequence` — correct execution order | Chain-level: KB call before answer |
+| Id-based references | `query: user_asks.says`, `context: kb_result.responds`, `response: self` |
 | Dataset-driven | `{{cases.userQuery}}`, `{{cases.kbContent}}`, `{{cases.expectedAnswer}}` |
-| Multiple evaluators on one step | `Groundedness` + `Relevance` + `Coherence` on `answer` |
+| Multiple evaluators on one step | `Groundedness` + `Relevance` + `Coherence` combined |
 
 ### How to run
 
