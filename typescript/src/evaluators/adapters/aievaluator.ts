@@ -238,15 +238,15 @@ async function aievaluatorAdapter(
       );
     } else {
       // Playground: 5 free evals/day
-      const playgroundInput: any = { query };
-      if (context) playgroundInput.context = context;
-      if (response) playgroundInput.response = response;
+      const row: any = { input: query };
+      if (context) row.context = context;
+      if (response) row.response = response;
 
       result = await client.playgroundEvaluate({
-        queries: [query],
-        contexts: context ? [context] : undefined,
-        responses: response ? [response] : undefined,
+        rows: [row],
         metrics: [metric],
+        agentEndpoint: "http://localhost/chat",
+        agentConfig: { url: "http://localhost/chat", format: "openai", auth: "none" },
       });
     }
 
