@@ -20,7 +20,7 @@ const program = new Command();
 program
   .name("abs")
   .description("ABS — Agent Behavior Specification CLI")
-  .version("0.1.9");
+  .version("0.2.0");
 
 // ── init ──
 
@@ -645,12 +645,12 @@ program
 
 abs-quality-gate:
   stage: test
-  image: python:3.12
+  image: node:20
   before_script:
-    - pip install abs
+    - npm install -g abslang
   script:
     - |
-      abs run ${options.session} \\
+      abslang run ${options.session} \\
         --agent $AGENT_URL \\
         --dataset ${options.dataset} \\
         --format junit \\
@@ -683,19 +683,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: '3.12'
+          node-version: '20'
 
       - name: Install ABS
-        run: pip install abs
+        run: npm install -g abslang
 
       - name: Run ABS evaluations
         env:
           ABS_AGENT_URL: \${{ vars.STAGING_AGENT_URL }}
         run: |
-          abs run ${options.session} \\
+          abslang run ${options.session} \\
             --agent \$ABS_AGENT_URL \\
             --dataset ${options.dataset} \\
             --format junit \\
