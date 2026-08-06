@@ -19,6 +19,7 @@ Don't want to write YAML? Just describe the behavior in plain language:
 
 ```bash
 abslang chat
+# Uses OPENAI_API_KEY, ANTHROPIC_API_KEY, or DEEPSEEK_API_KEY — whichever is set
 # You: A customer asks for a refund. The agent should verify the order, process it, and confirm.
 # → generates a complete .abs.yaml with evaluations, datasets, and chain checks
 ```

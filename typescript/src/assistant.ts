@@ -2,7 +2,7 @@
  * ABS Assistant — chat with QA/PO/PM to build spec files.
  * Knows the ABS spec. Asks the right questions. Generates valid YAML.
  *
- * Backend: DeepSeek (cheap, good instruction-following).
+ * Supports BYOK: OpenAI, Anthropic, and DeepSeek.
  * Used by: CLI (abs chat), Web UI, VSCode extension.
  */
 

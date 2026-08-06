@@ -1,6 +1,6 @@
 """ABS Assistant — chat with QA/PO/PM to build spec files.
 
-Uses DeepSeek API (cheap, good instruction-following).
+Supports BYOK: OpenAI, Anthropic, and DeepSeek.
 Run via: abs chat (CLI) or integrated in the web UI / VSCode.
 """
 

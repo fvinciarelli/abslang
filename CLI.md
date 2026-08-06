@@ -153,15 +153,27 @@ The assistant knows the full ABS v0.1 spec — every action, every evaluator typ
 | `/force <path>` | Saves without validation (if you want to fix it manually) |
 | `/quit` or `/q` | Ends the session |
 
-### Requirements
+### Provider support
 
-Needs a DeepSeek API key:
+`abslang chat` supports BYOK with OpenAI, Anthropic, and DeepSeek. It auto-detects the provider from whichever API key is set in your environment:
 
 ```bash
-DEEPSEEK_API_KEY=sk-... abslang chat
+# Auto-detect from env
+abslang chat
+
+# Or specify explicitly
+abslang chat --provider openai
+abslang chat --provider anthropic
+abslang chat --provider deepseek
 ```
 
-Get one at [platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys). DeepSeek is cheap (~$0.14/1M tokens) and excellent at structured generation.
+| Provider | Env variable | Default model |
+|---|---|---|
+| OpenAI | `OPENAI_API_KEY` | `gpt-4o` |
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-sonnet-4-20250514` |
+| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek-chat` |
+
+Override the model with `ABS_CHAT_MODEL` and the base URL with `ABS_CHAT_BASE_URL`.
 
 ---
 

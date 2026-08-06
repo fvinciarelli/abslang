@@ -548,14 +548,38 @@ def report(file: str, output_format: str, failed: bool, detail: Optional[int]):
 # ═══════════════════════════════════════════════════════════════════
 
 @main.command("chat")
-@click.option("--api-key", help="DeepSeek API key (or set DEEPSEEK_API_KEY env var)")
-def chat_cmd(api_key: str | None):
-    """Start an ABS assistant chat session (uses DeepSeek)."""
-    key = api_key or os.environ.get("DEEPSEEK_API_KEY")
+@click.option("--provider", help="openai, anthropic, or deepseek (auto-detects from env if not set)")
+@click.option("--api-key", help="API key (or set OPENAI_API_KEY / ANTHROPIC_API_KEY / DEEPSEEK_API_KEY)")
+def chat_cmd(provider: str | None, api_key: str | None):
+    """Start an ABS assistant chat session."""
+    # Detect provider
+    if not provider:
+        if os.environ.get("OPENAI_API_KEY"):
+            provider = "openai"
+        elif os.environ.get("ANTHROPIC_API_KEY"):
+            provider = "anthropic"
+        elif os.environ.get("DEEPSEEK_API_KEY"):
+            provider = "deepseek"
+        else:
+            provider = "openai"
+
+    # Resolve API key
+    key_env = {"openai": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "deepseek": "DEEPSEEK_API_KEY"}
+    key = api_key or os.environ.get(key_env.get(provider, ""))
     if not key:
-        click.echo("❌ Set DEEPSEEK_API_KEY or pass --api-key.", err=True)
-        click.echo("   Get one at https://platform.deepseek.com/api_keys")
+        click.echo(f"❌ No API key found for {provider}. Set {key_env.get(provider)} or pass --api-key.", err=True)
         sys.exit(2)
+
+    # Provider config
+    configs = {
+        "openai": {"model": os.environ.get("ABS_CHAT_MODEL", "gpt-4o"), "base_url": os.environ.get("ABS_CHAT_BASE_URL", "https://api.openai.com/v1")},
+        "anthropic": {"model": os.environ.get("ABS_CHAT_MODEL", "claude-sonnet-4-20250514"), "base_url": os.environ.get("ABS_CHAT_BASE_URL", "https://api.anthropic.com/v1")},
+        "deepseek": {"model": os.environ.get("ABS_CHAT_MODEL", "deepseek-chat"), "base_url": os.environ.get("ABS_CHAT_BASE_URL", "https://api.deepseek.com/v1")},
+    }
+    if provider not in configs:
+        click.echo(f"❌ Unknown provider: {provider}. Use openai, anthropic, or deepseek.", err=True)
+        sys.exit(2)
+    cfg = configs[provider]
 
     from .assistant import chat, new_conversation, extract_yaml
     messages = new_conversation()
@@ -628,7 +652,7 @@ def chat_cmd(api_key: str | None):
             messages.append({"role": "user", "content": trimmed})
 
             try:
-                task = asyncio.create_task(chat(messages, key))
+                task = asyncio.create_task(chat(messages, key, model=cfg["model"], base_url=cfg["base_url"]))
                 spinner_task = asyncio.create_task(_spinner(task))
                 response = await task
                 await spinner_task

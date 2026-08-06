@@ -73,11 +73,16 @@ abslang report report.json --detail 3       # Full trace for row #3
 
 ### `abslang chat`
 
-Generate ABS YAML by describing the behavior in plain language (requires DeepSeek API key).
+Generate ABS YAML by describing the behavior in plain language.
 
 ```bash
-export DEEPSEEK_API_KEY=sk-...
+# Works with OpenAI, Anthropic, or DeepSeek — auto-detects from env
 abslang chat
+
+# Or specify a provider
+abslang chat --provider openai
+abslang chat --provider anthropic
+abslang chat --provider deepseek
 
 # You: A customer asks for a refund. The agent should verify the order, process it, and confirm.
 # → generates .abs.yaml with evaluations, datasets, and chain checks

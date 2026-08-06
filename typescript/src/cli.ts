@@ -20,7 +20,7 @@ const program = new Command();
 program
   .name("abs")
   .description("ABS — Agent Behavior Specification CLI")
-  .version("0.1.1");
+  .version("0.1.2");
 
 // ── init ──
 
@@ -595,6 +595,46 @@ program
     }
   });
 
+// ── chat provider helpers ──
+
+function detectProvider(): string {
+  if (process.env.OPENAI_API_KEY) return "openai";
+  if (process.env.ANTHROPIC_API_KEY) return "anthropic";
+  if (process.env.DEEPSEEK_API_KEY) return "deepseek";
+  return "openai";
+}
+
+function getProviderKey(provider: string): string | undefined {
+  switch (provider) {
+    case "openai": return process.env.OPENAI_API_KEY;
+    case "anthropic": return process.env.ANTHROPIC_API_KEY;
+    case "deepseek": return process.env.DEEPSEEK_API_KEY;
+    default: return undefined;
+  }
+}
+
+function getProviderKeyEnv(provider: string): string {
+  switch (provider) {
+    case "openai": return "OPENAI_API_KEY";
+    case "anthropic": return "ANTHROPIC_API_KEY";
+    case "deepseek": return "DEEPSEEK_API_KEY";
+    default: return "<PROVIDER>_API_KEY";
+  }
+}
+
+function getProviderConfig(provider: string): { model: string; baseUrl: string } {
+  switch (provider) {
+    case "openai":
+      return { model: process.env.ABS_CHAT_MODEL || "gpt-4o", baseUrl: process.env.ABS_CHAT_BASE_URL || "https://api.openai.com/v1" };
+    case "anthropic":
+      return { model: process.env.ABS_CHAT_MODEL || "claude-sonnet-4-20250514", baseUrl: process.env.ABS_CHAT_BASE_URL || "https://api.anthropic.com/v1" };
+    case "deepseek":
+      return { model: process.env.ABS_CHAT_MODEL || "deepseek-chat", baseUrl: process.env.ABS_CHAT_BASE_URL || "https://api.deepseek.com/v1" };
+    default:
+      throw new Error(`Unknown provider: ${provider}. Use openai, anthropic, or deepseek.`);
+  }
+}
+
 // ── helpers ──
 
 function collectVar(value: string, previous: Record<string, string>): Record<string, string> {
@@ -725,15 +765,19 @@ jobs:
 
 program
   .command("chat")
-  .description("Start an ABS assistant chat session (uses DeepSeek)")
-  .option("--api-key <key>", "DeepSeek API key (or set DEEPSEEK_API_KEY env var)")
+  .description("Start an ABS assistant chat session")
+  .option("--provider <provider>", "openai, anthropic, or deepseek (auto-detects from env if not set)")
+  .option("--api-key <key>", "API key (or set OPENAI_API_KEY / ANTHROPIC_API_KEY / DEEPSEEK_API_KEY)")
   .action(async (options) => {
-    const apiKey = options.apiKey || process.env.DEEPSEEK_API_KEY;
+    const provider = options.provider || detectProvider();
+    const apiKey = options.apiKey || getProviderKey(provider);
     if (!apiKey) {
-      console.error(chalk.red("❌ Set DEEPSEEK_API_KEY or pass --api-key."));
-      console.error("   Get one at https://platform.deepseek.com/api_keys");
+      console.error(chalk.red(`❌ No API key found for ${provider}.`));
+      console.error(`   Set ${getProviderKeyEnv(provider)} or pass --api-key.`);
       process.exit(2);
     }
+
+    const { model, baseUrl } = getProviderConfig(provider);
 
     const { chat, newConversation, extractYaml } = await import("./assistant");
     const messages = newConversation();
@@ -814,7 +858,7 @@ program
 
         try {
           const stop = spinner(true);
-          const response = await chat(messages, { apiKey });
+          const response = await chat(messages, { apiKey, model, baseUrl });
           stop?.();
           console.log(chalk.blue("Assistant: "));
           console.log(response);
