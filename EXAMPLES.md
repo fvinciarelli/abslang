@@ -1,10 +1,93 @@
 # Examples
 
-Runnable versions of every example below live under [examples/](./examples/) and have been validated to parse as YAML.
+Runnable versions of every example below live under [examples/](./examples/). All validated to parse as YAML.
 
-## 1. Refund request — full workflow with evaluations
+---
 
-A customer returns a damaged item. The agent verifies eligibility across two API calls, processes the refund, and confirms. This is the showcase example: step-level LLM judge with multi-criteria rubrics, chain sequence verification, variable capture and consistency, and two complete tool round-trips — all in one file.
+## 1. RAG Groundedness — anti-hallucination for RAG agents
+
+A user asks a question. The agent queries a knowledge base. We verify the answer is grounded in the retrieved context — no hallucinations.
+
+```yaml
+session: Return policy RAG — grounded answer
+dataset:
+  id: cases
+  path: cases.jsonl
+behaviors:
+  - id: user_asks
+    actor: user
+    action: says
+    content: "{{cases.userQuery}}"        # e.g. "Can I return items bought on sale?"
+
+  - id: kb_call
+    actor: assistant
+    action: calls
+    target: Knowledge Base
+
+  - id: kb_result
+    actor: tool
+    action: responds
+    target: Knowledge Base
+    content: "{{cases.kbContent}}"        # e.g. "Sale items can be returned within 14 days with receipt"
+
+  - id: answer
+    actor: assistant
+    action: informs
+    content: "{{cases.expectedAnswer}}"   # e.g. "Yes, sale items can be returned within 14 days with a receipt."
+    evaluations:
+      # Factual accuracy: every claim must be supported by kb_result
+      - type: Groundedness
+        query: user_asks.says
+        context: kb_result.responds
+        response: self
+        threshold: 0.8
+
+      # Did it actually answer what was asked?
+      - type: Relevance
+        query: user_asks.says
+        response: self
+
+      # Is the response logically coherent?
+      - type: Coherence
+        response: self
+
+evaluations:
+  # Hard guard: must never claim something is non-returnable unless the KB says so
+  - type: Groundedness
+    query: user_asks.says
+    context: kb_result.responds
+    response: answer.informs
+    threshold: 0.8
+```
+
+### What this example shows
+
+| Feature | Where |
+|---|---|
+| `Groundedness` — anti-hallucination | Step-level on `answer`, chain-level on full trace |
+| `Relevance` — response matches query | Step-level on `answer` |
+| `Coherence` — logical flow | Step-level on `answer` |
+| Id-based references | `query: user_asks.says`, `context: kb_result.responds`, `response: self`, `response: answer.informs` |
+| Dataset-driven | `{{cases.userQuery}}`, `{{cases.kbContent}}`, `{{cases.expectedAnswer}}` |
+| Multiple evaluators on one step | `Groundedness` + `Relevance` + `Coherence` on `answer` |
+
+### How to run
+
+```bash
+# Route through AI Evaluator (dimension types need an adapter)
+abslang run examples/rag-groundedness.yaml \
+  --agent $URL \
+  --dataset datasets/rag-cases.jsonl \
+  --adapter llm_judge=aievaluator
+```
+
+See [examples/rag-groundedness.yaml](./examples/rag-groundedness.yaml).
+
+---
+
+## 2. Refund request — free-form LLM judge + hard facts + chain checks
+
+A customer returns a damaged item. The agent verifies eligibility across two API calls, processes the refund, and confirms.
 
 ```yaml
 session: Refund request — approved
@@ -67,8 +150,11 @@ behaviors:
     capture:
       refundId: "R-5512"
     evaluations:
+      # Hard fact — runs locally
       - type: contains
         value: "R-5512"
+
+      # Soft quality — built-in judge auto-detects OpenAI/Anthropic/Gemini
       - type: llm_judge
         criteria: |
           1. States the refund amount (€47.50) and timeline (3-5 days)
@@ -93,18 +179,32 @@ evaluations:
 
 | Feature | Where |
 |---|---|
-| Step-level evaluations | `llm_judge` with 3–4 criteria on the `asks` and `informs` steps |
-| Chain evaluation | `sequence` verifies the 4 assistant actions happen in exact order |
-| Variable capture + consistency | `customerName` and `refundId` captured; `variable_consistency` ensures `refundId` never drifts |
-| Tool round-trips | Two `calls` → `responds` pairs, each independently assertable |
-| Invariant guard | `never hands_off` — the agent must resolve, not escalate |
-| Multi-criteria LLM judge | Empathy, accuracy, tone, and omissions checked in one rubric |
+| Step-level `llm_judge` | Multi-criteria rubrics on `asks` and `informs` |
+| Hard fact `contains` | Refund ID must appear in the response |
+| Both evaluator types together | Same behavior has `contains` + `llm_judge` |
+| Chain `sequence` | 4 assistant actions in exact order |
+| Chain `variable_consistency` | `refundId` must be the same everywhere |
+| Chain `never` | Agent must resolve, not escalate |
+| Variable capture | `customerName`, `refundId` captured for reuse |
+| Tool round-trips | Two `calls` → `responds` pairs |
+
+### How to run
+
+```bash
+# Built-in judge — no adapter needed
+OPENAI_API_KEY=sk-... abslang run examples/refund-request.yaml --agent $URL
+
+# Or route through AI Evaluator
+abslang run examples/refund-request.yaml --agent $URL --adapter llm_judge=aievaluator
+```
 
 See [examples/refund-request.yaml](./examples/refund-request.yaml).
 
-## 2. Order status (minimal intro)
+---
 
-The simplest possible Session: user asks, assistant calls a tool, assistant informs. Good for understanding the basic format, but real sessions use evaluations, variables, and chain checks like the refund example above.
+## 3. Order status (minimal intro)
+
+The simplest possible Session: user asks, assistant calls a tool, assistant informs.
 
 ```yaml
 session: Order status
@@ -142,11 +242,20 @@ behaviors:
       - type: contains
         value: "on the way"
 ```
+
+### How to run
+
+```bash
+abslang run examples/order-status.yaml --agent $URL
+```
+
 See [examples/order-status.yaml](./examples/order-status.yaml).
 
-## 2. Missing information flow
+---
 
-Same scenario, but the order number isn't known yet — the assistant asks for it first. This is a **separate Session** from #1, per the v0.1 rule that alternate paths don't branch within one Session.
+## 4. Missing information flow
+
+Same scenario, but the order number isn't known yet — the assistant asks for it first. This is a separate Session (v0.1 doesn't branch within a session).
 
 ```yaml
 session: Order status requires order number
@@ -187,16 +296,16 @@ evaluations:
     match: { actor: assistant, action: hands_off }
 ```
 
-The `evaluations` block here is **session-level** — it checks the trace as a whole, not any single Behavior: the three key steps must occur in that relative order, `orderId` must resolve to the same value everywhere it's used (catching a case where the assistant silently used a different order number than the one the user gave), and no hand-off to a human should have happened anywhere in this flow. See EVALUATIONS.md, "Session-level (chain) evaluator types."
-
 See [examples/order-status-missing-info.yaml](./examples/order-status-missing-info.yaml).
 
-## 3. Appointment booking (multi-step, with hand-off)
+---
 
-Shows `shows`/`selects` for a UI-driven choice, and `hands_off` for delegation to a human when no slot fits. The example file contains two related Sessions (happy path and fallback) as separate YAML documents in one file, separated by `---`.
+## 5. Appointment booking (multi-step, with UI interaction)
+
+Shows `shows`/`selects` for UI-driven choice, and two related sessions (happy path + fallback with hand-off).
 
 ```yaml
-session: Appointment booking with fallback to human
+session: Appointment booking
 behaviors:
   - actor: user
     action: says
@@ -237,11 +346,14 @@ behaviors:
     action: confirms
     content: "You're booked for August 3rd at 9:00 AM"
 ```
-See [examples/appointment-booking.yaml](./examples/appointment-booking.yaml).
 
-## 4. Chatbot greeting (minimal Session)
+See [examples/appointment-booking.yaml](./examples/appointment-booking.yaml) — contains both the happy path and the hand-off fallback as separate YAML documents.
 
-The smallest valid Session — useful as a smoke test for a new ABS-conformant tool.
+---
+
+## 6. Chatbot greeting (minimal)
+
+The smallest valid Session — useful as a smoke test.
 
 ```yaml
 session: Chatbot greeting
@@ -257,4 +369,24 @@ behaviors:
       - type: llm_judge
         criteria: "Friendly greeting that invites the user to state their need, without assuming what they want."
 ```
+
+### How to run
+
+```bash
+# Built-in judge — just set an API key
+OPENAI_API_KEY=sk-... abslang run examples/chatbot-greeting.yaml --agent $URL
+```
+
 See [examples/chatbot-greeting.yaml](./examples/chatbot-greeting.yaml).
+
+---
+
+## Evaluator types at a glance
+
+| Category | Types | Needs |
+|---|---|---|
+| **Built-in** | `contains`, `exact_match`, `regex`, `schema`, `tool_call` | Nothing — runs locally |
+| **Chain** | `sequence`, `eventually`, `never`, `count`, `within`, `variable_consistency` | Nothing — runs locally |
+| **`llm_judge`** | Free-form criteria in natural language | Built-in judge (auto-detects OpenAI/Anthropic/Gemini) or `--adapter llm_judge=aievaluator` |
+| **Dimension** | `Groundedness`, `Relevance`, `Coherence`, `Fluency` | Adapter required — `--adapter llm_judge=aievaluator` |
+| **Composition** | `all_of`, `any_of`, `none_of` | Nothing — wraps other evaluators |
