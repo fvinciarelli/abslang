@@ -47,11 +47,27 @@ behaviors:
     action: informs
     content: "Your order is on the way"
     evaluations:
+      # Hard fact — runs locally, no API calls
       - type: contains
         value: "on the way"
+
+      # Soft quality — uses your existing LLM key or an adapter
+      - type: llm_judge
+        criteria: |
+          1. States the order is on the way
+          2. Friendly, reassuring tone
+          3. No made-up delivery date
 ```
 
-Three behaviors, one evaluation. Anyone can read it — PO, dev, QA.
+Three behaviors, two evaluations — one hard fact, one LLM-powered quality check. Anyone can read it — PO, dev, QA.
+
+```bash
+# Run with built-in judge — uses your existing OPENAI_API_KEY / ANTHROPIC_API_KEY
+abslang run session.abs.yaml --agent $URL
+
+# Or route through an adapter (AI Evaluator, private Ollama, Azure, ...)
+abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
+```
 
 👉 **New to ABS?** Start with the [20-minute tutorial](./TUTORIAL.md). It walks you from this simple example all the way to multi-step flows with tool calls, variables, and LLM-as-judge evaluations.
 
