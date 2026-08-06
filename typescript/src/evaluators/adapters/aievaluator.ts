@@ -4,83 +4,28 @@
  * Registers a single adapter that handles ALL LLM-based evaluator types
  * (llm_judge, Groundedness, Relevance, Coherence, Fluency).
  *
- * The adapter receives (trace, evaluationRule) and returns EvalResult.
- * It resolves id-based references (query: user_asks.says) from the trace,
- * maps ABS evaluator types to AI Evaluator metrics, and returns the result.
+ * Calls POST /api/v1/evaluations/direct via the aievaluator npm package.
+ * No agent call, no double execution. The adapter receives (trace, evaluationRule),
+ * resolves id-based references from the trace, and returns EvalResult.
  *
  * Other providers (Azure, LangSmith, Galileo, local Ollama) should follow
- * this same pattern: register one adapter for all types you support,
- * resolve references from the trace, dispatch by type internally.
+ * this same pattern.
  */
 
 import { ObservedStep, EvalResult, registerAdapter } from "../builtin";
 
-// ── Reference resolution ──
+// ── Metric mapping ──
 
-/**
- * Resolve a reference like "user_asks.says" or "kb_result.responds"
- * from the trace. "self" means the current behavior.
- *
- * Format: <behavior_id>.<action>  or  <behavior_id>
- * If action is omitted, defaults to:
- *   user      → says
- *   assistant → informs
- *   tool      → responds
- */
-function resolveRef(
-  ref: string,
-  trace: ObservedStep[],
-  behaviors: { id?: string; actor: string; action: string; content?: any }[]
-): string {
-  if (ref === "self") {
-    // "self" is resolved by the caller using the current behavior
-    return "";
-  }
+const METRIC_MAP: Record<string, string> = {
+  llm_judge: "g_eval",
+  Groundedness: "hallucination",
+  Relevance: "answer_relevancy",
+  Coherence: "g_eval",
+  Fluency: "g_eval",
+  faithfulness: "faithfulness",
+};
 
-  const [id, action] = ref.includes(".") ? ref.split(".") : [ref, undefined];
-
-  // Find the behavior by id
-  const behavior = behaviors.find((b) => b.id === id);
-  if (!behavior) {
-    // Not an id reference — try finding in trace by actor/action
-    for (const step of trace) {
-      if (step.actor === id || step.action === id) {
-        return typeof step.content === "string" ? step.content : JSON.stringify(step.content ?? "");
-      }
-    }
-    return ref; // return as-is if we can't resolve
-  }
-
-  // Resolve the action — if unspecified, use the actor default
-  const resolvedAction = action ?? defaultAction(behavior.actor);
-
-  // Find the step in the trace matching this behavior's id
-  // The trace preserves the order of behaviors, so we look for actor + action + matching content
-  for (const step of trace) {
-    if (
-      step.actor === behavior.actor &&
-      (step.action === resolvedAction ||
-        // Communication actions are equivalent
-        (["says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests", "shows"].includes(step.action) &&
-         ["says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests", "shows"].includes(resolvedAction)))
-    ) {
-      return typeof step.content === "string" ? step.content : JSON.stringify(step.content ?? "");
-    }
-  }
-
-  return "";
-}
-
-function defaultAction(actor: string): string {
-  switch (actor) {
-    case "user": return "says";
-    case "assistant": return "informs";
-    case "tool": return "responds";
-    default: return "says";
-  }
-}
-
-// ── AI Evaluator client ──
+// ── Client ──
 
 let _client: any = null;
 
@@ -88,22 +33,17 @@ function getClient(): any {
   if (_client) return _client;
   try {
     let APIClient: any = null;
-
-    // Try multiple paths for APIClient depending on aievaluator package version
     try {
-      // Primary: aievaluator with api sub-path
       const api = require("aievaluator/dist/api/client");
       APIClient = api.APIClient;
     } catch {
       try {
-        // Direct export
         const mod = require("aievaluator");
         APIClient = mod.api?.APIClient || mod.APIClient;
       } catch {
         return null;
       }
     }
-
     if (!APIClient) return null;
 
     let apiKey: string | undefined = process.env.AIEVALUATOR_API_KEY;
@@ -122,16 +62,6 @@ function getClient(): any {
   }
 }
 
-// ── Metric mapping ──
-
-const METRIC_MAP: Record<string, string> = {
-  llm_judge: "g_eval",
-  Groundedness: "groundedness",
-  Relevance: "relevance",
-  Coherence: "coherence",
-  Fluency: "fluency",
-};
-
 // ── Main adapter ──
 
 async function aievaluatorAdapter(
@@ -149,8 +79,7 @@ async function aievaluatorAdapter(
         "  npm install -g aievaluator\n" +
         "Or if you use Python:\n" +
         "  pip install aievaluator\n" +
-        "Then run your session with:\n" +
-        "  abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator\n" +
+        "Then: abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator\n" +
         "Free tier: 5 evals/day without API key, 100/month with API key.\n" +
         "Get a key at: https://aievaluator.dev",
     };
@@ -159,13 +88,12 @@ async function aievaluatorAdapter(
   const evalType = evaluation.type;
   const metric = METRIC_MAP[evalType] || "g_eval";
 
-  // ── Build the evaluation payload based on type ──
+  // ── Build payload ──
 
-  let query = "";
+  let input = "";
   let context = "";
   let response = "";
 
-  // For llm_judge: the "query" is the trace + criteria as a prompt
   if (evalType === "llm_judge") {
     const criteria = evaluation.criteria || "Is the response helpful and accurate?";
     const traceText = trace
@@ -176,39 +104,30 @@ async function aievaluatorAdapter(
           }`
       )
       .join("\n");
-    query = `Given this conversation:\n\n${traceText}\n\nEvaluate: ${criteria}`;
+    input = `Given this conversation:\n\n${traceText}\n\nEvaluate: ${criteria}`;
+
+    const lastAssistant = [...trace].reverse().find((s) => s.actor === "assistant");
+    response = lastAssistant?.content
+      ? typeof lastAssistant.content === "string" ? lastAssistant.content : JSON.stringify(lastAssistant.content)
+      : "";
   }
 
-  // For dimension types: resolve id-based references
   if (["Groundedness", "Relevance", "Coherence", "Fluency"].includes(evalType)) {
-    // Resolve "self" to the current behavior's content (last assistant message in trace)
     const lastAssistant = [...trace].reverse().find((s) => s.actor === "assistant");
     const selfContent = lastAssistant?.content
-      ? typeof lastAssistant.content === "string"
-        ? lastAssistant.content
-        : JSON.stringify(lastAssistant.content)
+      ? typeof lastAssistant.content === "string" ? lastAssistant.content : JSON.stringify(lastAssistant.content)
       : "";
 
-    // Resolve references using the trace itself as the behavior list
     const resolveContent = (ref: string | undefined): string => {
       if (!ref) return "";
       if (ref === "self") return selfContent;
-      // Parse id.action from ref
       const [id, action] = ref.includes(".") ? ref.split(".") : [ref, undefined];
       const resolvedAction = action ?? (id === "user" ? "says" : id === "assistant" ? "informs" : id === "tool" ? "responds" : "says");
-
-      // Find in trace: match by actor having that id-like name, or by actor/action
       for (const step of trace) {
-        // Try matching by actor matching the id (e.g., "user_asks" → actor "user")
-        const stepMatchesId =
-          step.actor === id ||
-          (id.includes("_") && step.actor === id.split("_")[0]);
-
-        const actionMatches =
-          step.action === resolvedAction ||
-          (["says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests", "shows"].includes(step.action) &&
-           ["says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests", "shows"].includes(resolvedAction));
-
+        const stepMatchesId = step.actor === id || (id.includes("_") && step.actor === id.split("_")[0]);
+        const commActions = ["says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests", "shows"];
+        const actionMatches = step.action === resolvedAction ||
+          (commActions.includes(step.action) && commActions.includes(resolvedAction));
         if (stepMatchesId && actionMatches) {
           return typeof step.content === "string" ? step.content : JSON.stringify(step.content ?? "");
         }
@@ -216,58 +135,41 @@ async function aievaluatorAdapter(
       return ref;
     };
 
-    query = resolveContent(evaluation.query);
+    input = resolveContent(evaluation.query);
     context = resolveContent(evaluation.context);
     response = resolveContent(evaluation.response);
   }
 
+  // ── Call /api/v1/evaluations/direct ──
+
   try {
-    let result: any;
+    const body: any = {
+      rows: [{ input, response }],
+      metrics: [metric],
+    };
+    if (context) body.rows[0].context = context;
 
-    if (client.apiKey) {
-      // Authenticated: use evaluateSync with structured data
-      const input: any = { query };
-      if (context) input.context = context;
-      if (response) input.response = response;
-
-      result = await client.evaluateSync(
-        [input],
-        "http://localhost/chat",
-        "openai",
-        [metric]
-      );
-    } else {
-      // Playground: 5 free evals/day
-      const row: any = { input: query };
-      if (context) row.context = context;
-      if (response) row.response = response;
-
-      result = await client.playgroundEvaluate({
-        rows: [row],
-        metrics: [metric],
-        agentEndpoint: "http://localhost/chat",
-        agentConfig: { url: "http://localhost/chat", format: "openai", auth: "none" },
-      });
+    const threshold = evaluation.threshold;
+    if (threshold !== undefined) {
+      body.thresholds = { [metric]: threshold };
     }
 
-    const results = result.results ?? [];
-    if (results.length > 0) {
-      const r = results[0];
-      const score = r.scores?.[metric] ?? r.scores?.g_eval ?? 0.5;
-      const threshold = evaluation.threshold ?? 0.7;
-      return {
-        type: evalType,
-        passed: score >= threshold,
-        score,
-        reason: r.agent_response ?? `[${metric}] ${JSON.stringify(r.scores ?? {})}`,
-      };
+    const result = await client.request("POST", "/api/v1/evaluations/direct", body);
+    const row = result.results?.[0];
+    if (!row) {
+      return { type: evalType, passed: false, score: 0, reason: "No result from AI Evaluator" };
     }
+
+    const score = row.scores?.[metric] ?? row.scores?.[Object.keys(row.scores)[0]] ?? 0.5;
+    const detail = row.details?.[metric] || row.details?.[Object.keys(row.details)[0]] || {};
+    const reason = detail.reason || JSON.stringify(row.scores || {});
+    const thresholdValue = evaluation.threshold ?? 0.7;
 
     return {
       type: evalType,
-      passed: false,
-      score: 0,
-      reason: `No result from AI Evaluator for metric: ${metric}`,
+      passed: score >= thresholdValue,
+      score,
+      reason: `[${metric}] ${reason}`,
     };
   } catch (err: any) {
     return {
@@ -281,7 +183,6 @@ async function aievaluatorAdapter(
 
 // ── Registration ──
 
-// Called via --adapter llm_judge=aievaluator
 export function configureAIEvaluator(cfg: {
   apiKey?: string;
   engineUrl?: string;
@@ -289,10 +190,7 @@ export function configureAIEvaluator(cfg: {
 }): void {
   if (cfg.apiKey) process.env.AIEVALUATOR_API_KEY = cfg.apiKey;
   if (cfg.engineUrl) process.env.AIEVALUATOR_ENGINE_URL = cfg.engineUrl;
-  _client = null;
 
-  // Register the same adapter for all LLM-based evaluator types.
-  // The adapter dispatches internally based on evaluation.type.
   const types = ["llm_judge", "Groundedness", "Relevance", "Coherence", "Fluency"];
   for (const t of types) {
     registerAdapter(t, aievaluatorAdapter);

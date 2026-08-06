@@ -4,69 +4,31 @@ AI Evaluator adapter — reference implementation.
 Registers a single adapter that handles ALL LLM-based evaluator types
 (llm_judge, Groundedness, Relevance, Coherence, Fluency).
 
-The adapter receives (trace, evaluationRule) and returns EvalResult.
-It resolves id-based references (query: user_asks.says) from the trace,
-maps ABS evaluator types to AI Evaluator metrics, and returns the result.
-
-Other providers (Azure, LangSmith, Galileo, local Ollama) should follow
-this same pattern: register one adapter for all types you support,
-resolve references from the trace, dispatch by type internally.
+Calls POST /api/v1/evaluations/direct via the aievaluator Python package.
+No agent call, no double execution. The adapter receives (trace, evaluationRule),
+resolves id-based references from the trace, and returns EvalResult.
 """
 
 import json
+import os
 from typing import Any
 
-from ..evaluators import ObservedStep, EvalResult, register_adapter
-
-
-# ── Reference resolution ──
-
-def _resolve_ref(
-    ref: str,
-    trace: list[ObservedStep],
-) -> str:
-    """Resolve a reference like 'user_asks.says' or 'kb_result.responds' from the trace.
-
-    'self' is resolved by the caller using the current behavior.
-    """
-    if ref == "self":
-        return ""
-
-    parts = ref.split(".", 1)
-    ref_id = parts[0]
-    action = parts[1] if len(parts) > 1 else None
-
-    # Default action by actor
-    defaults = {"user": "says", "assistant": "informs", "tool": "responds"}
-    resolved_action = action or defaults.get(ref_id, "says")
-
-    comm_actions = {"says", "asks", "informs", "greets", "responds",
-                    "clarifies", "confirms", "rejects", "suggests", "shows"}
-
-    for step in trace:
-        step_matches = step.actor == ref_id
-        action_matches = (
-            step.action == resolved_action
-            or (step.action in comm_actions and resolved_action in comm_actions)
-        )
-        if step_matches and action_matches:
-            return str(step.content) if isinstance(step.content, str) else json.dumps(step.content or "")
-
-    return ref
+from .. import ObservedStep, EvalResult, register_adapter
 
 
 # ── Metric mapping ──
 
 METRIC_MAP = {
     "llm_judge": "g_eval",
-    "Groundedness": "groundedness",
-    "Relevance": "relevance",
-    "Coherence": "coherence",
-    "Fluency": "fluency",
+    "Groundedness": "hallucination",
+    "Relevance": "answer_relevancy",
+    "Coherence": "g_eval",
+    "Fluency": "g_eval",
+    "faithfulness": "faithfulness",
 }
 
 
-# ── AI Evaluator client ──
+# ── Client ──
 
 _client: Any = None
 
@@ -76,21 +38,15 @@ def _get_client() -> Any:
     if _client is not None:
         return _client
     try:
-        import aievaluator  # type: ignore
-        APIClient = getattr(getattr(aievaluator, "api", None), "APIClient", None) or getattr(aievaluator, "APIClient", None)
-        if not APIClient:
-            return None
+        from aievaluator.api.client import APIClient  # type: ignore
 
-        import os
         api_key = os.environ.get("AIEVALUATOR_API_KEY")
         engine_url = os.environ.get("AIEVALUATOR_ENGINE_URL", "https://api.aievaluator.dev")
 
         try:
-            from aievaluator import config  # type: ignore
-            if hasattr(config, "resolveApiKey"):
-                api_key = config.resolveApiKey(None) or api_key
-            if hasattr(config, "resolveEngineUrl"):
-                engine_url = config.resolveEngineUrl(None) or engine_url
+            from aievaluator.config import resolveApiKey, resolveEngineUrl  # type: ignore
+            api_key = resolveApiKey(None) or api_key
+            engine_url = resolveEngineUrl(None) or engine_url
         except Exception:
             pass
 
@@ -115,10 +71,7 @@ async def aievaluator_adapter(
             reason=(
                 "AI Evaluator is not installed. Install it and try again:\n"
                 "  pip install aievaluator\n"
-                "Or if you use Node.js:\n"
-                "  npm install -g aievaluator\n"
-                "Then run your session with:\n"
-                "  abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator\n"
+                "Then: abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator\n"
                 "Free tier: 5 evals/day without API key, 100/month with API key.\n"
                 "Get a key at: https://aievaluator.dev"
             ),
@@ -127,8 +80,9 @@ async def aievaluator_adapter(
     eval_type = evaluation["type"]
     metric = METRIC_MAP.get(eval_type, "g_eval")
 
-    # ── Build the evaluation payload ──
-    query = ""
+    # ── Build payload ──
+
+    input_text = ""
     context = ""
     response = ""
 
@@ -139,10 +93,16 @@ async def aievaluator_adapter(
             f"{s.content if isinstance(s.content, str) else json.dumps(s.content)}"
             for s in trace
         )
-        query = f"Given this conversation:\n\n{trace_text}\n\nEvaluate: {criteria}"
+        input_text = f"Given this conversation:\n\n{trace_text}\n\nEvaluate: {criteria}"
+
+        last_asst = None
+        for s in reversed(trace):
+            if s.actor == "assistant":
+                last_asst = s
+                break
+        response = str(last_asst.content) if last_asst and last_asst.content else ""
 
     if eval_type in ("Groundedness", "Relevance", "Coherence", "Fluency"):
-        # Resolve "self" to the last assistant message
         last_asst = None
         for s in reversed(trace):
             if s.actor == "assistant":
@@ -155,56 +115,80 @@ async def aievaluator_adapter(
                 return ""
             if ref == "self":
                 return self_content
-            return _resolve_ref(ref, trace)
+            parts = ref.split(".", 1)
+            ref_id = parts[0]
+            action = parts[1] if len(parts) > 1 else None
+            defaults = {"user": "says", "assistant": "informs", "tool": "responds"}
+            resolved_action = action or defaults.get(ref_id, "says")
+            comm_actions = {"says", "asks", "informs", "greets", "responds",
+                            "clarifies", "confirms", "rejects", "suggests", "shows"}
+            for step in trace:
+                step_matches = step.actor == ref_id
+                action_matches = (
+                    step.action == resolved_action
+                    or (step.action in comm_actions and resolved_action in comm_actions)
+                )
+                if step_matches and action_matches:
+                    return str(step.content) if isinstance(step.content, str) else json.dumps(step.content or "")
+            return ref
 
-        query = _resolve(evaluation.get("query"))
+        input_text = _resolve(evaluation.get("query"))
         context = _resolve(evaluation.get("context"))
         response = _resolve(evaluation.get("response"))
 
+    # ── Call /api/v1/evaluations/direct ──
+
     try:
+        body: dict[str, Any] = {
+            "rows": [{"input": input_text, "response": response}],
+            "metrics": [metric],
+        }
+        if context:
+            body["rows"][0]["context"] = context
+
+        threshold = evaluation.get("threshold")
+        if threshold is not None:
+            body["thresholds"] = {metric: threshold}
+
         import httpx
+        async with httpx.AsyncClient(timeout=120) as http:
+            engine_url = os.environ.get("AIEVALUATOR_ENGINE_URL", "https://api.aievaluator.dev")
+            headers = {"Content-Type": "application/json"}
+            api_key = os.environ.get("AIEVALUATOR_API_KEY")
+            if api_key:
+                headers["X-API-Key"] = api_key
 
-        if client.apiKey:
-            input_data: dict[str, str] = {"query": query}
-            if context:
-                input_data["context"] = context
-            if response:
-                input_data["response"] = response
-
-            result = client.evaluateSync(
-                [input_data],
-                "http://localhost/chat",
-                "openai",
-                [metric],
-            )
-        else:
-            # Playground: 5 free evals/day
-            result = client.playgroundEvaluate(
-                queries=[query],
-                contexts=[context] if context else None,
-                responses=[response] if response else None,
-                metrics=[metric],
+            resp = await http.post(
+                f"{engine_url}/api/v1/evaluations/direct",
+                json=body,
+                headers=headers,
             )
 
-        results = getattr(result, "results", []) or []
-        if results:
-            r = results[0]
-            scores = getattr(r, "scores", {}) or {}
-            score = scores.get(metric, scores.get("g_eval", 0.5))
-            threshold = evaluation.get("threshold", 0.7)
-            reason = getattr(r, "agent_response", None) or json.dumps(scores)
+        if resp.status_code >= 400:
             return EvalResult(
                 type=eval_type,
-                passed=score >= threshold,
-                score=score,
-                reason=f"[{metric}] {reason}",
+                passed=False,
+                score=0.0,
+                reason=f"AI Evaluator returned {resp.status_code}: {resp.text[:200]}",
             )
+
+        data = resp.json()
+        row = (data.get("results") or [{}])[0]
+        if not row:
+            return EvalResult(type=eval_type, passed=False, score=0.0, reason="No result from AI Evaluator")
+
+        scores = row.get("scores", {})
+        score = scores.get(metric, list(scores.values())[0] if scores else 0.5)
+        details = row.get("details", {})
+        detail = details.get(metric, list(details.values())[0] if details else {})
+        reason = detail.get("reason", json.dumps(scores)) if isinstance(detail, dict) else str(detail)
+        threshold_value = evaluation.get("threshold", 0.7)
 
         return EvalResult(
             type=eval_type,
-            passed=False,
-            score=0.0,
-            reason=f"No result from AI Evaluator for metric: {metric}",
+            passed=score >= threshold_value,
+            score=score,
+            reason=f"[{metric}] {reason}",
         )
     except Exception as e:
         return EvalResult(
@@ -223,8 +207,6 @@ def configure(
     judge_model: str | None = None,
 ) -> None:
     """Called via --adapter llm_judge=aievaluator. Registers for all LLM-based types."""
-    import os
-
     global _client
     if api_key:
         os.environ["AIEVALUATOR_API_KEY"] = api_key
@@ -232,7 +214,5 @@ def configure(
         os.environ["AIEVALUATOR_ENGINE_URL"] = engine_url
     _client = None
 
-    # Register the same adapter for all LLM-based evaluator types.
-    # The adapter dispatches internally based on evaluation.type.
     for t in ("llm_judge", "Groundedness", "Relevance", "Coherence", "Fluency"):
         register_adapter(t, aievaluator_adapter)
