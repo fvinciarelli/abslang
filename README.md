@@ -32,44 +32,70 @@ It plays a role for agent behavior similar to what OpenAPI plays for HTTP APIs: 
 
 ## Quick example
 
+A RAG agent answers a question using a knowledge base. The spec verifies every claim is grounded in the retrieved context — **no hallucinations** — and the response is relevant and coherent.
+
 ```yaml
-session: Customer checks order status
+session: Return policy RAG
+dataset:
+  id: cases
+  path: cases.jsonl
 behaviors:
-  - actor: user
+  - id: user_asks
+    actor: user
     action: says
-    content: "Where is my order #8291?"
+    content: "{{cases.userQuery}}"           # e.g. "Can I return sale items?"
 
-  - actor: assistant
+  - id: kb_call
+    actor: assistant
     action: calls
-    target: Orders API
+    target: Knowledge Base
 
-  - actor: assistant
+  - id: kb_result
+    actor: tool
+    action: responds
+    target: Knowledge Base
+    content: "{{cases.kbContent}}"           # e.g. "Returns accepted within 14 days with receipt"
+
+  - id: answer
+    actor: assistant
     action: informs
-    content: "Your order is on the way"
+    content: "{{cases.expectedAnswer}}"
     evaluations:
-      # Hard fact — runs locally, no API calls
-      - type: contains
-        value: "on the way"
+      # Did the agent hallucinate? Every fact must be in kb_result
+      - type: Groundedness
+        query: user_asks.says
+        context: kb_result.responds
+        response: self
+        threshold: 0.8
 
-      # Soft quality — uses your existing LLM key or an adapter
-      - type: llm_judge
-        criteria: |
-          1. States the order is on the way
-          2. Friendly, reassuring tone
-          3. No made-up delivery date
+      # Did it answer what was asked?
+      - type: Relevance
+        query: user_asks.says
+        response: self
+
+      # Is the response logically coherent?
+      - type: Coherence
+        response: self
+
+evaluations:
+  - type: Groundedness
+    query: user_asks.says
+    context: kb_result.responds
+    response: answer.informs
+    threshold: 0.8
 ```
 
-Three behaviors, two evaluations — one hard fact, one LLM-powered quality check. Anyone can read it — PO, dev, QA.
+Four behaviors, four evaluations across three dimension types. The `query`, `context`, and `response` fields reference behaviors by their `id` — `user_asks.says`, `kb_result.responds`, `answer.informs` — so the adapter knows exactly which parts of the trace to evaluate.
 
 ```bash
-# Run with built-in judge — uses your existing OPENAI_API_KEY / ANTHROPIC_API_KEY
-abslang run session.abs.yaml --agent $URL
+# Built-in judge handles llm_judge with any LLM key you already have
+OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
 
-# Or route through an adapter (AI Evaluator, private Ollama, Azure, ...)
+# Dimension types (Groundedness, Relevance, Coherence, Fluency) route through an adapter
 abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
 ```
 
-👉 **New to ABS?** Start with the [20-minute tutorial](./TUTORIAL.md). It walks you from this simple example all the way to multi-step flows with tool calls, variables, and LLM-as-judge evaluations.
+👉 **New to ABS?** Start with the [20-minute tutorial](./TUTORIAL.md). More examples: [refund flow with `llm_judge` + chain checks](./EXAMPLES.md), [order status](./EXAMPLES.md), [appointment booking](./EXAMPLES.md).
 
 💬 **Don't want to write YAML?** Use [`abslang chat`](./CLI.md#abslang-chat) — describe the behavior in plain language and it generates the file for you, with evaluations, datasets, and chain checks included.
 
