@@ -129,7 +129,15 @@ async function aievaluatorAdapter(
       type: evaluation.type,
       passed: false,
       score: 0,
-      reason: "AI Evaluator not installed. Run: npm install -g aievaluator",
+      reason:
+        "AI Evaluator is not installed. Install it and try again:\n" +
+        "  npm install -g aievaluator\n" +
+        "Or if you use Python:\n" +
+        "  pip install aievaluator\n" +
+        "Then run your session with:\n" +
+        "  abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator\n" +
+        "Free tier: 5 evals/day without API key, 100/month with API key.\n" +
+        "Get a key at: https://aievaluator.dev",
     };
   }
 

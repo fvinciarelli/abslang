@@ -112,7 +112,16 @@ async def aievaluator_adapter(
             type=evaluation["type"],
             passed=False,
             score=0.0,
-            reason="AI Evaluator not installed. Run: pip install aievaluator",
+            reason=(
+                "AI Evaluator is not installed. Install it and try again:\n"
+                "  pip install aievaluator\n"
+                "Or if you use Node.js:\n"
+                "  npm install -g aievaluator\n"
+                "Then run your session with:\n"
+                "  abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator\n"
+                "Free tier: 5 evals/day without API key, 100/month with API key.\n"
+                "Get a key at: https://aievaluator.dev"
+            ),
         )
 
     eval_type = evaluation["type"]
