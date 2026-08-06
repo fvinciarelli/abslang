@@ -52,14 +52,37 @@ For hard facts — things that absolutely must appear — we use exact verificat
 
 ### Available evaluation types
 
+**Built-in (no adapter needed, runs locally):**
+
 | Evaluator | What it's for |
 |---|---|
 | `contains` | Text includes a specific word or phrase |
 | `exact_match` | Text matches exactly |
 | `regex` | Text matches a pattern (email, date, code) |
 | `schema` | API response matches a structure |
-| `llm_judge` | Qualitative criteria in natural language |
 | `tool_call` | Verifies the right tool was called with the right parameters |
+
+**LLM-based (auto-detects OpenAI/Anthropic/Gemini from env, or route through an adapter):**
+
+| Evaluator | What it's for |
+|---|---|
+| `llm_judge` | Qualitative criteria in natural language — tone, empathy, completeness |
+| `Groundedness` | Every factual claim is supported by retrieved context (anti-hallucination) |
+| `Relevance` | Response addresses the query, no tangents |
+| `Coherence` | Logical flow and internal consistency |
+| `Fluency` | Natural language quality, grammar, readability |
+
+`llm_judge` works with the built-in judge using your existing `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY`.
+
+Dimension evaluators (`Groundedness`, `Relevance`, `Coherence`, `Fluency`) need an adapter. Pass `--adapter` to route them through AI Evaluator, a private LLM, or your own infrastructure:
+
+```bash
+# Groundedness via AI Evaluator
+abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
+
+# Groundedness via your own LLM (private, no data leaves your network)
+abslang run session.abs.yaml --agent $URL --adapter llm_judge=local --adapter-url http://localhost:11434/v1
+```
 
 ---
 

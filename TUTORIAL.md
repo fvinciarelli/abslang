@@ -377,29 +377,45 @@ Open any `.abs.yaml` — the editor panel opens automatically. Edit visually, ru
 
 ---
 
-## What backs `llm_judge`
+## What backs `llm_judge` and dimension evaluators
 
-When you add an `llm_judge` evaluation, someone has to actually call an LLM to judge the response. `abslang` gives you two paths, and you don't have to change your session file to switch between them.
+When you add an `llm_judge`, `Groundedness`, `Relevance`, `Coherence`, or `Fluency` evaluation, someone has to call an LLM to produce the judgment. `abslang` gives you multiple paths — including keeping everything local for privacy — and you don't have to change your session file to switch between them.
 
-### Default: built-in judge (zero setup)
+### Evaluator types: what runs where
 
-Out of the box, `abslang` detects which LLM provider you have available and uses it automatically:
+| Evaluator | Provider |
+|---|---|
+| `llm_judge` — free-form criteria | Built-in judge (OpenAI, Anthropic, Gemini) or AI Evaluator adapter |
+| `Groundedness` — factual accuracy | AI Evaluator or custom adapter |
+| `Relevance` — answers the question | AI Evaluator or custom adapter |
+| `Coherence` — logical flow | AI Evaluator or custom adapter |
+| `Fluency` — language quality | AI Evaluator or custom adapter |
+
+### Built-in judge: zero setup for `llm_judge`
+
+Out of the box, `abslang` auto-detects whichever LLM provider you have available:
 
 ```bash
-# If you have an OpenAI key, it just works:
+# OpenAI — if OPENAI_API_KEY is set
 OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
 
-# Same with Anthropic:
+# Anthropic — if ANTHROPIC_API_KEY is set
 ANTHROPIC_API_KEY=sk-ant-... abslang run session.abs.yaml --agent $URL
 
-# Or Gemini:
+# Gemini — if GEMINI_API_KEY is set
 GEMINI_API_KEY=... abslang run session.abs.yaml --agent $URL
 ```
 
-Set `ABS_JUDGE_PROVIDER` if you have more than one and want to pick:
+Set `ABS_JUDGE_PROVIDER` if you have more than one and want to pick explicitly:
 
 ```bash
 ABS_JUDGE_PROVIDER=openai abslang run session.abs.yaml --agent $URL
+```
+
+Override the judge model with `ABS_JUDGE_MODEL`:
+
+```bash
+ABS_JUDGE_MODEL=gpt-4o-mini abslang run session.abs.yaml --agent $URL
 ```
 
 No API key? Use the mock judge for testing — returns a fixed score based on response length:
@@ -408,27 +424,75 @@ No API key? Use the mock judge for testing — returns a fixed score based on re
 ABS_MOCK_JUDGE=true abslang run session.abs.yaml --agent $URL
 ```
 
-### External adapter: AI Evaluator
+### Dimension evaluators: Groundedness, Relevance, Coherence, Fluency
 
-If you use [AI Evaluator](https://aievaluator.dev), pass `--adapter` to route `llm_judge` evaluations through it instead:
+These go beyond free-form criteria — they measure specific quality dimensions. They require an **evaluator adapter** (the built-in judge only handles `llm_judge`).
+
+**With AI Evaluator (recommended):**
 
 ```bash
-# With API key (100 free evals/month):
-AIEVALUATOR_API_KEY=... abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
+# 100 free evals/month with API key
+AIEVALUATOR_API_KEY=... abslang run session.abs.yaml \
+  --agent $URL \
+  --adapter llm_judge=aievaluator
 
-# Without API key (playground, 5 free evals/day):
-abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
+# 5 free evals/day without API key (playground)
+abslang run session.abs.yaml \
+  --agent $URL \
+  --adapter llm_judge=aievaluator
 ```
 
-This also works from `abs.config.yaml` so you don't retype it:
+**With your own LLM (full privacy, no external API calls):**
+
+Deploy a private judge behind any OpenAI-compatible endpoint (Ollama, vLLM, LiteLLM, local GPT) and point `abslang` at it:
+
+```bash
+# Local Ollama with Llama 3
+abslang run session.abs.yaml \
+  --agent $URL \
+  --adapter llm_judge=local \
+  --adapter-url http://localhost:11434/v1
+
+# Self-hosted vLLM
+abslang run session.abs.yaml \
+  --agent $URL \
+  --adapter llm_judge=local \
+  --adapter-url https://judge.internal.company.com/v1 \
+  --adapter-key $JUDGE_API_KEY
+```
+
+This keeps your code, your agent responses, and your evaluations entirely on your infrastructure — nothing leaves your network.
+
+**With Azure AI / Vertex AI:**
+
+```bash
+abslang run session.abs.yaml \
+  --agent $URL \
+  --adapter llm_judge=azure \
+  --adapter-key $AZURE_KEY \
+  --adapter-url $AZURE_ENDPOINT
+```
+
+### Config file — don't retype adapter flags
 
 ```yaml
 # abs.config.yaml
 adapters:
-  llm_judge: aievaluator
+  llm_judge: aievaluator       # Route all LLM evaluations through AI Evaluator
+  Groundedness: aievaluator    # Or split by type
+  Relevance: local              # Use local judge for relevance
 ```
 
-Other providers (Azure AI, LangSmith, Galileo) can ship their own adapters too. `abslang` doesn't care which one you use — your session file stays the same, only the `--adapter` flag or config changes.
+### The adapter contract
+
+Any adapter is a function that receives `(trace, evaluationRule)` and returns `{ passed, score, reason }`. Providers (Azure, LangSmith, Promptfoo, Galileo, Arize) can ship adapters implementing this interface. `abslang` doesn't care which one you use — your session file stays the same, only the `--adapter` flag or config changes.
+
+```
+adapter.evaluate(
+  trace = [...conversation steps...],
+  rule  = { type: "Groundedness", query: ..., context: ..., response: ..., threshold: 0.8 }
+) → { passed: true, score: 0.92, reason: "..." }
+```
 
 ---
 
