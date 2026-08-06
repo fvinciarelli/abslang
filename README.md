@@ -4,6 +4,25 @@
 
 **Status:** v0.1 — draft, open for review.
 
+[![npm version](https://img.shields.io/npm/v/abslang)](https://www.npmjs.com/package/abslang)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](./LICENSE)
+
+## Get started in 30 seconds
+
+```bash
+npm install -g abslang
+abslang init
+abslang run sessions/order-status.abs.yaml --agent http://localhost:8080/chat
+```
+
+Don't want to write YAML? Just describe the behavior in plain language:
+
+```bash
+abslang chat
+# You: A customer asks for a refund. The agent should verify the order, process it, and confirm.
+# → generates a complete .abs.yaml with evaluations, datasets, and chain checks
+```
+
 ## What is **Agent Behavior Specification**?
 
 **Agent Behavior Specification** (ABS) is a plain-text (YAML) format for describing agent behavior as an ordered sequence of observable actions — messages, tool calls, UI interactions, hand-offs — independent of the LLM provider, agent framework, orchestration engine, or tool protocol used to implement it.

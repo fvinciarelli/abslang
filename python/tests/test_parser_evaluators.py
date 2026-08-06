@@ -18,7 +18,7 @@ passed = 0
 failed = 0
 
 
-def test(name, fn):
+def check(name, fn):
     global passed, failed
     try:
         fn()
@@ -59,7 +59,7 @@ behaviors:
     assert_true(docs[0].session == "Test")
     assert_true(len(docs[0].behaviors) == 2)
 
-test("parse single session", test_parse_single)
+check("parse single session", test_parse_single)
 
 
 def test_parse_multi():
@@ -81,7 +81,7 @@ behaviors:
     assert_true(docs[0].session == "First")
     assert_true(docs[1].session == "Second")
 
-test("parse multi-document (---)", test_parse_multi)
+check("parse multi-document (---)", test_parse_multi)
 
 
 def test_fragment_expansion():
@@ -104,7 +104,7 @@ behaviors:
     assert_true(expanded.behaviors[0].actor == "user")
     assert_true(expanded.behaviors[1].actor == "assistant")
 
-test("fragment expansion", test_fragment_expansion)
+check("fragment expansion", test_fragment_expansion)
 
 
 def test_variable_resolution():
@@ -116,7 +116,7 @@ def test_variable_resolution():
     assert_equals(resolved[0].content, "12345")
     assert_equals(resolved[1].with_, {"orderId": "12345"})
 
-test("variable resolution", test_variable_resolution)
+check("variable resolution", test_variable_resolution)
 
 
 def test_variable_runtime_binding():
@@ -126,7 +126,7 @@ def test_variable_runtime_binding():
     resolved = resolve_variables(behaviors, {"orderId": "99999"})
     assert_equals(resolved[0].content, "Order 99999")
 
-test("variable from runtime binding", test_variable_runtime_binding)
+check("variable from runtime binding", test_variable_runtime_binding)
 
 
 def test_variable_not_found():
@@ -140,35 +140,35 @@ def test_variable_not_found():
         threw = True
     assert_true(threw)
 
-test("variable not found throws", test_variable_not_found)
+check("variable not found throws", test_variable_not_found)
 
 
 # ── Evaluator tests ──
 
 print("\n📦 Evaluators")
 
-test("exact_match — pass", lambda: assert_true(exact_match("hello", {"value": "hello"}).passed))
-test("exact_match — fail", lambda: assert_true(not exact_match("hello", {"value": "world"}).passed))
-test("contains — pass", lambda: assert_true(contains("Your order is on the way", {"value": "on the way"}).passed))
-test("contains — fail", lambda: assert_true(not contains("Your order is delayed", {"value": "on the way"}).passed))
-test("contains — case insensitive", lambda: assert_true(contains("ON THE WAY", {"value": "on the way"}).passed))
-test("regex — pass", lambda: assert_true(regex_match("Order #12345 is shipped", {"pattern": r"^Order #\d+"}).passed))
-test("regex — fail", lambda: assert_true(not regex_match("Your order", {"pattern": r"^Order #\d+"}).passed))
+check("exact_match — pass", lambda: assert_true(exact_match("hello", {"value": "hello"}).passed))
+check("exact_match — fail", lambda: assert_true(not exact_match("hello", {"value": "world"}).passed))
+check("contains — pass", lambda: assert_true(contains("Your order is on the way", {"value": "on the way"}).passed))
+check("contains — fail", lambda: assert_true(not contains("Your order is delayed", {"value": "on the way"}).passed))
+check("contains — case insensitive", lambda: assert_true(contains("ON THE WAY", {"value": "on the way"}).passed))
+check("regex — pass", lambda: assert_true(regex_match("Order #12345 is shipped", {"pattern": r"^Order #\d+"}).passed))
+check("regex — fail", lambda: assert_true(not regex_match("Your order", {"pattern": r"^Order #\d+"}).passed))
 
-test("schema — pass", lambda: assert_true(schema_eval(
+check("schema — pass", lambda: assert_true(schema_eval(
     {"status": "shipped"}, {"schema": {"type": "object", "required": ["status"], "properties": {"status": {"type": "string"}}}}
 ).passed))
 
-test("schema — missing required", lambda: assert_true(not schema_eval(
+check("schema — missing required", lambda: assert_true(not schema_eval(
     {}, {"schema": {"type": "object", "required": ["status"]}}
 ).passed))
 
-test("schema — additionalProperties false", lambda: assert_true(not schema_eval(
+check("schema — additionalProperties false", lambda: assert_true(not schema_eval(
     {"status": "ok", "extra": "nope"},
     {"schema": {"type": "object", "required": ["status"], "properties": {"status": {"type": "string"}}, "additionalProperties": False}}
 ).passed))
 
-test("schema — enum", lambda: assert_true(not schema_eval(
+check("schema — enum", lambda: assert_true(not schema_eval(
     {"status": "unknown"},
     {"schema": {"type": "object", "properties": {"status": {"type": "string", "enum": ["shipped", "pending"]}}}}
 ).passed))
@@ -184,7 +184,7 @@ trace = [
     ObservedStep(actor="assistant", action="informs", content="On the way"),
 ]
 
-test("sequence — pass", lambda: assert_true(sequence(trace, {
+check("sequence — pass", lambda: assert_true(sequence(trace, {
     "order": [
         {"actor": "assistant", "action": "asks"},
         {"actor": "assistant", "action": "calls"},
@@ -192,20 +192,20 @@ test("sequence — pass", lambda: assert_true(sequence(trace, {
     ]
 }).passed))
 
-test("sequence — fail (wrong order)", lambda: assert_true(not sequence(trace, {
+check("sequence — fail (wrong order)", lambda: assert_true(not sequence(trace, {
     "order": [{"actor": "assistant", "action": "calls"}, {"actor": "user", "action": "says"}]
 }).passed))
 
-test("eventually — pass", lambda: assert_true(eventually(trace, {"match": {"action": "calls"}}).passed))
-test("eventually — fail", lambda: assert_true(not eventually(trace, {"match": {"action": "uploads"}}).passed))
-test("never — pass", lambda: assert_true(never_eval(trace, {"match": {"action": "uploads"}}).passed))
-test("never — fail", lambda: assert_true(not never_eval(trace, {"match": {"action": "calls"}}).passed))
-test("count — pass", lambda: assert_true(count_eval(trace, {"match": {"actor": "assistant"}, "min": 2, "max": 5}).passed))
-test("count — fail", lambda: assert_true(not count_eval(trace, {"match": {"action": "uploads"}, "min": 1}).passed))
-test("within — pass", lambda: assert_true(within(trace, {"after": {"action": "asks"}, "match": {"action": "calls"}, "max_steps": 2}).passed))
-test("within — fail (wrong target)", lambda: assert_true(not within(trace, {"after": {"action": "asks"}, "match": {"action": "calls", "target": "Other"}, "max_steps": 3}).passed))
+check("eventually — pass", lambda: assert_true(eventually(trace, {"match": {"action": "calls"}}).passed))
+check("eventually — fail", lambda: assert_true(not eventually(trace, {"match": {"action": "uploads"}}).passed))
+check("never — pass", lambda: assert_true(never_eval(trace, {"match": {"action": "uploads"}}).passed))
+check("never — fail", lambda: assert_true(not never_eval(trace, {"match": {"action": "calls"}}).passed))
+check("count — pass", lambda: assert_true(count_eval(trace, {"match": {"actor": "assistant"}, "min": 2, "max": 5}).passed))
+check("count — fail", lambda: assert_true(not count_eval(trace, {"match": {"action": "uploads"}, "min": 1}).passed))
+check("within — pass", lambda: assert_true(within(trace, {"after": {"action": "asks"}, "match": {"action": "calls"}, "max_steps": 2}).passed))
+check("within — fail (wrong target)", lambda: assert_true(not within(trace, {"after": {"action": "asks"}, "match": {"action": "calls", "target": "Other"}, "max_steps": 3}).passed))
 
-test("selector with target",
+check("selector with target",
      lambda: (
          assert_true(matches_selector(trace[2], {"actor": "assistant", "action": "calls", "target": "Order MCP"})),
          assert_true(not matches_selector(trace[2], {"actor": "assistant", "action": "calls", "target": "Other"})),
