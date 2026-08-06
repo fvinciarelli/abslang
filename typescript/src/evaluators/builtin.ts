@@ -152,10 +152,12 @@ export function matchesSelector(
   selector: Selector
 ): boolean {
   const commActions = ["says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests", "shows"];
+  const execActions = ["calls", "submits", "retrieves", "stores", "updates"];
   if (selector.actor && step.actor !== selector.actor) return false;
   if (selector.action) {
     if (step.action === selector.action) { /* exact match */ }
     else if (commActions.includes(step.action) && commActions.includes(selector.action)) { /* comm equivalence */ }
+    else if (execActions.includes(step.action) && execActions.includes(selector.action)) { /* exec equivalence */ }
     else return false;
   }
   if (selector.target && step.target !== selector.target) return false;

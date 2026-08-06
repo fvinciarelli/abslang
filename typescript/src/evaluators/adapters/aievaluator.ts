@@ -87,15 +87,30 @@ let _client: any = null;
 function getClient(): any {
   if (_client) return _client;
   try {
-    const aievaluator = require("aievaluator");
-    const APIClient = aievaluator.api?.APIClient || aievaluator.APIClient;
+    let APIClient: any = null;
+
+    // Try multiple paths for APIClient depending on aievaluator package version
+    try {
+      // Primary: aievaluator with api sub-path
+      const api = require("aievaluator/dist/api/client");
+      APIClient = api.APIClient;
+    } catch {
+      try {
+        // Direct export
+        const mod = require("aievaluator");
+        APIClient = mod.api?.APIClient || mod.APIClient;
+      } catch {
+        return null;
+      }
+    }
+
     if (!APIClient) return null;
 
     let apiKey: string | undefined = process.env.AIEVALUATOR_API_KEY;
     let engineUrl = process.env.AIEVALUATOR_ENGINE_URL || "https://api.aievaluator.dev";
 
     try {
-      const config = require("aievaluator/config");
+      const config = require("aievaluator/dist/config");
       if (config.resolveApiKey) apiKey = config.resolveApiKey(undefined) || apiKey;
       if (config.resolveEngineUrl) engineUrl = config.resolveEngineUrl(undefined) || engineUrl;
     } catch {}
