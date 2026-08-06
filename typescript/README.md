@@ -52,7 +52,7 @@ abslang run sessions/ --agent $STAGING --dataset datasets/ --format junit --ci >
 | `--agent-format` | `openai` (default), `claude`, or `gemini` |
 | `--agent-auth` | `none`, `api_key`, `bearer`, or `oauth2` |
 | `--agent-token` | Auth token or API key |
-| `--adapter llm_judge=aievaluator` | Route LLM judge through AI Evaluator |
+| `--adapter llm_judge=<name>` | Route LLM evaluations through an adapter (`aievaluator`, `local`, `azure`) — see below |
 | `--format` | `table` (default), `json`, or `junit` |
 | `--ci` | CI mode (no colors) |
 | `--timeout <n>` | Timeout per session in seconds (default: 300) |
@@ -98,6 +98,34 @@ Generate a CI/CD workflow file.
 abslang generate-ci --platform github   # GitHub Actions
 abslang generate-ci --platform gitlab   # GitLab CI
 ```
+
+### LLM judge adapters
+
+Evaluations like `llm_judge`, `Groundedness`, and `Relevance` need an LLM to produce the judgment. `abslang` routes them through an adapter — you pick where the judgment runs.
+
+**Built-in judge (zero setup, `llm_judge` only):**
+
+```bash
+# Auto-detects OpenAI, Anthropic, or Gemini from env
+OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
+ANTHROPIC_API_KEY=sk-ant-... abslang run session.abs.yaml --agent $URL
+```
+
+**AI Evaluator (currently the only adapter available for dimension types):**
+
+```bash
+abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
+```
+
+**Private LLM (Ollama, vLLM, any OpenAI-compatible endpoint):**
+
+```bash
+abslang run session.abs.yaml --agent $URL \
+  --adapter llm_judge=local \
+  --adapter-url http://localhost:11434/v1
+```
+
+**Other providers** (Azure, Vertex AI, LangSmith, Galileo) can ship adapters implementing the same interface. Your session file doesn't change — only the `--adapter` flag.
 
 ## Test with the mock agent
 
