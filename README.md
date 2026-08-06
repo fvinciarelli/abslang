@@ -19,51 +19,46 @@ A RAG agent answers a question using a knowledge base. The spec verifies every c
 
 ```yaml
 session: Return policy RAG
-dataset:
-  id: cases
+dataset:                                  # SPEC §2
+  id: cases                               #   SPEC §2
   path: cases.jsonl
-behaviors:
-  - id: user_asks
-    actor: user
-    action: says
-    content: "{{cases.userQuery}}"           # e.g. "Can I return sale items?"
+behaviors:                                # SPEC §2
+  - id: user_asks                         # SPEC §3 — id for evaluation references
+    actor: user                           # SPEC §3
+    action: says                          # VOCABULARY — Communication
+    content: "{{cases.userQuery}}"        # SPEC §6 — variable from dataset row
 
   - id: kb_call
     actor: assistant
-    action: calls
-    target: Knowledge Base
+    action: calls                         # VOCABULARY — Execution
+    target: Knowledge Base                # SPEC §4 — target = system invoked
 
   - id: kb_result
-    actor: tool
-    action: responds
+    actor: tool                           # SPEC §3 — actor: tool
+    action: responds                      # VOCABULARY — Communication
     target: Knowledge Base
-    content: "{{cases.kbContent}}"           # e.g. "Returns accepted within 14 days with receipt"
 
   - id: answer
     actor: assistant
-    action: informs
+    action: informs                       # VOCABULARY — Communication
     content: "{{cases.expectedAnswer}}"
-    evaluations:
-      # Did the agent hallucinate? Every fact must be in kb_result
-      - type: Groundedness
-        query: user_asks.says
-        context: kb_result.responds
-        response: self
-        threshold: 0.8
+    evaluations:                          # SPEC §3, EVALUATIONS.md
+      - type: Groundedness                # EVALUATIONS.md — dimension type
+        query: user_asks.says             #   EVALUATIONS.md — id.action reference
+        context: kb_result.responds       #   EVALUATIONS.md — id.action reference
+        response: self                    #   EVALUATIONS.md — current behavior
+        threshold: 0.8                    #   EVALUATIONS.md — min score to pass
 
-      # Did it answer what was asked?
-      - type: Relevance
+      - type: Relevance                   # EVALUATIONS.md — dimension type
         query: user_asks.says
         response: self
 
-      # Is the response logically coherent?
-      - type: Coherence
+      - type: Coherence                   # EVALUATIONS.md — dimension type
         response: self
 
-evaluations:
-  # Chain check: the agent must call the KB before answering — every time
-  - type: sequence
-    order:
+evaluations:                              # SPEC §3 — session-level (chain)
+  - type: sequence                        # EVALUATIONS.md — chain evaluator
+    order:                                #   EVALUATIONS.md — behavior selector
       - { actor: assistant, action: calls, target: "Knowledge Base" }
       - { actor: assistant, action: informs }
 ```
