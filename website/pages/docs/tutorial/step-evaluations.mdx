@@ -72,16 +72,121 @@ For hard facts — things that absolutely must appear — we use exact verificat
 | `Coherence` | Logical flow and internal consistency |
 | `Fluency` | Natural language quality, grammar, readability |
 
-`llm_judge` works with the built-in judge using your existing `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY`.
+## What backs `llm_judge` and dimension evaluators
 
-Dimension evaluators (`Groundedness`, `Relevance`, `Coherence`, `Fluency`) need an adapter. Pass `--adapter` to route them through AI Evaluator, a private LLM, or your own infrastructure:
+When you add an `llm_judge`, `Groundedness`, `Relevance`, `Coherence`, or `Fluency` evaluation, someone has to call an LLM to produce the judgment. `abslang` gives you multiple paths — including keeping everything local for privacy — and you don't have to change your session file to switch between them.
+
+### Evaluator types: what runs where
+
+| Evaluator | Provider |
+|---|---|
+| `llm_judge` — free-form criteria | Built-in judge (OpenAI, Anthropic, Gemini) or AI Evaluator adapter |
+| `Groundedness` — factual accuracy | AI Evaluator or custom adapter |
+| `Relevance` — answers the question | AI Evaluator or custom adapter |
+| `Coherence` — logical flow | AI Evaluator or custom adapter |
+| `Fluency` — language quality | AI Evaluator or custom adapter |
+
+### Built-in judge: zero setup for `llm_judge`
+
+Out of the box, `abslang` auto-detects whichever LLM provider you have available:
 
 ```bash
-# Groundedness via AI Evaluator
-abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
+# OpenAI — if OPENAI_API_KEY is set
+OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
 
-# Groundedness via your own LLM (private, no data leaves your network)
-abslang run session.abs.yaml --agent $URL --adapter llm_judge=local --adapter-url http://localhost:11434/v1
+# Anthropic — if ANTHROPIC_API_KEY is set
+ANTHROPIC_API_KEY=sk-ant-... abslang run session.abs.yaml --agent $URL
+
+# Gemini — if GEMINI_API_KEY is set
+GEMINI_API_KEY=... abslang run session.abs.yaml --agent $URL
+```
+
+Set `ABS_JUDGE_PROVIDER` if you have more than one and want to pick:
+
+```bash
+ABS_JUDGE_PROVIDER=openai abslang run session.abs.yaml --agent $URL
+```
+
+Override the model with `ABS_JUDGE_MODEL`:
+
+```bash
+ABS_JUDGE_MODEL=gpt-4o-mini abslang run session.abs.yaml --agent $URL
+```
+
+No API key? Use the mock judge:
+
+```bash
+ABS_MOCK_JUDGE=true abslang run session.abs.yaml --agent $URL
+```
+
+### Dimension evaluators: Groundedness, Relevance, Coherence, Fluency
+
+These measure specific quality dimensions. They require an **evaluator adapter** — the built-in judge only handles `llm_judge`.
+
+**With AI Evaluator (recommended):**
+
+```bash
+# 100 free evals/month with API key
+AIEVALUATOR_API_KEY=... abslang run session.abs.yaml \
+  --agent $URL \
+  --adapter llm_judge=aievaluator
+
+# 5 free evals/day without API key (playground)
+abslang run session.abs.yaml \
+  --agent $URL \
+  --adapter llm_judge=aievaluator
+```
+
+**With your own LLM (full privacy, no external API calls):**
+
+Deploy a private judge behind any OpenAI-compatible endpoint (Ollama, vLLM, LiteLLM):
+
+```bash
+# Local Ollama
+abslang run session.abs.yaml \
+  --agent $URL \
+  --adapter llm_judge=local \
+  --adapter-url http://localhost:11434/v1
+
+# Self-hosted vLLM
+abslang run session.abs.yaml \
+  --agent $URL \
+  --adapter llm_judge=local \
+  --adapter-url https://judge.internal.company.com/v1 \
+  --adapter-key $JUDGE_API_KEY
+```
+
+Nothing leaves your network.
+
+**With Azure AI / Vertex AI:**
+
+```bash
+abslang run session.abs.yaml \
+  --agent $URL \
+  --adapter llm_judge=azure \
+  --adapter-key $AZURE_KEY \
+  --adapter-url $AZURE_ENDPOINT
+```
+
+### Config file — don't retype adapter flags
+
+```yaml
+# abs.config.yaml
+adapters:
+  llm_judge: aievaluator       # Route all LLM evaluations through AI Evaluator
+  Groundedness: aievaluator    # Or split by type
+  Relevance: local              # Use local judge for relevance
+```
+
+### The adapter contract
+
+Any adapter is a function that receives `(trace, evaluationRule)` and returns `{ passed, score, reason }`. Providers (Azure, LangSmith, Promptfoo, Galileo, Arize) can ship adapters implementing this interface. Your session file stays the same — only the `--adapter` flag changes.
+
+```
+adapter.evaluate(
+  trace = [...conversation steps...],
+  rule  = { type: "Groundedness", query: ..., context: ..., response: ..., threshold: 0.8 }
+) → { passed: true, score: 0.92, reason: "..." }
 ```
 
 ---
