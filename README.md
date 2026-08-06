@@ -7,30 +7,13 @@
 [![npm version](https://img.shields.io/npm/v/abslang)](https://www.npmjs.com/package/abslang)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](./LICENSE)
 
-## Get started in 30 seconds
-
-```bash
-npm install -g abslang
-abslang init
-abslang run sessions/order-status.abs.yaml --agent http://localhost:8080/chat
-```
-
-Don't want to write YAML? Just describe the behavior in plain language:
-
-```bash
-abslang chat
-# Uses OPENAI_API_KEY, ANTHROPIC_API_KEY, or DEEPSEEK_API_KEY — whichever is set
-# You: A customer asks for a refund. The agent should verify the order, process it, and confirm.
-# → generates a complete .abs.yaml with evaluations, datasets, and chain checks
-```
-
 ## What is **Agent Behavior Specification**?
 
-**Agent Behavior Specification** (ABS) is a plain-text (YAML) format for describing agent behavior as an ordered sequence of observable actions — messages, tool calls, UI interactions, hand-offs — independent of the LLM provider, agent framework, orchestration engine, or tool protocol used to implement it.
+**[Agent Behavior Specification](./SPECIFICATION.md)** (ABS) is a plain-text (YAML) format for describing agent behavior as an ordered sequence of observable actions — messages, tool calls, UI interactions, hand-offs — independent of the LLM provider, agent framework, orchestration engine, or tool protocol used to implement it.
 
 It plays a role for agent behavior similar to what OpenAPI plays for HTTP APIs: a shared contract that developers, QA, product owners, and tooling can all read and act on.
 
-## Quick example
+### Quick example
 
 A RAG agent answers a question using a knowledge base. The spec verifies every claim is grounded in the retrieved context — **no hallucinations** — and the response is relevant and coherent.
 
@@ -87,12 +70,34 @@ evaluations:
 
 Four behaviors, four evaluations across three dimension types. The `query`, `context`, and `response` fields reference behaviors by their `id` — `user_asks.says`, `kb_result.responds`, `answer.informs` — so the adapter knows exactly which parts of the trace to evaluate.
 
+## Get started in 30 seconds
+
 ```bash
-# Built-in judge handles llm_judge with any LLM key you already have
-OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
+npm install -g abslang
+abslang init
+abslang run sessions/order-status.abs.yaml --agent http://localhost:8080/chat
+```
+
+Don't want to write YAML? Just describe the behavior in plain language:
+
+```bash
+abslang chat
+# Uses OPENAI_API_KEY, ANTHROPIC_API_KEY, or DEEPSEEK_API_KEY — whichever is set
+# You: A customer asks for a refund. The agent should verify the order, process it, and confirm.
+# → generates a complete .abs.yaml with evaluations, datasets, and chain checks
+```
+
+### How to run it
+
+```bash
+# Built-in judge — uses your existing OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY
+abslang run session.abs.yaml --agent $URL
 
 # Dimension types (Groundedness, Relevance, Coherence, Fluency) route through an adapter
 abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
+
+# Private LLM — no data leaves your network
+abslang run session.abs.yaml --agent $URL --adapter llm_judge=local --adapter-url http://localhost:11434/v1
 ```
 
 👉 **New to ABS?** Start with the [20-minute tutorial](./TUTORIAL.md). More examples: [refund flow with `llm_judge` + chain checks](./EXAMPLES.md), [order status](./EXAMPLES.md), [appointment booking](./EXAMPLES.md).
