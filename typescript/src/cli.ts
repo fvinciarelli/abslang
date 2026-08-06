@@ -595,46 +595,6 @@ program
     }
   });
 
-// ── chat provider helpers ──
-
-function detectProvider(): string {
-  if (process.env.OPENAI_API_KEY) return "openai";
-  if (process.env.ANTHROPIC_API_KEY) return "anthropic";
-  if (process.env.DEEPSEEK_API_KEY) return "deepseek";
-  return "openai";
-}
-
-function getProviderKey(provider: string): string | undefined {
-  switch (provider) {
-    case "openai": return process.env.OPENAI_API_KEY;
-    case "anthropic": return process.env.ANTHROPIC_API_KEY;
-    case "deepseek": return process.env.DEEPSEEK_API_KEY;
-    default: return undefined;
-  }
-}
-
-function getProviderKeyEnv(provider: string): string {
-  switch (provider) {
-    case "openai": return "OPENAI_API_KEY";
-    case "anthropic": return "ANTHROPIC_API_KEY";
-    case "deepseek": return "DEEPSEEK_API_KEY";
-    default: return "<PROVIDER>_API_KEY";
-  }
-}
-
-function getProviderConfig(provider: string): { model: string; baseUrl: string } {
-  switch (provider) {
-    case "openai":
-      return { model: process.env.ABS_CHAT_MODEL || "gpt-4o", baseUrl: process.env.ABS_CHAT_BASE_URL || "https://api.openai.com/v1" };
-    case "anthropic":
-      return { model: process.env.ABS_CHAT_MODEL || "claude-sonnet-4-20250514", baseUrl: process.env.ABS_CHAT_BASE_URL || "https://api.anthropic.com/v1" };
-    case "deepseek":
-      return { model: process.env.ABS_CHAT_MODEL || "deepseek-chat", baseUrl: process.env.ABS_CHAT_BASE_URL || "https://api.deepseek.com/v1" };
-    default:
-      throw new Error(`Unknown provider: ${provider}. Use openai, anthropic, or deepseek.`);
-  }
-}
-
 // ── helpers ──
 
 function collectVar(value: string, previous: Record<string, string>): Record<string, string> {
@@ -769,15 +729,17 @@ program
   .option("--provider <provider>", "openai, anthropic, or deepseek (auto-detects from env if not set)")
   .option("--api-key <key>", "API key (or set OPENAI_API_KEY / ANTHROPIC_API_KEY / DEEPSEEK_API_KEY)")
   .action(async (options) => {
+    const { detectProvider, getProviderKey, getProviderKeyEnv, getProviderConfig } = await import("./providers");
+
     const provider = options.provider || detectProvider();
-    const apiKey = options.apiKey || getProviderKey(provider);
+    const apiKey = options.apiKey || getProviderKey(provider as any);
     if (!apiKey) {
       console.error(chalk.red(`❌ No API key found for ${provider}.`));
-      console.error(`   Set ${getProviderKeyEnv(provider)} or pass --api-key.`);
+      console.error(`   Set ${getProviderKeyEnv(provider as any)} or pass --api-key.`);
       process.exit(2);
     }
 
-    const { model, baseUrl } = getProviderConfig(provider);
+    const { model, baseUrl } = getProviderConfig(provider as any);
 
     const { chat, newConversation, extractYaml } = await import("./assistant");
     const messages = newConversation();
