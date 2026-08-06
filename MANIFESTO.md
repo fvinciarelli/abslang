@@ -23,6 +23,33 @@ Gherkin (Given/When/Then) already solved "human-readable behavioral spec" for so
 3. **Tool independent.** The same behavior can be implemented with MCP, REST, function calling, plugins, or a hand-rolled backend, and the **Agent Behavior Specification** document that describes it doesn't change.
 4. **Composable, not exhaustive.** **Agent Behavior Specification** defines a small core vocabulary plus an extension mechanism, not an exhaustive catalog of every possible agent action.
 5. **Testable.** Any Behavior can optionally carry Evaluations, so the same document that describes intended behavior can drive automated verification.
+6. **No vendor lock-in.** You run your agent on your infrastructure. `abslang` runs it, captures the trace, and sends only the relevant data to the evaluator. The evaluator never calls your agent — it receives `{type, input, context, response, threshold}` and returns `{passed, score, reason}`. Any provider can implement this adapter in an afternoon.
+
+### The anti-lock-in architecture
+
+The industry standard today couples agent execution and evaluation in the same platform — you deploy your agent to their infrastructure, they run it, they evaluate it. Change platforms and you rewrite everything.
+
+ABS separates these concerns:
+
+```
+Industry today:  [agent execution + evaluation] in one platform → vendor lock-in
+ABS:             [agent] in your infra → [trace] → [evaluation] wherever you want
+```
+
+The adapter contract is deliberately minimal. Any provider — Azure AI Foundry, LangSmith, Galileo, a local Ollama instance — implements the same interface:
+
+```typescript
+// All an adapter does:
+adapter.evaluate(trace, {
+  type: "Groundedness",
+  input: "Can I return sale items?",          // resolved from query: user_asks.says
+  context: "Returns within 14 days.",          // resolved from context: kb_result.responds
+  response: "Yes, within 14 days.",            // resolved from response: self
+  threshold: 0.8
+}) → { passed: true, score: 0.92, reason: "..." }
+```
+
+Your session file never changes. Only the `--adapter` flag.
 
 ## What **Agent Behavior Specification** is not
 

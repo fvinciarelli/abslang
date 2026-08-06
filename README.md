@@ -65,6 +65,36 @@ evaluations:
 
 Four behaviors, three step-level evaluations (Groundedness, Relevance, Coherence) and one chain evaluation (sequence). The `query`, `context`, and `response` fields reference behaviors by their `id` — `user_asks.says`, `kb_result.responds`, `answer.informs` — so the adapter knows exactly which parts of the trace to evaluate. `sequence` guarantees the agent calls the KB *before* answering, every time.
 
+## No vendor lock-in
+
+The industry standard couples agent execution and evaluation in the same platform. ABS separates them:
+
+```
+Industry today:  [agent + evaluation] in one platform → vendor lock-in
+ABS:             [agent] in your infra → [trace] → [evaluation] wherever you want
+```
+
+`abslang` runs your agent on your infrastructure, captures the trace, resolves the references, and sends only the relevant data to the evaluator. The evaluator **never calls your agent** — it receives `{type, input, context, response, threshold}` and returns `{passed, score, reason}`. Switch evaluators by changing one flag:
+
+```bash
+# Built-in judge (OpenAI, Anthropic, Gemini) — free, just set an env var
+OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
+
+# AI Evaluator — dimension types (Groundedness, Relevance, Coherence, Fluency)
+abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
+
+# Private LLM — nothing leaves your network
+abslang run session.abs.yaml --agent $URL --adapter llm_judge=local --adapter-url http://localhost:11434/v1
+
+# Azure AI Foundry
+abslang run session.abs.yaml --agent $URL --adapter llm_judge=azure --adapter-key $KEY
+
+# LangSmith, Galileo, Promptfoo — any provider implementing the adapter contract
+abslang run session.abs.yaml --agent $URL --adapter llm_judge=langsmith
+```
+
+Your session file never changes. Only the `--adapter` flag. Any provider can implement the adapter in an afternoon.
+
 ## Get testing in 30 seconds
 
 Once you have a spec, run it against your agent:
@@ -82,19 +112,6 @@ abslang chat
 # Uses OPENAI_API_KEY, ANTHROPIC_API_KEY, or DEEPSEEK_API_KEY — whichever is set
 # You: A customer asks for a refund. The agent should verify the order, process it, and confirm.
 # → generates a complete .abs.yaml with evaluations, datasets, and chain checks
-```
-
-### How to run it
-
-```bash
-# Built-in judge — uses your existing OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY
-abslang run session.abs.yaml --agent $URL
-
-# Dimension types (Groundedness, Relevance, Coherence, Fluency) route through an adapter
-abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
-
-# Private LLM — no data leaves your network
-abslang run session.abs.yaml --agent $URL --adapter llm_judge=local --adapter-url http://localhost:11434/v1
 ```
 
 👉 **New to ABS?** Start with the [20-minute tutorial](./TUTORIAL.md). More worked examples with the same level of detail: [refund flow with `llm_judge` + tool calls + chain checks](./EXAMPLES.md), [intent routing with hand-offs across agents](./EXAMPLES.md), [all examples →](./EXAMPLES.md).
