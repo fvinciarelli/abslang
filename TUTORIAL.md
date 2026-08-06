@@ -181,7 +181,11 @@ Four ways, from zero effort to full integration:
 You don't need to know the YAML format. Open a terminal and describe what the agent should do:
 
 ```bash
-DEEPSEEK_API_KEY=sk-... abslang chat
+# Works with OpenAI, Anthropic, or DeepSeek — auto-detects from env
+abslang chat
+
+# Or specify a provider
+abslang chat --provider openai
 ```
 
 The assistant asks you guided questions, generates a complete `.abs.yaml` with evaluations, dataset placeholders, and chain checks — then validates it before saving. [Full details →](./CLI.md#abslang-chat)
@@ -190,15 +194,182 @@ The assistant asks you guided questions, generates a complete `.abs.yaml` with e
 
 Go to the **[ABS Designer](/abs-designer/)**. In the right panel, click the ✨ **Assistant** tab and describe the behavior in plain language — it generates the YAML and loads it into the visual editor. Enter your agent URL, hit ▶ Run. Results appear inline.
 
-### 3. Terminal
+### 3. Terminal — the full pipeline
+
+This is where `abslang` earns its keep. The CLI has five commands and can take you from zero to CI quality gate in five minutes.
+
+#### `abslang init` — scaffold a project
 
 ```bash
-abslang run session.abs.yaml --agent http://localhost:8080/chat
+abslang init
 ```
 
-Prints step-by-step: what matched, what failed, and why.
+Creates:
+- `abs.config.yaml` — project settings (agent URL, auth, adapters, timeout)
+- `sessions/order-status.abs.yaml` — example session with `{{placeholders}}`
+- `sessions/order-status.jsonl` — 3-row dataset that binds those placeholders
 
-> 💡 If your session uses `llm_judge` evaluations, you'll need an LLM API key — see [What backs `llm_judge`](#what-backs-llm_judge) below.
+You can run it immediately if you have an agent:
+
+```bash
+abslang run sessions/order-status.abs.yaml --agent http://localhost:8080/chat
+```
+
+#### `abslang run` — execute sessions
+
+The workhorse. Every flag maps to an env var for CI use.
+
+**Single session, quick smoke test:**
+
+```bash
+abslang run sessions/order-status.abs.yaml --agent http://localhost:8080/chat
+```
+
+**Single session with a variable override (no dataset needed):**
+
+```bash
+abslang run sessions/order-status.abs.yaml --agent $URL --var orderId=12345
+```
+
+**With a dataset — parametrized testing, one run per row:**
+
+```bash
+abslang run sessions/order-status.abs.yaml --agent $URL --dataset sessions/order-status.jsonl
+```
+
+Three rows, three runs. Each row binds `{{orderId}}`, `{{expectedResponse}}`, and `{{expectedKeyword}}` to concrete values. The report aggregates all of them.
+
+**Filter dataset rows during development:**
+
+```bash
+abslang run sessions/order-status.abs.yaml --agent $URL --dataset cases.jsonl --filter "orderId:12345"
+```
+
+Runs only rows where `orderId` equals `12345`. Fast iteration on a single case.
+
+**Run a directory of sessions against a directory of datasets:**
+
+```bash
+abslang run sessions/ --agent $URL --dataset datasets/
+```
+
+Pairs `order-status.abs.yaml` with `order-status.jsonl`, `booking.abs.yaml` with `booking.jsonl`, etc. One command, N scenarios.
+
+**Agent adapters — OpenAI, Claude, Gemini:**
+
+```bash
+# OpenAI-compatible (default)
+abslang run session.abs.yaml --agent $URL
+
+# Anthropic Claude
+abslang run session.abs.yaml --agent $URL --agent-format claude
+
+# Google Gemini
+abslang run session.abs.yaml --agent $URL --agent-format gemini
+```
+
+**Agent authentication:**
+
+```bash
+# API key
+abslang run session.abs.yaml --agent $URL --agent-auth api_key --agent-token $KEY
+
+# Bearer token
+abslang run session.abs.yaml --agent $URL --agent-auth bearer --agent-token $TOKEN
+
+# OAuth2 with auto-refresh
+abslang run session.abs.yaml --agent $URL \
+  --agent-auth oauth2 --agent-token $ACCESS \
+  --agent-refresh-url https://auth.example.com/oauth/token \
+  --agent-refresh-token $REFRESH
+```
+
+**Output formats:**
+
+```bash
+abslang run session.abs.yaml --agent $URL                     # table (human-readable)
+abslang run session.abs.yaml --agent $URL --format json        # machine-readable
+abslang run session.abs.yaml --agent $URL --format junit       # CI integration
+```
+
+**Parallel execution:**
+
+```bash
+abslang run session.abs.yaml --agent $URL --dataset 200-cases.jsonl --parallel 5
+```
+
+Runs 5 dataset rows in parallel. Speed up large suites without changing a single line of your session files.
+
+**CI mode — no colors, non-zero exit on failure:**
+
+```bash
+abslang run sessions/ --agent $STAGING --dataset datasets/ --format junit --ci > report.xml
+```
+
+Exit code 0 if everything passed. Exit code 1 if any session failed. Drops straight into GitHub Actions or GitLab CI.
+
+**Save report to file for later inspection:**
+
+```bash
+abslang run session.abs.yaml --agent $URL --dataset cases.jsonl --output report.json
+```
+
+#### `abslang report` — inspect results
+
+View a saved report in different formats, drill into failures:
+
+```bash
+abslang report report.json                  # Table view
+abslang report report.json --format json    # Machine-readable
+abslang report report.json --format junit   # CI integration
+abslang report report.json --failed         # Only failed cases
+abslang report report.json --detail 3       # Full trace for row #3
+```
+
+#### `abslang generate-ci` — one command to CI
+
+```bash
+abslang generate-ci --platform github   # GitHub Actions workflow
+abslang generate-ci --platform gitlab   # GitLab CI workflow
+```
+
+Generates a complete workflow file that installs `abslang`, runs your sessions, and publishes test results — ready to drop into `.github/workflows/`.
+
+#### The config file — don't retype flags
+
+`abs.config.yaml` stores project settings so you don't retype them:
+
+```yaml
+agent:
+  url: http://localhost:8080/chat
+  format: openai
+  auth: none
+
+adapters:
+  llm_judge: aievaluator
+
+defaults:
+  dataset: datasets/
+  timeout: 120
+```
+
+Everything in the config can be overridden by CLI flags. CLI flags can be overridden by environment variables. The precedence is:
+
+```
+CLI flag  >  environment variable  >  config file  >  built-in default
+```
+
+#### Test with the mock agent — no real agent needed
+
+```bash
+# Terminal 1: start mock agent
+python3 tools/mock_agent.py --scenario happy
+
+# Terminal 2: run
+abslang run examples/order-status.yaml --agent http://localhost:8080/chat
+```
+
+The mock agent speaks the same protocol as a real agent. Good for learning, demos, and CI smoke tests.
 
 ### 4. VSCode
 

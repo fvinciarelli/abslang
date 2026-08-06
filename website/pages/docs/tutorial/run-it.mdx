@@ -1,28 +1,222 @@
 import DocsLayout from '@/components/layout/DocsLayout';
 
-export const frontmatter = { title: '5. Run it', description: 'Browser, terminal, or VSCode — three ways to execute your spec against a real agent.' };
+export const frontmatter = { title: '5. Run it', description: 'Five commands, every flag, every format — the full ABS CLI pipeline from init to CI quality gate.' };
 
 <DocsLayout frontmatter={frontmatter}>
 
 You've written your spec. Now let's run it.
 
-Three options, from simplest to most integrated:
-
-### 1. Browser — zero install
-
-Open the **[ABS Designer](/abslang/abs-designer/)**, paste your YAML, enter your agent URL, ▶ Run. No installation needed.
-
-### 2. Terminal
+## Install
 
 ```bash
-abslang run session.abs.yaml --agent http://localhost:8080/chat
+npm install -g abslang
 ```
 
-Prints step-by-step: what matched, what failed, and why.
+## Scaffold a project
 
-### 3. VSCode
+```bash
+abslang init
+```
 
-Open any `.abs.yaml` → the visual editor opens automatically → ▶ Run. Edit visually, save, and run against your agent — all in one place.
+Creates `abs.config.yaml`, `sessions/order-status.abs.yaml`, and `sessions/order-status.jsonl` (3 rows). You can run immediately if you have an agent listening.
+
+## The five commands
+
+```
+abslang init          Scaffold a project
+abslang chat          Generate a session by describing it in plain language
+abslang run           Execute sessions against an agent
+abslang report        View results from a previous run
+abslang generate-ci   Generate a CI/CD workflow
+```
+
+---
+
+### `abs chat` — generate YAML from plain language
+
+```bash
+# Auto-detects provider from OPENAI_API_KEY / ANTHROPIC_API_KEY / DEEPSEEK_API_KEY
+abslang chat
+
+# Or specify
+abslang chat --provider openai
+abslang chat --provider anthropic
+```
+
+Describe what the agent should do. The assistant asks guided questions, generates a complete `.abs.yaml` with evaluations, datasets, and chain checks — then validates before saving.
+
+---
+
+### `abs run` — the workhorse
+
+Every flag maps to an env var for CI use.
+
+**Single session, quick smoke test:**
+
+```bash
+abslang run sessions/order-status.abs.yaml --agent http://localhost:8080/chat
+```
+
+**Single session with a variable override (no dataset needed):**
+
+```bash
+abslang run sessions/order-status.abs.yaml --agent $URL --var orderId=12345
+```
+
+**With a dataset — parametrized, one run per row:**
+
+```bash
+abslang run sessions/order-status.abs.yaml --agent $URL --dataset sessions/order-status.jsonl
+```
+
+**Filter dataset rows during development:**
+
+```bash
+abslang run sessions/order-status.abs.yaml --agent $URL --dataset cases.jsonl --filter "orderId:12345"
+```
+
+**Run a whole directory:**
+
+```bash
+abslang run sessions/ --agent $URL --dataset datasets/
+```
+
+Pairs `order-status.abs.yaml` with `order-status.jsonl`, `booking.abs.yaml` with `booking.jsonl`, etc.
+
+**Agent adapters:**
+
+```bash
+abslang run session.abs.yaml --agent $URL                        # OpenAI-compatible (default)
+abslang run session.abs.yaml --agent $URL --agent-format claude  # Anthropic Claude
+abslang run session.abs.yaml --agent $URL --agent-format gemini  # Google Gemini
+```
+
+**Agent authentication:**
+
+```bash
+# API key
+abslang run session.abs.yaml --agent $URL --agent-auth api_key --agent-token $KEY
+
+# Bearer token
+abslang run session.abs.yaml --agent $URL --agent-auth bearer --agent-token $TOKEN
+
+# OAuth2 with auto-refresh
+abslang run session.abs.yaml --agent $URL --agent-auth oauth2 \
+  --agent-token $ACCESS --agent-refresh-url $REFRESH_URL --agent-refresh-token $REFRESH
+```
+
+**LLM judge adapters:**
+
+```bash
+# Built-in judge — auto-detects OpenAI, Anthropic, or Gemini from env
+OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
+
+# Mock judge for testing without an LLM key
+ABS_MOCK_JUDGE=true abslang run session.abs.yaml --agent $URL
+
+# Route through AI Evaluator
+abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
+```
+
+**Output formats:**
+
+```bash
+abslang run session.abs.yaml --agent $URL                     # table (human-readable)
+abslang run session.abs.yaml --agent $URL --format json        # machine-readable
+abslang run session.abs.yaml --agent $URL --format junit       # CI integration
+```
+
+**Parallel execution:**
+
+```bash
+abslang run session.abs.yaml --agent $URL --dataset 200-cases.jsonl --parallel 5
+```
+
+**CI mode — no colors, non-zero exit on failure:**
+
+```bash
+abslang run sessions/ --agent $STAGING --dataset datasets/ --format junit --ci > report.xml
+```
+
+Exit code 0 if all passed, 1 if any failed. Drops straight into any CI pipeline.
+
+**Save report for later:**
+
+```bash
+abslang run session.abs.yaml --agent $URL --dataset cases.jsonl --output report.json
+```
+
+---
+
+### `abs report` — inspect results
+
+```bash
+abslang report report.json                  # Table view
+abslang report report.json --format json    # Machine-readable
+abslang report report.json --format junit   # CI integration
+abslang report report.json --failed         # Only failed cases
+abslang report report.json --detail 3       # Full trace for a specific row
+```
+
+---
+
+### `abs generate-ci` — one command to CI
+
+```bash
+abslang generate-ci --platform github   # GitHub Actions
+abslang generate-ci --platform gitlab   # GitLab CI
+```
+
+Generates a complete workflow file ready to drop into `.github/workflows/`.
+
+---
+
+## The config file
+
+`abs.config.yaml` stores settings so you don't retype them:
+
+```yaml
+agent:
+  url: http://localhost:8080/chat
+  format: openai
+  auth: none
+
+adapters:
+  llm_judge: aievaluator
+
+defaults:
+  dataset: datasets/
+  timeout: 120
+```
+
+Precedence: `CLI flag > environment variable > config file > built-in default`.
+
+---
+
+## Test without a real agent
+
+```bash
+# Terminal 1: start mock agent
+python3 tools/mock_agent.py --scenario happy
+
+# Terminal 2: run
+abslang run examples/order-status.yaml --agent http://localhost:8080/chat
+```
+
+---
+
+## Environment variables for CI
+
+| Variable | Equivalent flag |
+|---|---|
+| `ABS_AGENT_URL` | `--agent` |
+| `ABS_AGENT_FORMAT` | `--agent-format` |
+| `ABS_AGENT_AUTH` | `--agent-auth` |
+| `ABS_AGENT_TOKEN` | `--agent-token` |
+| `ABS_ADAPTER_LLM_JUDGE` | `--adapter llm_judge=...` |
+| `ABS_VAR_orderId` | `--var orderId=...` |
+| `OPENAI_API_KEY` | Auto-detected for `llm_judge` |
+| `ANTHROPIC_API_KEY` | Auto-detected for `llm_judge` |
 
 ---
 
