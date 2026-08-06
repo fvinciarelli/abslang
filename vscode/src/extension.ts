@@ -318,6 +318,11 @@ behaviors:
     target: Order MCP
     with:
       orderId: "{{orderId}}"
+  - actor: tool
+    action: responds
+    target: Order MCP
+    content:
+      status: "in_transit"
   - actor: assistant
     action: informs
     content: "{{expectedResponse}}"

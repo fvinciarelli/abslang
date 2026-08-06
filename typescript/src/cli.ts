@@ -20,7 +20,7 @@ const program = new Command();
 program
   .name("abs")
   .description("ABS — Agent Behavior Specification CLI")
-  .version("0.1.5");
+  .version("0.1.9");
 
 // ── init ──
 
@@ -49,6 +49,12 @@ behaviors:
     target: Order MCP
     with:
       orderId: "{{orderId}}"
+
+  - actor: tool
+    action: responds
+    target: Order MCP
+    content:
+      status: "in_transit"
 
   - actor: assistant
     action: informs

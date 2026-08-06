@@ -152,7 +152,7 @@ def expand_fragments(doc: ABSDocument) -> NormalizedSession:
 
 # ── Variable resolution ──
 
-_VAR_RE = re.compile(r"\{\{(\w+)\}\}")
+_VAR_RE = re.compile(r"\{\{([\w.]+)\}\}")
 
 
 def resolve_variables(
@@ -190,11 +190,8 @@ def _resolve_value(value: Any, variables: dict[str, Any]) -> Any:
             name = m.group(1)
             if name in variables:
                 return str(variables[name])
-            raise ValueError(
-                f'Variable "{{{{{name}}}}}" has no binding. '
-                f"Ensure it is captured earlier in the session "
-                f"or provided at runtime (--var, --dataset, env)."
-            )
+            # Leave unresolved — will be bound later
+            return f"{{{{{name}}}}}"
         return _VAR_RE.sub(_replace, value)
     elif isinstance(value, dict):
         return {k: _resolve_value(v, variables) for k, v in value.items()}

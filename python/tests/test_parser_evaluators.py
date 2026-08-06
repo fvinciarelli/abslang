@@ -133,14 +133,10 @@ def test_variable_not_found():
     behaviors = [
         Behavior(actor="user", action="says", content="Order {{missing}}"),
     ]
-    threw = False
-    try:
-        resolve_variables(behaviors)
-    except ValueError:
-        threw = True
-    assert_true(threw)
+    result = resolve_variables(behaviors)
+    assert_true(result[0].content == "Order {{missing}}")  # stays unresolved
 
-check("variable not found throws", test_variable_not_found)
+check("variable not found left unresolved", test_variable_not_found)
 
 
 # ── Evaluator tests ──

@@ -119,15 +119,12 @@ test("variable from runtime binding", () => {
   assert(resolved[0].content === "Order 99999");
 });
 
-test("variable not found throws", () => {
+test("variable not found is left unresolved", () => {
   const behaviors = [
     { actor: "user", action: "says", content: "Order {{missing}}" },
   ];
-  let threw = false;
-  try {
-    resolveVariables(behaviors);
-  } catch { threw = true; }
-  assert(threw);
+  const resolved = resolveVariables(behaviors);
+  assertEquals(resolved[0].content, "Order {{missing}}"); // stays as placeholder
 });
 
 // ── Evaluator tests ──

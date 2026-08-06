@@ -352,7 +352,7 @@ function hasVarRefStr(s: string, varName: string): boolean {
 
 function resolveVarRefs(value: any, vars: Record<string, any>): any {
   if (typeof value === "string") {
-    return value.replace(/\{\{(\w+)\}\}/g, (_, name) => {
+    return value.replace(/\{\{([\w.]+)\}\}/g, (_, name) => {
       return name in vars ? String(vars[name]) : `{{${name}}}`;
     });
   }

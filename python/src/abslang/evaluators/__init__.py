@@ -335,7 +335,7 @@ def _resolve_var_refs(value: Any, variables: dict[str, Any]) -> Any:
         def _replace(m: re.Match) -> str:
             name = m.group(1)
             return str(variables[name]) if name in variables else f"{{{{{name}}}}}"
-        return re.sub(r"\{\{(\w+)\}\}", _replace, value)
+        return re.sub(r"\{\{([\w.]+)\}\}", _replace, value)
     if isinstance(value, list):
         return [_resolve_var_refs(v, variables) for v in value]
     if isinstance(value, dict):

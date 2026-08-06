@@ -132,6 +132,11 @@ export function resolveVariables(
       ) as Record<string, any>;
     }
 
+    // Resolve {{var}} references inside evaluations (value, criteria, query, context, response, etc.)
+    if (b.evaluations) {
+      resolved.evaluations = b.evaluations.map((e) => resolveObject(e, variables));
+    }
+
     // Apply captures after resolution
     if (b.capture) {
       for (const [key, value] of Object.entries(b.capture)) {
@@ -147,13 +152,12 @@ function resolveString(
   value: string,
   vars: Record<string, any>
 ): string {
-  return value.replace(/\{\{(\w+)\}\}/g, (_, name) => {
+  return value.replace(/\{\{([\w.]+)\}\}/g, (_, name) => {
     if (name in vars) {
       return String(vars[name]);
     }
-    throw new Error(
-      `Variable "{{${name}}}" has no binding. Ensure it is captured earlier in the session or provided at runtime (--var, --dataset, env).`
-    );
+    // Leave unresolved — will be bound later by runtime bindings (dataset, --var, env)
+    return `{{${name}}}`;
   });
 }
 
