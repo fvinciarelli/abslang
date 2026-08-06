@@ -44,8 +44,7 @@ behaviors:
         threshold: 0.7
 
 evaluations:
-  - type: Groundedness
-    query: user_asks.says
-    context: kb_result.responds
-    response: answer.informs
-    threshold: 0.8
+  - type: sequence
+    order:
+      - { actor: assistant, action: calls, target: "Knowledge Base" }
+      - { actor: assistant, action: informs }

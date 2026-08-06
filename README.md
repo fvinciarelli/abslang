@@ -102,9 +102,7 @@ abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
 abslang run session.abs.yaml --agent $URL --adapter llm_judge=local --adapter-url http://localhost:11434/v1
 ```
 
-👉 **New to ABS?** Start with the [20-minute tutorial](./TUTORIAL.md). More examples: [refund flow with `llm_judge` + chain checks](./EXAMPLES.md), [order status](./EXAMPLES.md), [appointment booking](./EXAMPLES.md).
-
-💬 **Don't want to write YAML?** Use [`abslang chat`](./CLI.md#abslang-chat) — describe the behavior in plain language and it generates the file for you, with evaluations, datasets, and chain checks included.
+👉 **New to ABS?** Start with the [20-minute tutorial](./TUTORIAL.md). More worked examples with the same level of detail: [refund flow with `llm_judge` + tool calls + chain checks](./EXAMPLES.md), [intent routing with hand-offs across agents](./EXAMPLES.md), [all examples →](./EXAMPLES.md).
 
 ## Documents
 
