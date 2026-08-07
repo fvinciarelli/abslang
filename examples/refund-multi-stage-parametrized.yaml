@@ -1,0 +1,69 @@
+# Damaged item → refund (parametrized)
+#
+# Same multi-stage evaluation, fed by a dataset.
+# Run N test scenarios without changing the session file.
+
+session: Damaged item → refund (parametrized)
+description: >
+  Multi-stage refund flow with dataset-driven cases.
+  Each row provides user messages, expected responses,
+  and independent evaluation criteria per stage.
+
+dataset:
+  id: cases
+  path: refund-cases.jsonl
+
+behaviors:
+  # ── Turn 1: intent classification ──
+  - actor: user
+    action: says
+    content: "{{cases.userMessage}}"
+
+  - actor: assistant
+    action: clarifies
+    content: "{{cases.expectedClarification}}"
+    evaluations:
+      - type: llm_judge
+        criteria: "{{cases.clarificationCriteria}}"
+
+  # ── Turn 2: resolution with delivery ──
+  - actor: user
+    action: says
+    content: "{{cases.followUp}}"
+
+  - actor: assistant
+    action: informs
+    content: "{{cases.expectedResolution}}"
+    capture:
+      refundId: "{{cases.expectedRefundId}}"
+    evaluations:
+      - type: contains
+        value: "{{cases.expectedRefundId}}"
+      - type: llm_judge
+        criteria: "{{cases.resolutionCriteria}}"
+      - type: Relevance
+        query: user
+        response: self
+
+  # ── Turn 3: closing ──
+  - actor: user
+    action: says
+    content: "{{cases.closing}}"
+
+  - actor: assistant
+    action: confirms
+    content: "{{cases.expectedClosing}}"
+    evaluations:
+      - type: llm_judge
+        criteria: "{{cases.closingCriteria}}"
+
+# ── Chain: cross-stage properties ──
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: clarifies }
+      - { actor: assistant, action: informs }
+      - { actor: assistant, action: confirms }
+
+  - type: variable_consistency
+    variable: refundId

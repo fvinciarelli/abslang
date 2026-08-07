@@ -38,137 +38,173 @@ That's it. Three fields per step. `actor` is who (`user`, `assistant`, `tool`), 
 
 ---
 
-## A real example: refund for damaged item
+## A real example: damaged item refund — multi-stage evaluation
 
 Here's the user story from your PO:
 
-> *"A customer reports a damaged item. The agent asks them to confirm their name and order date. Then it checks the Orders API to verify the order exists and is eligible for refund. If everything checks out, it processes the refund and tells the customer the amount and when they'll receive it."*
+> *"A customer reports a damaged item. The agent classifies the intent, processes the refund, and closes the conversation. Each stage has its own quality bar."*
 
 ### Step 1: Write the conversation — no evaluations yet
 
-First, describe what should happen, step by step. No assertions — just the sequence:
+First, describe what should happen across three turns. Just `actor`, `action`, `content`:
 
 ```yaml
-session: Refund — damaged item
+session: Damaged item → refund
 behaviors:
+  # Turn 1: classification
   - actor: user
     action: says
-    content: "I received order #8291 damaged, I want to return it"
+    content: "I received a damaged item, I want my money back. Order #8291."
 
   - actor: assistant
-    action: asks
-    content: "I'm sorry about the damage. Can you confirm your name and order date?"
+    action: clarifies
+    content: "I understand your order #8291 arrived damaged. I'll help you get a refund."
 
+  # Turn 2: resolution
   - actor: user
     action: says
-    content: "Franco Vinciarelli, ordered last Tuesday"
-
-  - actor: assistant
-    action: calls
-    target: Orders API
-    with:
-      orderId: "8291"
-
-  - actor: tool
-    action: responds
-    target: Orders API
-    content:
-      orderId: "8291"
-      status: "delivered"
-      eligibleForRefund: true
-
-  - actor: assistant
-    action: calls
-    target: Refunds API
-    with:
-      orderId: "8291"
-      reason: "damaged"
-
-  - actor: tool
-    action: responds
-    target: Refunds API
-    content:
-      refundId: "R-5512"
-      amount: 47.50
-      status: "processed"
+    content: "Yes please, how long will it take?"
 
   - actor: assistant
     action: informs
-    content: "Refund of €47.50 processed, Franco. You'll receive it in 3-5 days. Reference: R-5512."
+    content: "Refund of €47.50 approved. Reference: R-5512. You'll receive it in 3-5 days."
+
+  # Turn 3: closing
+  - actor: user
+    action: says
+    content: "Great, thanks."
+
+  - actor: assistant
+    action: confirms
+    content: "You're welcome! Is there anything else I can help with?"
 ```
 
-At this point, your PO can read and understand the flow. Your dev can see which APIs to call and with what parameters. But you, as QA, need more — you need to verify the agent actually did all of this correctly.
+Three turns, six steps. No tool calls — works with any agent. Your PO reads this and understands the flow. Your dev knows what responses to build for.
 
-### Step 2: Add evaluations on the critical steps
+### Step 2: Add evaluations at each stage
 
-There are two moments that matter most: when the agent asks for verification (was it empathetic? did it ask for the right info?), and when it delivers the result (did it include all the facts? did it hallucinate anything?). 
-
-Add `evaluations` at these points:
+Now you, as QA, add quality checks at the three critical moments — each stage has its own bar:
 
 ```yaml
+  # Turn 1: did the agent understand the intent?
   - actor: assistant
-    action: asks
-    content: "I'm sorry about the damage. Can you confirm your name and order date?"
+    action: clarifies
+    content: "I understand your order #8291 arrived damaged. I'll help you get a refund."
     evaluations:
       - type: llm_judge
         criteria: |
-          1. Shows empathy for the damaged item
+          1. Correctly classifies the intent as a refund request
           2. References the order number #8291
-          3. Asks for verification info before taking action
-```
+          3. Acknowledges the damage (not a simple return)
+          4. Takes ownership of the resolution
 
-This uses an LLM to judge whether the response meets the criteria. For hard facts, use exact evaluators instead:
-
-```yaml
+  # Turn 2: did it deliver the facts completely?
   - actor: assistant
     action: informs
-    content: "Refund of €47.50 processed, Franco. You'll receive it in 3-5 days. Reference: R-5512."
+    content: "Refund of €47.50 approved. Reference: R-5512. You'll receive it in 3-5 days."
+    capture:
+      refundId: "R-5512"
     evaluations:
-      # Hard fact: the refund ID MUST appear
+      # Hard fact
       - type: contains
         value: "R-5512"
-
-      # Soft qualities: tone, completeness — use LLM
+      # Soft qualities
       - type: llm_judge
         criteria: |
-          1. States the amount (€47.50) and timeline (3-5 days)
-          2. Provides the refund reference R-5512
-          3. Uses the customer's name (Franco)
-          4. Reassuring tone, no upsells or deflections
+          1. States the exact refund amount (€47.50)
+          2. Provides the reference number R-5512
+          3. Sets a clear timeline (3-5 days)
+          4. Professional and empathetic tone
+      # Did it answer what was asked?
+      - type: Relevance
+        query: user
+        response: self
+
+  # Turn 3: is the closing appropriate?
+  - actor: assistant
+    action: confirms
+    content: "You're welcome! Is there anything else I can help with?"
+    evaluations:
+      - type: llm_judge
+        criteria: |
+          1. Offers further assistance
+          2. Does NOT reopen the resolved refund
+          3. Concise and natural
 ```
 
-### Step 3: Whole-conversation evaluations
+This is the key: **each `llm_judge` sees a different slice of the trace**. Turn 1's evaluator only sees the clarification. Turn 2's sees clarification + resolution. Turn 3's sees the entire conversation. The evaluation gets richer as the flow progresses.
 
-Beyond checking individual steps, you want to check properties of the entire trace. These go in a top-level `evaluations` block, sibling to `behaviors`:
+### Step 3: Whole-conversation checks
+
+Beyond individual steps, properties that span the entire trace:
 
 ```yaml
 evaluations:
-  # The 4 assistant actions MUST happen in this relative order
+  # The 3 assistant actions MUST happen in this relative order
   - type: sequence
     order:
-      - { actor: assistant, action: asks }
-      - { actor: assistant, action: calls, target: "Orders API" }
-      - { actor: assistant, action: calls, target: "Refunds API" }
+      - { actor: assistant, action: clarifies }
       - { actor: assistant, action: informs }
+      - { actor: assistant, action: confirms }
 
-  # The refund ID must be the same everywhere it appears
+  # The refund ID must be consistent everywhere
   - type: variable_consistency
     variable: refundId
-
-  # Must NEVER escalate to a human — this flow resolves automatically
-  - type: never
-    match: { actor: assistant, action: hands_off }
 ```
 
-This is where **Agent Behavior Specification** earns its keep over manual test scripts. `sequence` checks ordering without you having to trace through step numbers. `variable_consistency` catches a subtle bug: the agent saying "R-5512" early but "R-5513" later. `never` is a safety guard: if this flow hands off to a human, something went wrong.
+Seven evaluations total: five step-level across three stages, two chain-level. **Multi-stage evaluation is what makes ABS different from a single-shot eval tool.**
 
 ---
 
 ## The complete file
 
-Putting it all together, the file is about 70 lines. PO understands the conversation. Dev knows what to build. You have 7 automated checks. One file.
+About 60 lines. PO understands the conversation. Dev knows what to build. QA has 7 automated checks across 3 stages of the same flow. One file.
 
-> 👉 Full file at [`examples/refund-request.yaml`](examples/refund-request.yaml)
+> 👉 Full file at [`examples/refund-multi-stage.yaml`](examples/refund-multi-stage.yaml)
+
+---
+
+## Ok, but how do I evaluate with multiple test scenarios?
+
+Replace the hardcoded values with `{{placeholders}}` and feed it a dataset. The session structure stays identical — only the data changes per row:
+
+```yaml
+session: Damaged item → refund (parametrized)
+dataset:
+  id: cases
+  path: refund-cases.jsonl
+behaviors:
+  - actor: user
+    action: says
+    content: "{{cases.userMessage}}"       # Each row provides its own message
+
+  - actor: assistant
+    action: clarifies
+    content: "{{cases.expectedClarification}}"
+    evaluations:
+      - type: llm_judge
+        criteria: "{{cases.clarificationCriteria}}"     # Each row has its own criteria
+  # ... same structure, all values from dataset
+```
+
+The dataset is a JSONL file — one JSON object per row, one row per test case:
+
+```jsonl
+{"userMessage": "I received a damaged item...", "expectedClarification": "...", ...}
+{"userMessage": "My order #3412 arrived broken...", "expectedClarification": "...", ...}
+{"userMessage": "Wrong item in my box for order #5567...", "expectedClarification": "...", ...}
+{"userMessage": "Order #1234 came with a cracked screen...", "expectedClarification": "...", ...}
+```
+
+Four rows, four runs, four scenarios — all using the same multi-stage evaluation. One command:
+
+```bash
+abslang run refund-multi-stage-parametrized.abs.yaml \
+  --agent $URL \
+  --dataset refund-cases.jsonl
+```
+
+> 👉 Full files at [`examples/refund-multi-stage-parametrized.yaml`](examples/refund-multi-stage-parametrized.yaml) · [`examples/refund-cases.jsonl`](examples/refund-cases.jsonl)
 
 ---
 

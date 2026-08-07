@@ -16,7 +16,16 @@
     "test": "node --import tsx --test src/__tests__/*.test.ts",
     "prepublishOnly": "npm run build"
   },
-  "keywords": ["ai", "agent", "testing", "evaluation", "specification", "llm", "openapi", "behavior"],
+  "keywords": [
+    "ai",
+    "agent",
+    "testing",
+    "evaluation",
+    "specification",
+    "llm",
+    "openapi",
+    "behavior"
+  ],
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -33,7 +42,7 @@
     "js-yaml": "^4.1.0"
   },
   "optionalDependencies": {
-    "aievaluator": "*"
+    "aievaluator": "^1.2.4"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",

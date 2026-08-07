@@ -1,37 +1,34 @@
 import DocsLayout from '@/components/layout/DocsLayout';
 
-export const frontmatter = { title: '3. Step-level evaluations', description: 'Minute 10–15: add llm_judge for quality checks and contains for hard facts.' };
+export const frontmatter = { title: '3. Step-level evaluations', description: 'Minute 10–15: add llm_judge, contains, and Relevance across three distinct stages of the same flow.' };
 
 <DocsLayout frontmatter={frontmatter}>
 
-Describing is fine, but you're QA: you want to **verify** the bot actually did everything right. That's what `evaluations` are for.
+Describing is fine, but you're QA: you want to **verify** the agent did everything right at every stage. That's what `evaluations` are for — and the real power of ABS is that you can place them at **different points in the same flow**, each one seeing the trace accumulated so far.
 
-There are two critical moments in this flow: when the bot asks for verification (was it empathetic? did it ask for the right info?), and when it delivers the final result (are all the facts there? did it hallucinate anything?).
-
-Let's add `evaluations` at those two points:
+## Turn 1: did the agent understand the intent?
 
 ```yaml
-  # Step 2 improved: we verify response quality
   - actor: assistant
-    action: asks
-    content: "I'm sorry about the damage. Can you confirm your name and order date?"
+    action: clarifies
+    content: "I understand your order #8291 arrived damaged. I'll help you get a refund."
     evaluations:
       - type: llm_judge
         criteria: |
-          1. Shows empathy for the damaged item
-          2. Mentions order number #8291
-          3. Asks for verification before taking action
+          1. Correctly classifies the intent as a refund request
+          2. References the order number #8291
+          3. Acknowledges the damage (not a simple return)
+          4. Takes ownership of the resolution
 ```
 
-`llm_judge` asks an AI to evaluate the response against your criteria, in natural language. Zero code.
+`llm_judge` asks an AI to evaluate the response against your criteria in natural language. Zero code. At this point the evaluator only sees the clarification — the trace has just one assistant response so far.
 
-For hard facts — things that absolutely must appear — we use exact verifications:
+## Turn 2: did it deliver the facts completely?
 
 ```yaml
-  # Step 8 improved: hard facts + quality
   - actor: assistant
     action: informs
-    content: "Refund of €47.50 processed, Franco. You'll receive it in 3-5 days. Reference: R-5512."
+    content: "Refund of €47.50 approved. Reference: R-5512. You'll receive it in 3-5 days."
     capture:
       refundId: "R-5512"
     evaluations:
@@ -39,155 +36,60 @@ For hard facts — things that absolutely must appear — we use exact verificat
       - type: contains
         value: "R-5512"
 
-      # Quality: tone, completeness
+      # Soft qualities: tone, completeness
       - type: llm_judge
         criteria: |
-          1. States the amount (€47.50) and timeline (3-5 days)
-          2. Gives the reference R-5512
-          3. Uses the customer's name (Franco)
-          4. Reassuring tone, no upsells or deflections
+          1. States the exact refund amount (€47.50)
+          2. Provides the reference number R-5512
+          3. Sets a clear timeline (3-5 days)
+          4. Professional and empathetic tone
+
+      # Did it answer what was asked?
+      - type: Relevance
+        query: user
+        response: self
 ```
 
-**`capture`** stores the value `R-5512` for later use. You'll need it in the next section.
+Three evaluators on a single step: `contains` for the hard fact, `llm_judge` for quality, `Relevance` to verify the answer matches the question. The evaluator now sees the clarification **plus** the resolution — the trace has grown.
 
-### Available evaluation types
+**`capture`** stores the refund ID for later. You'll need it in the next section.
 
-**Built-in (no adapter needed, runs locally):**
+## Turn 3: is the closing appropriate?
 
-| Evaluator | What it's for |
-|---|---|
-| `contains` | Text includes a specific word or phrase |
-| `exact_match` | Text matches exactly |
-| `regex` | Text matches a pattern (email, date, code) |
-| `schema` | API response matches a structure |
-| `tool_call` | Verifies the right tool was called with the right parameters |
+```yaml
+  - actor: assistant
+    action: confirms
+    content: "You're welcome! Is there anything else I can help with?"
+    evaluations:
+      - type: llm_judge
+        criteria: |
+          1. Offers further assistance
+          2. Does NOT reopen the resolved refund
+          3. Concise and natural
+```
 
-**LLM-based (auto-detects OpenAI/Anthropic/Gemini from env, or route through an adapter):**
+By now the evaluator sees the **entire conversation**: clarification + resolution + closing. Evaluations get richer as the flow progresses.
 
-| Evaluator | What it's for |
-|---|---|
-| `llm_judge` | Qualitative criteria in natural language — tone, empathy, completeness |
-| `Groundedness` | Every factual claim is supported by retrieved context (anti-hallucination) |
-| `Relevance` | Response addresses the query, no tangents |
-| `Coherence` | Logical flow and internal consistency |
-| `Fluency` | Natural language quality, grammar, readability |
+---
+
+**This is what makes ABS different from a single-shot eval tool:** five evaluations, across three stages, each with a growing view of the trace. The same session file, the same adapter, different slices of context.
 
 ## What backs `llm_judge` and dimension evaluators
 
-When you add an `llm_judge`, `Groundedness`, `Relevance`, `Coherence`, or `Fluency` evaluation, someone has to call an LLM to produce the judgment. `abslang` gives you multiple paths — including keeping everything local for privacy — and you don't have to change your session file to switch between them.
-
-### Evaluator types: what runs where
-
-| Evaluator | Provider |
-|---|---|
-| `llm_judge` — free-form criteria | Built-in judge (OpenAI, Anthropic, Gemini) or AI Evaluator adapter |
-| `Groundedness` — factual accuracy | AI Evaluator or custom adapter |
-| `Relevance` — answers the question | AI Evaluator or custom adapter |
-| `Coherence` — logical flow | AI Evaluator or custom adapter |
-| `Fluency` — language quality | AI Evaluator or custom adapter |
-
-### Built-in judge: zero setup for `llm_judge`
-
-Out of the box, `abslang` auto-detects whichever LLM provider you have available:
+When you use `llm_judge`, `Relevance`, `Groundedness`, `Coherence`, or `Fluency`, an LLM needs to produce the judgment. `abslang` auto-detects your provider:
 
 ```bash
-# OpenAI — if OPENAI_API_KEY is set
+# Built-in judge — auto-detects OpenAI, Anthropic, or Gemini from env
 OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
 
-# Anthropic — if ANTHROPIC_API_KEY is set
-ANTHROPIC_API_KEY=sk-ant-... abslang run session.abs.yaml --agent $URL
+# Route through AI Evaluator adapter (dimension types too)
+abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
 
-# Gemini — if GEMINI_API_KEY is set
-GEMINI_API_KEY=... abslang run session.abs.yaml --agent $URL
+# Private LLM — nothing leaves your network
+abslang run session.abs.yaml --agent $URL --adapter llm_judge=local --adapter-url http://localhost:11434/v1
 ```
 
-Set `ABS_JUDGE_PROVIDER` if you have more than one and want to pick:
-
-```bash
-ABS_JUDGE_PROVIDER=openai abslang run session.abs.yaml --agent $URL
-```
-
-Override the model with `ABS_JUDGE_MODEL`:
-
-```bash
-ABS_JUDGE_MODEL=gpt-4o-mini abslang run session.abs.yaml --agent $URL
-```
-
-No API key? Use the mock judge:
-
-```bash
-ABS_MOCK_JUDGE=true abslang run session.abs.yaml --agent $URL
-```
-
-### Dimension evaluators: Groundedness, Relevance, Coherence, Fluency
-
-These measure specific quality dimensions. They require an **evaluator adapter** — the built-in judge only handles `llm_judge`.
-
-**With AI Evaluator (recommended):**
-
-```bash
-# 100 free evals/month with API key
-AIEVALUATOR_API_KEY=... abslang run session.abs.yaml \
-  --agent $URL \
-  --adapter llm_judge=aievaluator
-
-# 5 free evals/day without API key (playground)
-abslang run session.abs.yaml \
-  --agent $URL \
-  --adapter llm_judge=aievaluator
-```
-
-**With your own LLM (full privacy, no external API calls):**
-
-Deploy a private judge behind any OpenAI-compatible endpoint (Ollama, vLLM, LiteLLM):
-
-```bash
-# Local Ollama
-abslang run session.abs.yaml \
-  --agent $URL \
-  --adapter llm_judge=local \
-  --adapter-url http://localhost:11434/v1
-
-# Self-hosted vLLM
-abslang run session.abs.yaml \
-  --agent $URL \
-  --adapter llm_judge=local \
-  --adapter-url https://judge.internal.company.com/v1 \
-  --adapter-key $JUDGE_API_KEY
-```
-
-Nothing leaves your network.
-
-**With Azure AI / Vertex AI:**
-
-```bash
-abslang run session.abs.yaml \
-  --agent $URL \
-  --adapter llm_judge=azure \
-  --adapter-key $AZURE_KEY \
-  --adapter-url $AZURE_ENDPOINT
-```
-
-### Config file — don't retype adapter flags
-
-```yaml
-# abs.config.yaml
-adapters:
-  llm_judge: aievaluator       # Route all LLM evaluations through AI Evaluator
-  Groundedness: aievaluator    # Or split by type
-  Relevance: local              # Use local judge for relevance
-```
-
-### The adapter contract
-
-Any adapter is a function that receives `(trace, evaluationRule)` and returns `{ passed, score, reason }`. Providers (Azure, LangSmith, Promptfoo, Galileo, Arize) can ship adapters implementing this interface. Your session file stays the same — only the `--adapter` flag changes.
-
-```
-adapter.evaluate(
-  trace = [...conversation steps...],
-  rule  = { type: "Groundedness", query: ..., context: ..., response: ..., threshold: 0.8 }
-) → { passed: true, score: 0.92, reason: "..." }
-```
+Your session file never changes. Only the `--adapter` flag. See the [full adapter guide](/abslang/docs/tutorial/run-it) for all options.
 
 ---
 

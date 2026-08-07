@@ -6,15 +6,94 @@ export const frontmatter = { title: 'Examples', description: 'Worked, narrated e
 
 Real-world examples of ABS sessions for common agent patterns.
 
-## 1. Refund request — full workflow with evaluations
+## 1. Multi-stage evaluation — damaged item refund
 
-A customer returns a damaged item. The agent verifies eligibility across two API calls, processes the refund, and confirms — with LLM judge evaluations, chain sequence verification, and variable consistency checks all in one file.
+**The defining example.** Three conversational turns, five LLM-as-judge evaluations across three stages, plus two chain evaluations. No tool calls — works with any agent. Each `llm_judge` sees the trace accumulated so far.
 
 ```yaml
-session: Refund request — approved
-description: |
-  Customer returns a damaged item. Agent verifies eligibility,
-  processes the refund, and confirms — with evaluations at every step.
+session: Damaged item → refund (multi-stage evaluation)
+behaviors:
+  # ── Turn 1: intent classification ──
+  - actor: user
+    action: says
+    content: "I received a damaged item, I want my money back. Order #8291."
+
+  - actor: assistant
+    action: clarifies
+    content: "I understand your order #8291 arrived damaged. I'll help you get a refund."
+    evaluations:
+      - type: llm_judge
+        criteria: |
+          1. Correctly classifies the intent as a refund request
+          2. References the order number #8291
+          3. Acknowledges the damage (not a simple return)
+          4. Takes ownership of the resolution
+
+  # ── Turn 2: resolution with delivery ──
+  - actor: user
+    action: says
+    content: "Yes please, how long will it take?"
+
+  - actor: assistant
+    action: informs
+    content: "Refund of €47.50 approved. Reference: R-5512. You'll receive it in 3-5 days."
+    capture:
+      refundId: "R-5512"
+    evaluations:
+      - type: contains
+        value: "R-5512"
+      - type: llm_judge
+        criteria: |
+          1. States the exact refund amount (€47.50)
+          2. Provides the reference number R-5512
+          3. Sets a clear timeline (3-5 days)
+          4. Professional and empathetic tone
+      - type: Relevance
+        query: user
+        response: self
+
+  # ── Turn 3: closing ──
+  - actor: user
+    action: says
+    content: "Great, thanks."
+
+  - actor: assistant
+    action: confirms
+    content: "You're welcome! Is there anything else I can help with?"
+    evaluations:
+      - type: llm_judge
+        criteria: |
+          1. Offers further assistance
+          2. Does NOT reopen the resolved refund
+          3. Concise and natural
+
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: clarifies }
+      - { actor: assistant, action: informs }
+      - { actor: assistant, action: confirms }
+  - type: variable_consistency
+    variable: refundId
+```
+
+### What this example shows
+
+| Feature | Where |
+|---|---|
+| Multi-stage LLM judge | Three distinct stages, five evaluations total |
+| Step-level exact check | `contains: "R-5512"` on the resolution |
+| Dimension evaluator | `Relevance` on turn 2 |
+| Chain sequence | clarifies → informs → confirms in order |
+| Variable consistency | `refundId` captured once, checked everywhere |
+| Zero tool calls | Works with any agent, any framework |
+
+## 2. Refund request — with tool calls
+
+Same domain, but modeling API interactions. A customer returns a damaged item. The agent verifies eligibility across two API calls, processes the refund, and confirms.
+
+```yaml
+session: Refund request — with tools
 behaviors:
   - actor: user
     action: says
@@ -33,8 +112,6 @@ behaviors:
   - actor: user
     action: says
     content: "Franco Vinciarelli, ordered last Tuesday"
-    capture:
-      customerName: "Franco Vinciarelli"
 
   - actor: assistant
     action: calls
@@ -67,7 +144,7 @@ behaviors:
 
   - actor: assistant
     action: informs
-    content: "Refund of €47.50 processed, Franco. You'll receive it in 3-5 days. Your refund ID is R-5512."
+    content: "Refund of €47.50 processed, Franco. Your refund ID: R-5512."
     capture:
       refundId: "R-5512"
     evaluations:
@@ -93,37 +170,91 @@ evaluations:
     match: { actor: assistant, action: hands_off }
 ```
 
-<Mermaid chart={`
-sequenceDiagram
-    actor User
-    participant Assistant
-    participant Orders API
-    participant Refunds API
+## 3. RAG groundedness — anti-hallucination
 
-    User->>Assistant: says "I want to return order #8291, it arrived damaged"
-    Assistant->>User: asks "Can you confirm your name and order date?"
-    User->>Assistant: says "Franco Vinciarelli, ordered last Tuesday"
-    Assistant->>Orders API: calls — verify order #8291
-    Orders API-->>Assistant: responds — delivered, eligible for refund
-    Assistant->>Refunds API: calls — process refund for #8291, reason: damaged
-    Refunds API-->>Assistant: responds — R-5512, €47.50, processed
-    Assistant->>User: informs "Refund of €47.50 processed, Franco. Refund ID: R-5512."
-`} />
+A user asks about the return policy. The agent queries a knowledge base. Every claim must be grounded in the retrieved context.
 
-### What this example shows
+```yaml
+session: Return policy RAG
+behaviors:
+  - id: user_asks
+    actor: user
+    action: says
+    content: "Can I return sale items?"
 
-| Feature | Where |
-|---|---|
-| Step-level LLM judge | Two multi-criteria rubrics on `asks` and `informs` |
-| Step-level exact check | `contains: "R-5512"` on the final response |
-| Chain sequence | 4 assistant actions must happen in order |
-| Variable consistency | `refundId` captured once, checked everywhere |
-| Tool round-trips | Two `calls` → `responds` pairs |
-| Invariant guard | `never hands_off` — resolve, don't escalate |
+  - id: kb_call
+    actor: assistant
+    action: calls
+    target: Knowledge Base
 
-## 2. Order status (minimal intro)
+  - id: kb_result
+    actor: tool
+    action: responds
+    target: Knowledge Base
+    content: "Sale items can be returned within 14 days with receipt."
 
-A user checks order status. The assistant calls an MCP tool and reports back.
+  - id: answer
+    actor: assistant
+    action: informs
+    content: "Yes, sale items can be returned within 14 days with a receipt."
+    evaluations:
+      - type: Groundedness
+        query: user_asks.says
+        context: kb_result.responds
+        response: self
+        threshold: 0.8
+      - type: Relevance
+        query: user_asks.says
+        response: self
+
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: calls, target: "Knowledge Base" }
+      - { actor: assistant, action: informs }
+```
+
+## 4. Intent routing with hand-off
+
+A damaged item request gets routed to the Refunds Agent. Alternative paths (routing to Orders, Human) would be separate sessions — ABS v0.1 models bifurcations as separate session files.
+
+```yaml
+session: Intent routing — damaged item → refund
+behaviors:
+  - actor: user
+    action: says
+    content: "I received a damaged item, I want my money back. Order #8291."
+
+  - actor: assistant
+    action: clarifies
+    content: "I understand — you want to return order #8291 because it arrived damaged."
+    evaluations:
+      - type: llm_judge
+        criteria: |
+          1. Identifies the request as a refund, not a general inquiry
+          2. References the order number #8291
+          3. States they are routing to the refunds specialist
+
+  - actor: assistant
+    action: hands_off
+    target: Refunds Agent
+    content: "Refund request: order #8291, reason: damaged"
+    evaluations:
+      - type: llm_judge
+        criteria: |
+          1. Hands off to Refunds Agent — not Orders, not Human
+          2. Passes both order number and reason
+
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: clarifies }
+      - { actor: assistant, action: hands_off, target: "Refunds Agent" }
+  - type: never
+    match: { actor: assistant, action: hands_off, target: "Human Agent" }
+```
+
+## 5. Order status (minimal intro)
 
 ```yaml
 session: Order status
@@ -141,9 +272,7 @@ behaviors:
     content: "Your order is on the way — estimated delivery Friday."
 ```
 
-## 2. Multi-turn — appointment booking
-
-A conversation that spans several turns, with capture:
+## 6. Appointment booking (multi-turn, with UI)
 
 ```yaml
 session: Book appointment
@@ -172,46 +301,10 @@ behaviors:
     capture:
       selected_date: "2025-03-15"
   - actor: assistant
-    action: calls
-    target: Calendar API
-    with:
-      date: "{{selected_date}}"
-      time: "10:00 AM"
-  - actor: assistant
     action: confirms
     content: "Your appointment is booked for March 15 at 10:00 AM."
 ```
 
-## 3. Hand-off to human
-
-```yaml
-session: Escalation to human
-behaviors:
-  - actor: user
-    action: says
-    content: "I want to speak to a real person"
-  - actor: assistant
-    action: hands_off
-    target: Human Agent
-    content: "User requesting human escalation. Context: billing dispute."
-```
-
-## 4. With evaluations
-
-```yaml
-session: Greeting with verification
-behaviors:
-  - actor: user
-    action: says
-    content: "Hello"
-  - actor: assistant
-    action: says
-    content: "Hi! How can I help you today?"
-    evaluations:
-      - type: contains
-        value: "Hi"
-```
-
-More examples are available in the [repository](https://github.com/fvinciarelli/abslang/tree/main/examples).
+More examples in the [repository](https://github.com/fvinciarelli/abslang/tree/main/examples).
 
 </DocsLayout>

@@ -6,18 +6,20 @@ export const frontmatter = { title: 'Tutorial', description: 'Learn ABS in 20 mi
 
 A step-by-step guide to learning ABS — **A**gent **B**ehavior **S**pecification — from scratch. If you can write a bullet list, you can write ABS. No code required.
 
+We'll work through a single example — a refund agent handling a damaged item — and build it up from a plain conversation to a fully automated test suite with multi-stage evaluations and parametrized datasets.
+
 ## The 20-minute path
 
 1. **[What ABS is and its structure](/abslang/docs/tutorial/what-is-abs)** — the acronym, the YAML format, the three fields, the four actors
-2. **[Write a real conversation](/abslang/docs/tutorial/write-a-conversation)** — model a refund bot step by step: user says, bot asks, APIs are called, bot confirms
-3. **[Step-level evaluations](/abslang/docs/tutorial/step-evaluations)** — add `llm_judge` for quality checks and `contains` for hard facts
-4. **[Chain evaluations](/abslang/docs/tutorial/chain-evaluations)** — `sequence`, `never`, `variable_consistency`: properties of the whole trace
-5. **[Run it](/abslang/docs/tutorial/run-it)** — browser, terminal, or VSCode: three ways to execute against your agent
-6. **[Datasets and golden data](/abslang/docs/tutorial/datasets)** — from one happy-path test to 100 parameterized runs with `.jsonl`
+2. **[Write a real conversation](/abslang/docs/tutorial/write-a-conversation)** — model a refund bot across three turns: classification, resolution, closing
+3. **[Step-level evaluations](/abslang/docs/tutorial/step-evaluations)** — add `llm_judge`, `contains`, and `Relevance` at three distinct stages of the same flow
+4. **[Chain evaluations](/abslang/docs/tutorial/chain-evaluations)** — `sequence` and `variable_consistency`: properties of the entire trace
+5. **[Run it](/abslang/docs/tutorial/run-it)** — terminal, browser, or VSCode: execute against your agent
+6. **[Datasets and golden data](/abslang/docs/tutorial/datasets)** — from one happy-path case to N parametrized scenarios via `.jsonl`
 7. **[Common mistakes](/abslang/docs/tutorial/common-mistakes)** — pitfalls every QA hits the first time, and how to avoid them
 8. **[Available tools](/abslang/docs/tutorial/tools)** — CLI, Designer, VSCode extension, mock agent, chatbot
 9. **[Cheat sheet](/abslang/docs/tutorial/cheat-sheet)** — all actions and evaluators on one page
 
-Each page takes ~5 minutes. Start at the top and work through — by the end you'll have a complete automated test suite for your agent.
+Each page takes ~5 minutes. Start at the top and work through — by the end you'll have a complete automated test suite for your agent, with evaluations running at every stage of the conversation.
 
 </DocsLayout>

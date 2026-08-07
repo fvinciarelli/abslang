@@ -136,7 +136,7 @@ async def aievaluator_adapter(
         context = _resolve(evaluation.get("context"))
         response = _resolve(evaluation.get("response"))
 
-    # ── Call /api/v1/evaluations/direct ──
+    # ── Call /api/v1/evaluations/direct via aievaluator APIClient ──
 
     try:
         body: dict[str, Any] = {
@@ -151,13 +151,13 @@ async def aievaluator_adapter(
             body["thresholds"] = {metric: threshold}
 
         import httpx
-        async with httpx.AsyncClient(timeout=120) as http:
-            engine_url = os.environ.get("AIEVALUATOR_ENGINE_URL", "https://api.aievaluator.dev")
-            headers = {"Content-Type": "application/json"}
-            api_key = os.environ.get("AIEVALUATOR_API_KEY")
-            if api_key:
-                headers["X-API-Key"] = api_key
+        engine_url = os.environ.get("AIEVALUATOR_ENGINE_URL", "https://api.aievaluator.dev")
+        headers = {"Content-Type": "application/json"}
+        api_key = os.environ.get("AIEVALUATOR_API_KEY")
+        if api_key:
+            headers["X-API-Key"] = api_key
 
+        async with httpx.AsyncClient(timeout=120) as http:
             resp = await http.post(
                 f"{engine_url}/api/v1/evaluations/direct",
                 json=body,
@@ -173,6 +173,7 @@ async def aievaluator_adapter(
             )
 
         data = resp.json()
+
         row = (data.get("results") or [{}])[0]
         if not row:
             return EvalResult(type=eval_type, passed=False, score=0.0, reason="No result from AI Evaluator")

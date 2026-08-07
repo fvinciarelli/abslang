@@ -1,75 +1,51 @@
 import DocsLayout from '@/components/layout/DocsLayout';
 
-export const frontmatter = { title: '2. Write a real conversation', description: 'Minute 5–10: model a refund bot step by step — user says, bot asks, APIs are called, bot confirms.' };
+export const frontmatter = { title: '2. Write a real conversation', description: 'Minute 5–10: model a refund bot across three conversational turns — no tool calls, works with any agent.' };
 
 <DocsLayout frontmatter={frontmatter}>
 
 Imagine you're QA for a refund bot. The PO gives you this story:
 
-> *"A customer returns a damaged item. The bot asks to verify name and date. It queries two APIs. Processes the refund. Confirms amount and timeline."*
+> *"A customer reports a damaged item. The agent classifies the intent, processes the refund, and closes the conversation. Each stage has its own quality bar."*
 
-Let's write it in ABS, step by step:
+Let's write it in ABS, step by step, across three conversational turns:
 
 ```yaml
-session: Refund — damaged item
+session: Damaged item → refund
 behaviors:
-  # Step 1: the customer complains
+  # ── Turn 1: intent classification ──
   - actor: user
     action: says
-    content: "I received order #8291 damaged, I want to return it"
+    content: "I received a damaged item, I want my money back. Order #8291."
 
-  # Step 2: the bot asks for verification
   - actor: assistant
-    action: asks
-    content: "I'm sorry about the damage. Can you confirm your name and order date?"
+    action: clarifies
+    content: "I understand your order #8291 arrived damaged. I'll help you get a refund."
 
-  # Step 3: the customer responds
+  # ── Turn 2: resolution ──
   - actor: user
     action: says
-    content: "Franco Vinciarelli, ordered last Tuesday"
+    content: "Yes please, how long will it take?"
 
-  # Step 4: the bot queries the Orders API
-  - actor: assistant
-    action: calls
-    target: Orders API
-    with:
-      orderId: "8291"
-
-  # Step 5: the API responds
-  - actor: tool
-    action: responds
-    target: Orders API
-    content:
-      orderId: "8291"
-      status: "delivered"
-      eligibleForRefund: true
-
-  # Step 6: the bot calls the Refunds API
-  - actor: assistant
-    action: calls
-    target: Refunds API
-    with:
-      orderId: "8291"
-      reason: "damaged"
-
-  # Step 7: the Refunds API responds
-  - actor: tool
-    action: responds
-    target: Refunds API
-    content:
-      refundId: "R-5512"
-      amount: 47.50
-      status: "processed"
-
-  # Step 8: the bot confirms to the customer
   - actor: assistant
     action: informs
-    content: "Refund of €47.50 processed, Franco. You'll receive it in 3-5 days. Reference: R-5512."
+    content: "Refund of €47.50 approved. Reference: R-5512. You'll receive it in 3-5 days."
+
+  # ── Turn 3: closing ──
+  - actor: user
+    action: says
+    content: "Great, thanks."
+
+  - actor: assistant
+    action: confirms
+    content: "You're welcome! Is there anything else I can help with?"
 ```
 
-**Important:** Notice steps 4-5 and 6-7? Every time the bot calls an API, it's **two separate Behaviors**: the call and the response. This is intentional: you can verify separately whether it called correctly and whether what the API returned is correct.
+Three turns, six steps. Every `user` message triggers a new response from the agent — that's the key: the runner calls your agent each time it encounters `actor: user`, and the assistant responses get accumulated into a trace for evaluation.
 
-At this point **you already have a specification**. Your PO can read it and understand the flow. Your dev knows which APIs to call. No code, no tests.
+**Important:** no tool calls in this example. It works with any agent regardless of whether it exposes internal API calls. If your agent does call tools, you can model those too — see the [tools page](/abslang/docs/tutorial/tools).
+
+At this point **you already have a specification**. Your PO can read it and understand the flow. Your dev knows what responses to build for. No code, no tests.
 
 ---
 

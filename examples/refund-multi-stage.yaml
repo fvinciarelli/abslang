@@ -1,0 +1,78 @@
+# Damaged item → refund (multi-stage evaluation)
+#
+# Three conversational turns, five LLM-as-judge evaluations
+# across three distinct stages, plus two chain evaluations.
+# No tool calls — works with any agent.
+
+session: Damaged item → refund (multi-stage evaluation)
+description: >
+  A customer reports a damaged item. The agent classifies the intent,
+  processes the refund, and closes the conversation. Each stage has
+  its own quality bar via independent llm_judge evaluations that
+  receive the accumulated trace up to that point.
+
+behaviors:
+  # ── Turn 1: intent classification ──
+  - actor: user
+    action: says
+    content: "I received a damaged item, I want my money back. Order #8291."
+
+  - actor: assistant
+    action: clarifies
+    content: "I understand your order #8291 arrived damaged. I'll help you get a refund."
+    evaluations:
+      - type: llm_judge
+        criteria: |
+          1. Correctly classifies the intent as a refund request
+          2. References the order number #8291
+          3. Acknowledges the damage (not a simple return)
+          4. Takes ownership of the resolution
+
+  # ── Turn 2: resolution with delivery ──
+  - actor: user
+    action: says
+    content: "Yes please, how long will it take?"
+
+  - actor: assistant
+    action: informs
+    content: "Refund of €47.50 approved. Reference: R-5512. You'll receive it in 3-5 days."
+    capture:
+      refundId: "R-5512"
+    evaluations:
+      - type: contains
+        value: "R-5512"
+      - type: llm_judge
+        criteria: |
+          1. States the exact refund amount (€47.50)
+          2. Provides the reference number R-5512
+          3. Sets a clear timeline (3-5 days)
+          4. Professional and empathetic tone
+      - type: Relevance
+        query: user
+        response: self
+
+  # ── Turn 3: closing ──
+  - actor: user
+    action: says
+    content: "Great, thanks."
+
+  - actor: assistant
+    action: confirms
+    content: "You're welcome! Is there anything else I can help with?"
+    evaluations:
+      - type: llm_judge
+        criteria: |
+          1. Offers further assistance
+          2. Does NOT reopen the resolved refund
+          3. Concise and natural
+
+# ── Chain: cross-stage properties ──
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: clarifies }
+      - { actor: assistant, action: informs }
+      - { actor: assistant, action: confirms }
+
+  - type: variable_consistency
+    variable: refundId

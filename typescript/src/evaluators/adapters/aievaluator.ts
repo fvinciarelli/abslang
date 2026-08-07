@@ -140,21 +140,16 @@ async function aievaluatorAdapter(
     response = resolveContent(evaluation.response);
   }
 
-  // ── Call /api/v1/evaluations/direct ──
+  // ── Call aievaluator.evaluateDirect (package-native) ──
 
   try {
-    const body: any = {
-      rows: [{ input, response }],
-      metrics: [metric],
-    };
-    if (context) body.rows[0].context = context;
-
     const threshold = evaluation.threshold;
-    if (threshold !== undefined) {
-      body.thresholds = { [metric]: threshold };
-    }
+    const thresholds = threshold !== undefined ? { [metric]: threshold } : undefined;
 
-    const result = await client.request("POST", "/api/v1/evaluations/direct", body);
+    const rowPayload: any = { input, response };
+    if (context) rowPayload.context = context;
+
+    const result = await client.evaluateDirect([rowPayload], [metric], undefined, thresholds);
     const row = result.results?.[0];
     if (!row) {
       return { type: evalType, passed: false, score: 0, reason: "No result from AI Evaluator" };

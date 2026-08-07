@@ -15,97 +15,167 @@ It plays a role for agent behavior similar to what OpenAPI plays for HTTP APIs: 
 
 ### Quick example
 
-A RAG agent answers a question using a knowledge base. The spec verifies every claim is grounded in the retrieved context — **no hallucinations** — and the response is relevant and coherent.
+A customer reports a damaged item. The agent handles the refund across three turns — classifying the request, processing the refund, and closing the conversation. **Five LLM-as-judge evaluations run across three distinct stages**, sharing the accumulated trace at each point.
 
 ```yaml
-session: Return policy RAG
-dataset:
-  id: cases
-  path: cases.jsonl
+session: Damaged item → refund (multi-stage evaluation)
 behaviors:
-  - id: user_asks
-    actor: user
+  # ── Turn 1: intent classification ──
+  - actor: user
     action: says
-    content: "{{cases.userQuery}}"           # e.g. "Can I return sale items?"
+    content: "I received a damaged item, I want my money back. Order #8291."
 
-  - id: kb_call
-    actor: assistant
-    action: calls
-    target: Knowledge Base
-
-  - id: kb_result
-    actor: tool
-    action: responds
-    target: Knowledge Base
-
-  - id: answer
-    actor: assistant
-    action: informs
-    content: "{{cases.expectedAnswer}}"
+  - actor: assistant
+    action: clarifies
+    content: "I understand your order #8291 arrived damaged. I'll help you get a refund."
     evaluations:
-      - type: Groundedness
-        query: user_asks.says
-        context: kb_result.responds
-        response: self
-        threshold: 0.8
+      - type: llm_judge
+        criteria: |
+          1. Correctly classifies the intent as a refund request
+          2. References the order number #8291
+          3. Acknowledges the damage (not a simple return)
+          4. Takes ownership of the resolution
 
+  # ── Turn 2: resolution with delivery ──
+  - actor: user
+    action: says
+    content: "Yes please, how long will it take?"
+
+  - actor: assistant
+    action: informs
+    content: "Refund of €47.50 approved. Reference: R-5512. You'll receive it in 3-5 days."
+    capture:
+      refundId: "R-5512"
+    evaluations:
+      - type: contains
+        value: "R-5512"
+      - type: llm_judge
+        criteria: |
+          1. States the exact refund amount (€47.50)
+          2. Provides the reference number R-5512
+          3. Sets a clear timeline (3-5 days)
+          4. Professional and empathetic tone
       - type: Relevance
-        query: user_asks.says
+        query: user
         response: self
 
-      - type: Coherence
-        response: self
+  # ── Turn 3: closing ──
+  - actor: user
+    action: says
+    content: "Great, thanks."
+
+  - actor: assistant
+    action: confirms
+    content: "You're welcome! Is there anything else I can help with?"
+    evaluations:
+      - type: llm_judge
+        criteria: |
+          1. Offers further assistance
+          2. Does NOT reopen the resolved refund
+          3. Concise and natural
 
 evaluations:
   - type: sequence
     order:
-      - { actor: assistant, action: calls, target: "Knowledge Base" }
+      - { actor: assistant, action: clarifies }
       - { actor: assistant, action: informs }
+      - { actor: assistant, action: confirms }
+  - type: variable_consistency
+    variable: refundId
 ```
 
-Four behaviors, three step-level evaluations (Groundedness, Relevance, Coherence) and one chain evaluation (sequence). The `query`, `context`, and `response` fields reference behaviors by their `id` — `user_asks.says`, `kb_result.responds`, `answer.informs` — so the adapter knows exactly which parts of the trace to evaluate. `sequence` guarantees the agent calls the KB *before* answering, every time.
+Six behaviors, three turns, five evaluations with external adapters across three stages — plus two chain evaluations (`sequence`, `variable_consistency`). Each `llm_judge` sees the trace accumulated so far: turn 1's judge only sees the clarification, turn 2's sees clarification + resolution, turn 3's sees the entire conversation. **Multi-stage evaluation in a single flow.**
 
-## No vendor lock-in
+### Ok, but how do I evaluate with multiple test scenarios?
 
-The industry standard couples agent execution and evaluation in the same platform. ABS separates them:
+Same session. Replace hardcoded values with `{{placeholders}}` and feed it a dataset:
 
+```yaml
+session: Damaged item → refund (parametrized)
+dataset:
+  id: cases
+  path: cases.jsonl
+behaviors:
+  - actor: user
+    action: says
+    content: "{{cases.userMessage}}"
+
+  - actor: assistant
+    action: clarifies
+    content: "{{cases.expectedClarification}}"
+    evaluations:
+      - type: llm_judge
+        criteria: "{{cases.clarificationCriteria}}"
+
+  - actor: user
+    action: says
+    content: "{{cases.followUp}}"
+
+  - actor: assistant
+    action: informs
+    content: "{{cases.expectedResolution}}"
+    capture:
+      refundId: "{{cases.expectedRefundId}}"
+    evaluations:
+      - type: contains
+        value: "{{cases.expectedRefundId}}"
+      - type: llm_judge
+        criteria: "{{cases.resolutionCriteria}}"
+      - type: Relevance
+        query: user
+        response: self
+
+  - actor: user
+    action: says
+    content: "{{cases.closing}}"
+
+  - actor: assistant
+    action: confirms
+    content: "{{cases.expectedClosing}}"
+    evaluations:
+      - type: llm_judge
+        criteria: "{{cases.closingCriteria}}"
+
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: clarifies }
+      - { actor: assistant, action: informs }
+      - { actor: assistant, action: confirms }
+  - type: variable_consistency
+    variable: refundId
 ```
-Industry today:  [agent + evaluation] in one platform → vendor lock-in
-ABS:             [agent] in your infra → [trace] → [evaluation] wherever you want
+
+A sample dataset (`cases.jsonl`) for the previous example could be something like this:
+
+```jsonl
+{"userMessage": "I received a damaged item, I want my money back. Order #8291.", "expectedClarification": "I understand your order #8291 arrived damaged...", "clarificationCriteria": "1. Classifies as refund\n2. References #8291\n3. Acknowledges damage\n4. Takes ownership", "followUp": "Yes please, how long?", "expectedResolution": "Refund of €47.50 approved. Reference: R-5512. 3-5 days.", "expectedRefundId": "R-5512", "resolutionCriteria": "1. States amount €47.50\n2. Reference R-5512\n3. Timeline 3-5 days\n4. Professional tone", "closing": "Great, thanks.", "expectedClosing": "You're welcome! Anything else?", "closingCriteria": "1. Offers further help\n2. Doesn't reopen refund\n3. Concise"}
+{"userMessage": "My order #3412 arrived broken, refund please.", "expectedClarification": "Sorry about order #3412 arriving broken...", "clarificationCriteria": "1. Classifies as refund\n2. References #3412\n3. Acknowledges breakage\n4. Takes ownership", "followUp": "How fast is the refund?", "expectedResolution": "Refund of €32.00 approved. Reference: R-7811. 5-7 business days.", "expectedRefundId": "R-7811", "resolutionCriteria": "1. States amount €32.00\n2. Reference R-7811\n3. Timeline 5-7 days\n4. Professional tone", "closing": "Thanks!", "expectedClosing": "You're welcome! Anything else I can do?", "closingCriteria": "1. Offers further help\n2. Doesn't reopen refund\n3. Concise"}
+{"userMessage": "Wrong item in my box for order #5567, I want a refund.", "expectedClarification": "I see order #5567 had the wrong item...", "clarificationCriteria": "1. Classifies as refund\n2. References #5567\n3. Acknowledges wrong item\n4. Takes ownership", "followUp": "Yes, go ahead.", "expectedResolution": "Refund of €89.99 approved. Reference: R-3394. 3-5 days.", "expectedRefundId": "R-3394", "resolutionCriteria": "1. States amount €89.99\n2. Reference R-3394\n3. Timeline 3-5 days\n4. Professional tone", "closing": "Perfect, thanks.", "expectedClosing": "Glad to help! Anything else?", "closingCriteria": "1. Offers further help\n2. Doesn't reopen refund\n3. Concise"}
 ```
 
-`abslang` runs your agent on your infrastructure, captures the trace, resolves the references, and sends only the relevant data to the evaluator. The evaluator **never calls your agent** — it receives `{type, input, context, response, threshold}` and returns `{passed, score, reason}`. Switch evaluators by changing one flag:
+Three rows, three runs, same multi-stage evaluation.
+
+## And can I actually test this?
+
+Yes. We built `abslang` — a CLI that compiles `.abs.yaml` artifacts and executes them against your agent. Available for both ecosystems:
 
 ```bash
-# Built-in judge (OpenAI, Anthropic, Gemini) — free, just set an env var
-OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
-
-# AI Evaluator — dimension types (Groundedness, Relevance, Coherence, Fluency)
-abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
-
-# Private LLM — nothing leaves your network
-abslang run session.abs.yaml --agent $URL --adapter llm_judge=local --adapter-url http://localhost:11434/v1
-
-# Azure AI Foundry
-abslang run session.abs.yaml --agent $URL --adapter llm_judge=azure --adapter-key $KEY
-
-# LangSmith, Galileo, Promptfoo — any provider implementing the adapter contract
-abslang run session.abs.yaml --agent $URL --adapter llm_judge=langsmith
-```
-
-Your session file never changes. Only the `--adapter` flag. Any provider can implement the adapter in an afternoon.
-
-## Get testing in 30 seconds
-
-Once you have a spec, run it against your agent:
-
-```bash
+# TypeScript / Node.js
 npm install -g abslang
+
+# Python
+pip install abslang
+```
+
+Run your first spec in 30 seconds:
+
+```bash
 abslang init
 abslang run sessions/order-status.abs.yaml --agent http://localhost:8080/chat
 ```
 
-Prefer to describe the behavior instead of writing YAML?
+**Don't want to write YAML?** Use the chatbot — describe the behavior in plain language and `abslang` generates the `.abs.yaml` for you:
 
 ```bash
 abslang chat
@@ -114,7 +184,26 @@ abslang chat
 # → generates a complete .abs.yaml with evaluations, datasets, and chain checks
 ```
 
-👉 **New to ABS?** Start with the [20-minute tutorial](./TUTORIAL.md). More worked examples with the same level of detail: [refund flow with `llm_judge` + tool calls + chain checks](./EXAMPLES.md), [intent routing with hand-offs across agents](./EXAMPLES.md), [all examples →](./EXAMPLES.md).
+### Under the hood
+
+`abslang` calls your agent, captures the full trace, resolves references, and — when the session has evaluations — sends only the relevant data to the evaluator. The evaluator **never calls your agent**; it receives `{type, input, context, response, threshold}` and returns `{passed, score, reason}`. Switch evaluators by changing one flag:
+
+```bash
+# Built-in judge (OpenAI, Anthropic, Gemini) — free, just set an env var
+OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
+
+# Private LLM — nothing leaves your network
+abslang run session.abs.yaml --agent $URL --adapter llm_judge=local --adapter-url http://localhost:11434/v1
+
+# External adapters — today AI Evaluator ships out of the box;
+# Azure, LangSmith, Galileo, Promptfoo and others can be added
+# by implementing the adapter contract (an afternoon of work)
+abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
+```
+
+Your session file never changes. Only the `--adapter` flag.
+
+👉 [Explore the full docs and tutorials →](https://fvinciarelli.github.io/abslang/docs/)
 
 ## Documents
 

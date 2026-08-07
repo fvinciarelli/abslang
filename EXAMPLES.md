@@ -4,7 +4,94 @@ Runnable versions of every example below live under [examples/](./examples/). Al
 
 ---
 
-## 1. RAG Groundedness — anti-hallucination for RAG agents
+## 1. Multi-stage evaluation — damaged item refund
+
+**The defining example.** Three conversational turns, five LLM-as-judge evaluations across three stages, plus two chain evaluations. No tool calls — works with any agent. Each `llm_judge` receives the accumulated trace up to that point, so evaluations get richer as the flow progresses.
+
+👉 Files: [refund-multi-stage.yaml](./examples/refund-multi-stage.yaml) (single case) · [refund-multi-stage-parametrized.yaml](./examples/refund-multi-stage-parametrized.yaml) (dataset-driven) · [refund-cases.jsonl](./examples/refund-cases.jsonl) (4 test scenarios)
+
+```yaml
+session: Damaged item → refund (multi-stage evaluation)
+behaviors:
+  # ── Turn 1: intent classification ──
+  - actor: user
+    action: says
+    content: "I received a damaged item, I want my money back. Order #8291."
+
+  - actor: assistant
+    action: clarifies
+    content: "I understand your order #8291 arrived damaged. I'll help you get a refund."
+    evaluations:
+      - type: llm_judge
+        criteria: |
+          1. Correctly classifies the intent as a refund request
+          2. References the order number #8291
+          3. Acknowledges the damage (not a simple return)
+          4. Takes ownership of the resolution
+
+  # ── Turn 2: resolution with delivery ──
+  - actor: user
+    action: says
+    content: "Yes please, how long will it take?"
+
+  - actor: assistant
+    action: informs
+    content: "Refund of €47.50 approved. Reference: R-5512. You'll receive it in 3-5 days."
+    capture:
+      refundId: "R-5512"
+    evaluations:
+      - type: contains
+        value: "R-5512"
+      - type: llm_judge
+        criteria: |
+          1. States the exact refund amount (€47.50)
+          2. Provides the reference number R-5512
+          3. Sets a clear timeline (3-5 days)
+          4. Professional and empathetic tone
+      - type: Relevance
+        query: user
+        response: self
+
+  # ── Turn 3: closing ──
+  - actor: user
+    action: says
+    content: "Great, thanks."
+
+  - actor: assistant
+    action: confirms
+    content: "You're welcome! Is there anything else I can help with?"
+    evaluations:
+      - type: llm_judge
+        criteria: |
+          1. Offers further assistance
+          2. Does NOT reopen the resolved refund
+          3. Concise and natural
+
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: clarifies }
+      - { actor: assistant, action: informs }
+      - { actor: assistant, action: confirms }
+  - type: variable_consistency
+    variable: refundId
+```
+
+### Same flow, parametrized with a dataset
+
+Replace hardcoded values with `{{placeholders}}`, feed it 4 rows, get 4 runs:
+
+```bash
+abslang run examples/refund-multi-stage-parametrized.yaml \
+  --agent $URL \
+  --dataset examples/refund-cases.jsonl
+```
+
+Each row is a different scenario (damaged item, broken item, wrong item, cracked screen) with its own expected responses and evaluation criteria. Same multi-stage structure, N test cases.
+
+---
+
+## 2. RAG Groundedness — anti-hallucination for RAG agents
 
 A user asks a question. The agent queries a knowledge base. We verify the answer is grounded in the retrieved context — no hallucinations.
 
@@ -85,7 +172,7 @@ See [examples/rag-groundedness.yaml](./examples/rag-groundedness.yaml).
 
 ---
 
-## 2. Refund request — free-form LLM judge + hard facts + chain checks
+## 3. Refund request — free-form LLM judge + hard facts + chain checks
 
 A customer returns a damaged item. The agent verifies eligibility across two API calls, processes the refund, and confirms.
 

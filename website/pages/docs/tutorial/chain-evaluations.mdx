@@ -1,43 +1,35 @@
 import DocsLayout from '@/components/layout/DocsLayout';
 
-export const frontmatter = { title: '4. Chain evaluations', description: 'Minute 15–20: sequence, never, variable_consistency — properties of the whole trace.' };
+export const frontmatter = { title: '4. Chain evaluations', description: 'Minute 15–20: sequence, variable_consistency — properties that span the entire trace.' };
 
 <DocsLayout frontmatter={frontmatter}>
 
 So far we've evaluated individual steps. But there are things you can only verify by looking at **the entire conversation**:
 
-- Did the steps happen in the right order?
-- Did the refund ID stay the same everywhere?
-- Is there something that should **never** have happened?
+- Did the three stages happen in the right order?
+- Did the refund ID stay the same everywhere it appeared?
 
 These go in an `evaluations:` block at the same level as `behaviors:`, **not** inside a step:
 
 ```yaml
 evaluations:
-  # 1. Order: the bot must ask BEFORE calling the APIs
+  # 1. The 3 assistant actions MUST happen in this relative order
   - type: sequence
     order:
-      - { actor: assistant, action: asks }
-      - { actor: assistant, action: calls, target: "Orders API" }
-      - { actor: assistant, action: calls, target: "Refunds API" }
+      - { actor: assistant, action: clarifies }
       - { actor: assistant, action: informs }
+      - { actor: assistant, action: confirms }
 
-  # 2. The refund ID must be the same everywhere
+  # 2. The refund ID must be consistent everywhere
   - type: variable_consistency
     variable: refundId
-
-  # 3. This flow must NEVER transfer to a human
-  - type: never
-    match: { actor: assistant, action: hands_off }
 ```
 
 **What each one does:**
 
-- **`sequence`**: verifies the 4 assistant steps happen in that relative order. It doesn't matter if there are other steps in between — it only matters that A is before B, B before C, etc.
+- **`sequence`**: verifies the three assistant actions happen in that relative order. It doesn't matter if there are other steps in between — it only matters that clarifies is before informs is before confirms. If the agent jumps straight to the resolution without clarifying first, the sequence fails.
 
-- **`variable_consistency`**: remember `capture: refundId: "R-5512"`? This checks that every time `R-5512` appears in the conversation, the value is the same. Catches subtle bugs where the bot says "R-5512" at the beginning and "R-5513" later.
-
-- **`never`**: a gatekeeper. If this flow transfers to a human, something went wrong and the test fails.
+- **`variable_consistency`**: remember `capture: refundId: "R-5512"` from turn 2? This checks that every time a refund ID appears anywhere in the trace, it's the same value. Catches subtle bugs where the agent says "R-5512" early and "R-5513" later.
 
 ### More chain evaluators
 
@@ -45,14 +37,14 @@ evaluations:
 |---|---|
 | `sequence` | Steps in relative order |
 | `eventually` | Something happens at least once |
-| `never` | Something **never** happens |
+| `never` | Something **never** happens (e.g. never hands off to human) |
 | `count` | Something happens exactly N times |
 | `within` | A happens within N steps after B |
 | `variable_consistency` | A captured value stays the same |
 
 ### The complete document
 
-All together, it's about 70 lines. A single page. Your PO understands it, your dev knows what to build, you have 7 automated verifications. One file, three uses.
+About 60 lines. PO understands the conversation. Dev knows what to build. QA has 7 automated checks across 3 stages. **One file.**
 
 ---
 

@@ -1,196 +1,113 @@
 import DocsLayout from '@/components/layout/DocsLayout';
 
-export const frontmatter = { title: '6. Datasets and golden data', description: 'From one happy-path test to 100 parameterized runs with .jsonl datasets.' };
+export const frontmatter = { title: '6. Datasets and golden data', description: 'From one happy-path case to N parameterized runs — same multi-stage evaluation, driven by a .jsonl dataset.' };
 
 <DocsLayout frontmatter={frontmatter}>
 
-So far we've run **a single case**. The happy path with fixed data. That's fine to start, but with AI agents you need more: what about 100 different orders? What if the name has accents? What if the amount is zero?
+So far we've run **a single case** with hardcoded data. But with AI agents you need more: what about a broken item? A wrong item? A cracked screen? Each with its own expected response and evaluation criteria.
 
-ABS has an answer: **datasets**. Turn your Session into a template with `{{placeholders}}` and run it against a data file.
+ABS answers this with **datasets**. Turn your session into a template with `{{placeholders}}` and run it against a data file.
 
-### Step 1: Turn fixed values into placeholders
+## Step 1: Replace fixed values with placeholders
 
-Instead of hardcoding `"8291"` and `"R-5512"`, use `{{variables}}`:
-
-```yaml
-session: Refund — damaged item
-behaviors:
-  - actor: user
-    action: says
-    content: "I received order #{{orderId}} damaged, I want to return it"
-
-  - actor: assistant
-    action: asks
-    content: "I'm sorry about the damage. Can you confirm your name and order date?"
-    evaluations:
-      - type: llm_judge
-        criteria: |
-          1. Shows empathy for the damaged item
-          2. Mentions the order number
-          3. Asks for verification before taking action
-
-  - actor: user
-    action: says
-    content: "{{customerName}}, ordered last Tuesday"
-
-  - actor: assistant
-    action: calls
-    target: Orders API
-    with:
-      orderId: "{{orderId}}"
-
-  # ... rest of the flow with {{expectedAmount}}, {{expectedKeyword}}, etc.
-
-  - actor: assistant
-    action: informs
-    content: "Refund of {{expectedAmount}} processed, {{customerName}}. Reference: {{refundId}}."
-    capture:
-      refundId: "{{refundId}}"
-    evaluations:
-      - type: contains
-        value: "{{expectedKeyword}}"
-      - type: llm_judge
-        criteria: |
-          1. States the amount ({{expectedAmount}}) and timeline (3-5 days)
-          2. Uses the customer's name ({{customerName}})
-          3. Reassuring tone, no upsells or deflections
-```
-
-### Step 2: Create your golden dataset
-
-A `.jsonl` file where each line is a different case:
-
-```jsonl
-{"orderId": "8291", "customerName": "Franco", "expectedAmount": "€47.50", "refundId": "R-5512", "expectedKeyword": "processed"}
-{"orderId": "4456", "customerName": "María José", "expectedAmount": "€128.00", "refundId": "R-7813", "expectedKeyword": "authorized"}
-{"orderId": "1023", "customerName": "Åsmund", "expectedAmount": "€9.99", "refundId": "R-2004", "expectedKeyword": "completed"}
-```
-
-### Step 3: Run everything together
-
-```bash
-abslang run refund.abs.yaml --agent $URL --dataset golden-cases.jsonl
-```
-
-The Runner executes the Session **once per row**. If you have 100 rows, it runs 100 tests:
-
-```
-Session:  Refund — damaged item
-Agent:    http://localhost:8080/chat
-Dataset:  golden-cases.jsonl (100 rows)
-Result:   ❌ FAILED
-Rows:     97/100 passed · 3 failed
-
-❌ Row 42 (orderId=5555):
-  Step 8 — assistant informs:
-    Expected keyword: "processed"
-    Observed: "Your refund was rejected"
-    ❌ contains "processed" → FAILED
-```
-
-**This is what you want as QA:** the same spec, run against diverse real data, catching regressions. The Session is the *what*. The dataset is the *with what data*.
-
-### Bonus: run a single row while developing
-
-```bash
-abslang run refund.abs.yaml --agent $URL --dataset golden-cases.jsonl --filter "orderId:8291"
-```
-
-`--filter` lets you iterate on a single case without waiting for all 100.
-
-### Advanced: quality evaluations with dataset columns
-
-Beyond exact assertions like `contains`, your golden dataset can feed more sophisticated evaluations. For example, verifying the bot's response **doesn't hallucinate** (Groundedness), **answers what the user asked** (Relevance), or **isn't biased** (bias check with `llm_judge`).
-
-Imagine a customer support bot with a knowledge base. The dataset includes the context the bot should use:
-
-```jsonl
-{"userQuery": "What's the return policy?", "kbContext": "Returns are accepted within 30 days. Opened items have a 15% surcharge.", "expectedPolicy": "30 days"}
-{"userQuery": "Do you ship to Uruguay?", "kbContext": "We ship to Argentina, Chile, Uruguay, and Paraguay. Cost depends on weight.", "expectedPolicy": "Uruguay"}
-{"userQuery": "Do you offer extended warranty?", "kbContext": "We offer a 1-year warranty on all products. Extension to 3 years at 15% additional cost.", "expectedPolicy": "3 years"}
-```
-
-Now the Session references those columns both in the input and in the evaluations:
+Instead of hardcoding every message, use `{{cases.column}}`:
 
 ```yaml
-session: Knowledge base query
+session: Damaged item → refund (parametrized)
 dataset:
   id: cases
-  path: kb-cases.jsonl
+  path: refund-cases.jsonl
 behaviors:
-  - id: user_asks
-    actor: user
+  # ── Turn 1 ──
+  - actor: user
     action: says
-    content: "{{cases.userQuery}}"
+    content: "{{cases.userMessage}}"
 
-  - id: kb_result
-    actor: tool
-    action: responds
-    target: Knowledge Base
-    content: "{{cases.kbContext}}"
-
-  - id: answer
-    actor: assistant
-    action: informs
+  - actor: assistant
+    action: clarifies
+    content: "{{cases.expectedClarification}}"
     evaluations:
-      # Does the response rely on the context or invent facts?
-      - type: Groundedness
-        query: user_asks.says
-        context: kb_result.responds
-        response: self
-        threshold: 0.8
-
-      # Does it answer what the user asked?
-      - type: Relevance
-        query: user_asks.says
-        response: self
-        threshold: 0.7
-
-      # Is the response internally coherent?
-      - type: Coherence
-        response: self
-
-      # Hard fact: does it mention the right policy?
-      - type: contains
-        value: "{{cases.expectedPolicy}}"
-
-      # Right tone? No bias?
       - type: llm_judge
-        criteria: |
-          1. Answers the user's question: {{cases.userQuery}}
-          2. Doesn't make up information not in the context
-          3. Shows no bias or favoritism
-          4. Professional and helpful tone
-        threshold: 0.7
+        criteria: "{{cases.clarificationCriteria}}"
+
+  # ── Turn 2 ──
+  - actor: user
+    action: says
+    content: "{{cases.followUp}}"
+
+  - actor: assistant
+    action: informs
+    content: "{{cases.expectedResolution}}"
+    capture:
+      refundId: "{{cases.expectedRefundId}}"
+    evaluations:
+      - type: contains
+        value: "{{cases.expectedRefundId}}"
+      - type: llm_judge
+        criteria: "{{cases.resolutionCriteria}}"
+      - type: Relevance
+        query: user
+        response: self
+
+  # ── Turn 3 ──
+  - actor: user
+    action: says
+    content: "{{cases.closing}}"
+
+  - actor: assistant
+    action: confirms
+    content: "{{cases.expectedClosing}}"
+    evaluations:
+      - type: llm_judge
+        criteria: "{{cases.closingCriteria}}"
+
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: clarifies }
+      - { actor: assistant, action: informs }
+      - { actor: assistant, action: confirms }
+  - type: variable_consistency
+    variable: refundId
 ```
 
-### Where do these evaluations run? — Adapters
+**Everything** can be parametrized: user messages, expected responses, even the evaluation criteria themselves. Each scenario can define its own quality bar.
 
-Simple evaluations (`contains`, `exact_match`, `regex`, `schema`, `tool_call`) run **locally** on your machine, with no external calls. They're instant and free.
+## Step 2: Create the dataset
 
-Evaluations that need an LLM (`llm_judge`, `Groundedness`, `Relevance`, `Coherence`, `Fluency`) go through an **adapter**. The adapter is a bridge between ABS and *wherever you want to run the judgment*. ABS doesn't lock you into a provider:
+A `.jsonl` file — one JSON object per row, one row per test scenario:
 
-| Option | How to configure | Best for |
-|---|---|---|
-| **AI Evaluator (default)** | Already configured. 5 free evaluations/day without API key. | Getting started with zero infrastructure |
-| **Your own local LLM** | `--adapter llm_judge=local --adapter-url http://localhost:11434` | Full privacy, no usage limits |
-| **OpenAI / Azure / Vertex AI** | `--adapter llm_judge=azure --adapter-key $KEY` | Integration with your existing provider |
-| **LangSmith / Promptfoo / Galileo** | Each publishes its own adapter. Configure with `--adapter`. | If you already use an observability platform |
+```jsonl
+{"userMessage":"I received a damaged item, I want my money back. Order #8291.","expectedClarification":"I understand your order #8291 arrived damaged. I'll help you get a refund.","clarificationCriteria":"1. Classifies as refund\n2. References #8291\n3. Acknowledges damage\n4. Takes ownership","followUp":"Yes please, how long?","expectedResolution":"Refund of €47.50 approved. Reference: R-5512. 3-5 days.","expectedRefundId":"R-5512","resolutionCriteria":"1. States amount €47.50\n2. Reference R-5512\n3. Timeline 3-5 days\n4. Professional tone","closing":"Great, thanks.","expectedClosing":"You're welcome! Anything else?","closingCriteria":"1. Offers further help\n2. Doesn't reopen refund\n3. Concise"}
+{"userMessage":"My order #3412 arrived broken, refund please.","expectedClarification":"Sorry about order #3412 arriving broken...","clarificationCriteria":"1. Classifies as refund\n2. References #3412\n3. Acknowledges breakage\n4. Takes ownership","followUp":"How fast is the refund?","expectedResolution":"Refund of €32.00 approved. Reference: R-7811. 5-7 business days.","expectedRefundId":"R-7811","resolutionCriteria":"1. States amount €32.00\n2. Reference R-7811\n3. Timeline 5-7 days\n4. Professional tone","closing":"Thanks!","expectedClosing":"You're welcome! Anything else I can do?","closingCriteria":"1. Offers further help\n2. Doesn't reopen refund\n3. Concise"}
+{"userMessage":"Wrong item in my box for order #5567, I want a refund.","expectedClarification":"I see order #5567 had the wrong item...","clarificationCriteria":"1. Classifies as refund\n2. References #5567\n3. Acknowledges wrong item\n4. Takes ownership","followUp":"Yes, go ahead.","expectedResolution":"Refund of €89.99 approved. Reference: R-3394. 3-5 days.","expectedRefundId":"R-3394","resolutionCriteria":"1. States amount €89.99\n2. Reference R-3394\n3. Timeline 3-5 days\n4. Professional tone","closing":"Perfect, thanks.","expectedClosing":"Glad to help! Anything else?","closingCriteria":"1. Offers further help\n2. Doesn't reopen refund\n3. Concise"}
+{"userMessage":"Order #1234 came with a cracked screen, refund please.","expectedClarification":"That's not acceptable — your order #1234 arrived with a cracked screen...","clarificationCriteria":"1. Classifies as refund\n2. References #1234\n3. Acknowledges cracked screen\n4. Takes ownership","followUp":"How many days?","expectedResolution":"Refund of €215.00 approved. Reference: R-9904. 3-5 days.","expectedRefundId":"R-9904","resolutionCriteria":"1. States amount €215.00\n2. Reference R-9904\n3. Timeline 3-5 days\n4. Professional tone","closing":"Awesome, thank you.","expectedClosing":"You're welcome! Anything else I can help with?","closingCriteria":"1. Offers further help\n2. Doesn't reopen refund\n3. Concise"}
+```
+
+Four scenarios — damaged, broken, wrong item, cracked screen — each with its own messages, expected responses, and evaluation criteria. Same session structure, different data.
+
+## Step 3: Run everything
 
 ```bash
-# With AI Evaluator (default, no configuration needed)
-abslang run kb-session.abs.yaml --agent $URL --dataset kb-cases.jsonl
-
-# With your own local LLM (Ollama, llama.cpp, etc.)
-abslang run kb-session.abs.yaml --agent $URL --dataset kb-cases.jsonl \
-  --adapter llm_judge=local --adapter-url http://localhost:11434
-
-# With Azure AI Foundry
-abslang run kb-session.abs.yaml --agent $URL --dataset kb-cases.jsonl \
-  --adapter llm_judge=azure --adapter-key $AZURE_KEY
+abslang run refund-parametrized.abs.yaml \
+  --agent $URL \
+  --dataset refund-cases.jsonl
 ```
 
-**The Session is the same. The dataset is the same.** You only change the adapter depending on the environment: local while developing, AI Evaluator in staging, Azure in production. The *what* doesn't change; the *where* is resolved with a flag.
+Four rows, four runs. Each row gets the full multi-stage evaluation — five `llm_judge` calls across three stages, plus the two chain evaluations. 28 evaluations total across the suite.
+
+### Filter a single row during development
+
+```bash
+abslang run refund-parametrized.abs.yaml \
+  --agent $URL \
+  --dataset refund-cases.jsonl \
+  --filter "expectedRefundId:R-5512"
+```
+
+---
+
+**This is what you want as QA:** the same spec, run against diverse real data, catching regressions scenario by scenario. The session is the *what*. The dataset is the *with what data*. The multi-stage evaluation is the *how well* — at every stage, for every case.
 
 ---
 
