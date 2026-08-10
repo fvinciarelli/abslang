@@ -4,19 +4,21 @@ export const frontmatter = { title: 'CLI Reference', description: 'abs init, abs
 
 <DocsLayout frontmatter={frontmatter}>
 
-The CLI is the first thing anyone touches. It has to make two people happy at the same time:
+The CLI is the first thing anyone touches. It has to make three people happy at the same time:
 
 - **QA**: "I want to run this against staging and see if it passed or not, now."
 - **Data**: "I have 200 cases in a JSONL. Give me an aggregated report."
+- **Everyone**: "I don't want to learn YAML. Just let me describe the behavior and generate the file for me."
 
-Both should succeed on their first try.
+All three should succeed on their first try.
 
 ---
 
-## The three commands
+## The four commands
 
 ```
 abslang init                    # Scaffold a project
+abslang chat                    # Generate a session by describing it in plain language
 abslang run                     # Execute sessions against an agent
 abslang report                  # View results from a previous run
 ```
@@ -28,7 +30,7 @@ abslang report                  # View results from a previous run
 Creates a project skeleton in the current directory:
 
 ```bash
-abs init
+abslang init
 ```
 
 Creates:
@@ -41,6 +43,30 @@ Creates:
 └── datasets/
     └── order-status.jsonl       # 3 rows that bind those placeholders
 ```
+
+---
+
+## abslang chat
+
+You don't need to know the YAML format. Describe what the agent should do in plain language and `abslang chat` builds the `.abs.yaml` for you:
+
+```bash
+abslang chat
+```
+
+```
+🤖 ABS Assistant — describe the agent behavior you want to test
+
+You: A customer asks for a refund on a damaged item.
+     The agent should verify the order, process the refund,
+     and confirm with the amount and reference.
+
+Assistant: I'll draft a refund flow with tool calls…
+           [generates complete .abs.yaml with evaluations,
+            dataset placeholders, and chain checks]
+```
+
+Uses `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY` — whichever is set. Override the model with `ABS_CHAT_MODEL` and the base URL with `ABS_CHAT_BASE_URL`.
 
 ---
 

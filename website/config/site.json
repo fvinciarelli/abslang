@@ -11,7 +11,7 @@
       { "label": "Docs", "href": "/docs" },
       { "label": "Spec", "href": "/docs/specification" },
       { "label": "Examples", "href": "/docs/examples" },
-      { "label": "GitHub", "href": "https://github.com/fvinciarelli/abslang", "external": true }
+      { "label": "Star on Github", "href": "https://github.com/fvinciarelli/abslang", "external": true }
     ]
   },
   "docs": {

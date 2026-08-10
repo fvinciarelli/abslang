@@ -27,6 +27,17 @@ behaviors:
 
 Three behaviors, one evaluation. Anyone can read it — PO, dev, QA.
 
+### Don't want to write YAML?
+
+Use the chatbot — describe the behavior in plain language and `abslang` generates the `.abs.yaml` for you:
+
+```bash
+abslang chat
+# Uses OPENAI_API_KEY, ANTHROPIC_API_KEY, or DEEPSEEK_API_KEY
+# You: A customer asks for a refund. The agent should verify the order, process it, and confirm.
+# → generates a complete .abs.yaml with evaluations, datasets, and chain checks
+```
+
 ## How the docs are organized
 
 The documentation is split into several sections:

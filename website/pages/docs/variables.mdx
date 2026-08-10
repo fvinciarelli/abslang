@@ -30,7 +30,44 @@ The capture key (`order_id`) becomes available as `{{order_id}}` for all subsequ
 
 ## Runtime bindings
 
-Values can also be provided at execution time — via dataset row, CLI flag, or environment variable:
+Values can also be provided at execution time — via dataset row, CLI flag, or environment variable. A `{{variable}}` with no prior `capture:` is not an error — it is a **parameter**.
+
+### Datasets
+
+A dataset is declared in the session file with an `id` and a `path`. Each row in the file becomes one execution of the session. Columns are referenced as `{{id.column}}`.
+
+```yaml
+# session.abs.yaml
+dataset:
+  id: cases
+  path: cases.jsonl
+
+behaviors:
+  - actor: user
+    action: says
+    content: "{{cases.userQuery}}"
+```
+
+```jsonl
+# cases.jsonl
+{"userQuery": "What's your return policy?"}
+{"userQuery": "Can I return opened items?"}
+{"userQuery": "Do you do refunds?"}
+```
+
+When the Runner executes with `--dataset`, it runs the Session once per row, binding the row's keys as `{{variables}}`. The report aggregates all runs together.
+
+### Session as template
+
+A Session that uses runtime bindings is a template. The same Session file works for:
+
+- **Documentation** — a PO reads it and sees the shape of the interaction
+- **A single smoke test** — `abslang run --var orderId=12345`
+- **A full regression suite** — `abslang run --dataset 200-cases.jsonl`
+
+The Session doesn't change. The data does.
+
+### CLI bindings
 
 ```bash
 abslang run session.abs.yaml --var user_name="Alice"
@@ -48,12 +85,18 @@ behaviors:
 
 When resolving `{{variable}}`, implementations MUST follow this precedence:
 
-1. **Captured value** — nearest prior `capture:` of that name in the same Session.
-2. **Runtime binding** — provided at execution time.
+1. **Captured value** — nearest prior `capture:` of that name in the same Session. A captured value always wins over a dataset binding, because it represents something the agent or user actually said during the conversation.
+2. **Runtime binding** — provided at execution time via dataset row, CLI flag, or environment variable.
 3. **Error** — if no resolution source exists.
 
-## Design rationale
+## Scope
 
-Placeholders without runtime bindings are a feature, not a bug. A session with `{{user_name}}` is a template — it describes the shape of an interaction without committing to concrete values. The same session can be run against a dataset of 100 user names, or with a different value each time via CLI.
+In v0.1, variables are **Session-scoped**: a variable captured in one Session is not visible in another. Cross-Session variable sharing is not defined in v0.1.
+
+## What's intentionally out of scope for v0.1
+
+- Typed variables (all captured values are treated as opaque scalars or structures)
+- Computed/derived variables (no templating expressions beyond simple substitution)
+- Cross-Session or global variables
 
 </DocsLayout>

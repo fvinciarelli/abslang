@@ -18,14 +18,25 @@ An ABS document is valid YAML. (JSON is also valid, being a syntactic subset of 
 session: <string>            # REQUIRED — human-readable session name
 description: <string>        # OPTIONAL
 abs_version: "0.1"           # OPTIONAL in v0.1, RECOMMENDED, will be REQUIRED in v0.2
-behaviors:                   # REQUIRED — ordered list of Behavior objects
-  - actor: <string>
+dataset:                     # OPTIONAL — dataset that feeds this session
+  id: <string>               #   REQUIRED if dataset present
+  path: <string>             #   REQUIRED if dataset present — path to .json or .jsonl
+fragments:                   # OPTIONAL — named reusable lists of Behaviors
+  <fragment_name>:
+    - actor: <string>
+      action: <string>
+      # ... any Behavior fields
+behaviors:                   # REQUIRED — ordered list of Behavior objects and/or fragment includes
+  - id: <string>             #   OPTIONAL — unique id, used by evaluations to reference steps
+    actor: <string>
     action: <string>
     target: <string>         # OPTIONAL
     content: <any>           # OPTIONAL
     capture: <map>           # OPTIONAL
-    with: <map>              # OPTIONAL
+    with: <map>              # OPTIONAL — parameters, partial match (default)
+    with_only: <map>         # OPTIONAL — parameters, strict match (mutually exclusive with with)
     evaluations: <list>      # OPTIONAL — step-level, checks this Behavior only
+  - include: <fragment_name> # OPTIONAL — inserts a fragment's Behaviors here
 evaluations: <list>           # OPTIONAL — session-level (chain), checks the whole trace
 ```
 
@@ -48,12 +59,14 @@ This is **not valid YAML** — a block mapping cannot be directly followed by a 
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
+| `id` | string | No | Unique identifier for this Behavior. Used by evaluations to reference steps via `id.action`. |
 | `actor` | string | Yes | Who performs the Behavior. See Core Model. |
 | `action` | string | Yes | What is performed. See Vocabulary. |
 | `target` | string | No | Object or destination of the action. Semantics determined by action category — see §4. |
 | `content` | any | No | Payload of the Behavior: text, structured data, or displayed information. |
 | `capture` | map | No | Names runtime values observed in this Behavior for later reuse. |
-| `with` | map | No | Parameters passed on an outbound Action (typically `calls`), MAY reference captured variables. |
+| `with` | map | No | Parameters passed on an outbound Action (typically `calls`), MAY reference captured variables. Partial match by default. |
+| `with_only` | map | No | Parameters passed on an outbound Action. Strict match — mutually exclusive with `with`. See Tools & MCP. |
 | `evaluations` (step-level) | list | No | Step-level verification rules for that Behavior only. |
 | `evaluations` (session-level) | list | No | Session-level (chain) verification rules over the whole trace. |
 
