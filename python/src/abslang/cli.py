@@ -594,9 +594,65 @@ def chat_cmd(provider: str | None, api_key: str | None):
     click.echo("\n🤖 ABS Assistant — describe the agent behavior you want to test\n")
     click.echo("  I'll ask you guided questions to understand your flow and build the best possible test.")
     click.echo("  Some questions may feel extra — they're there to make sure we don't miss edge cases.\n")
-    click.echo("  Type /save <path> to save the generated YAML, /quit to exit.\n")
+    click.echo("  Type /save <filename> to save (e.g. /save refunds → refunds.abs.yaml), /quit to exit.\n")
+    click.echo("  ⚠️  Not all agents expose intermediate steps. The assistant will ask about this first.\n")
 
     import asyncio
+
+    def render_md(text: str) -> str:
+        """Basic terminal markdown renderer."""
+        lines = text.split("\n")
+        out: list[str] = []
+        in_code_block = False
+
+        for line in lines:
+            if line.startswith("```"):
+                in_code_block = not in_code_block
+                if in_code_block:
+                    out.append(click.style("┌─ code ──────────────────────", dim=True))
+                else:
+                    out.append(click.style("└──────────────────────────────", dim=True))
+                continue
+            if in_code_block:
+                out.append(click.style("│ " + line, dim=True))
+                continue
+
+            rendered = line
+
+            # Headers
+            import re as _re
+            if _re.match(r"^### ", rendered):
+                rendered = click.style(rendered[4:], bold=True, underline=True)
+            elif _re.match(r"^## ", rendered):
+                rendered = click.style(rendered[3:], bold=True, underline=True)
+            elif _re.match(r"^# ", rendered):
+                rendered = click.style(rendered[2:], bold=True, underline=True)
+
+            # Bold
+            rendered = _re.sub(
+                r"\*\*(.+?)\*\*",
+                lambda m: click.style(m.group(1), bold=True),
+                rendered,
+            )
+
+            # Inline code
+            rendered = _re.sub(
+                r"`([^`]+)`",
+                lambda m: click.style(m.group(1), fg="cyan"),
+                rendered,
+            )
+
+            # Bullet lists
+            if _re.match(r"^\s*- \s", rendered):
+                rendered = _re.sub(r"^(\s*)- ", r"\1  • ", rendered)
+
+            # Numbered lists
+            if _re.match(r"^\d+\.\s", rendered):
+                rendered = "  " + rendered
+
+            out.append(rendered)
+
+        return "\n".join(out)
 
     async def _spinner(task: asyncio.Task):
         frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -629,8 +685,19 @@ def chat_cmd(provider: str | None, api_key: str | None):
                 if not last_yaml:
                     click.echo("No YAML generated yet. Chat a bit first.\n")
                 elif not path:
-                    click.echo("Usage: /save <path>\n")
+                    click.echo("Usage: /save <filename>  (e.g. /save refunds → refunds.abs.yaml)\n")
                 else:
+                    # Auto-append .abs.yaml if no yaml extension
+                    if not path.endswith(".yaml") and not path.endswith(".abs.yaml"):
+                        path = path + ".abs.yaml"
+
+                    # Check for directory
+                    from pathlib import Path as PathLib
+                    p = PathLib(path)
+                    if p.exists() and p.is_dir():
+                        click.echo(f"❌ '{path}' is a directory. Provide a filename, e.g. /save refunds\n")
+                        continue
+
                     # Validate before saving
                     try:
                         from .parser import parse_yaml, expand_fragments
@@ -638,10 +705,10 @@ def chat_cmd(provider: str | None, api_key: str | None):
                         expand_fragments(docs[0])
                         from pathlib import Path
                         Path(path).write_text(last_yaml)
-                        click.echo(f"✅ Valid YAML — saved to {path}\n")
+                        click.echo(f"✅ Saved to {path}\n")
                     except Exception as e:
                         click.echo(f"❌ Invalid YAML: {e}")
-                        click.echo("  Keep chatting to refine it, or use /force <path> to save anyway.\n")
+                        click.echo("  Keep chatting to refine it, or use /force to save anyway.\n")
                 continue
 
             if trimmed.startswith("/force"):
@@ -650,6 +717,8 @@ def chat_cmd(provider: str | None, api_key: str | None):
                 if not last_yaml:
                     click.echo("No YAML generated yet.\n")
                 elif path:
+                    if not path.endswith(".yaml") and not path.endswith(".abs.yaml"):
+                        path = path + ".abs.yaml"
                     from pathlib import Path
                     Path(path).write_text(last_yaml)
                     click.echo(f"⚠️  Saved without validation to {path}\n")
@@ -664,7 +733,7 @@ def chat_cmd(provider: str | None, api_key: str | None):
                 await spinner_task
 
                 click.echo(click.style("Assistant: ", fg="blue"))
-                click.echo(response)
+                click.echo(render_md(response))
                 click.echo()
                 messages.append({"role": "assistant", "content": response})
 
@@ -675,7 +744,7 @@ def chat_cmd(provider: str | None, api_key: str | None):
                         docs = parse_yaml(yaml_content)
                         expand_fragments(docs[0])
                         last_yaml = yaml_content
-                        click.echo(click.style("  ✅ Valid YAML extracted. Use /save <path> to write it.\n", dim=True))
+                        click.echo(click.style("  ✅ Valid YAML extracted. Use /save <name> (e.g. /save refunds) or /save path/name\n", dim=True))
                     except Exception as e:
                         last_yaml = yaml_content
                         click.echo(click.style(f"  ⚠️  YAML extracted but has issues: {e}", fg="yellow"))

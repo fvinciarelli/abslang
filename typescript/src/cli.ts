@@ -20,7 +20,7 @@ const program = new Command();
 program
   .name("abs")
   .description("ABS — Agent Behavior Specification CLI")
-  .version("0.2.0");
+  .version("0.2.1");
 
 // ── init ──
 
@@ -727,6 +727,62 @@ jobs:
     }
   });
 
+// ── Terminal markdown renderer ──
+
+function renderMd(text: string): string {
+  const lines = text.split("\n");
+  const out: string[] = [];
+  let inCodeBlock = false;
+
+  for (const line of lines) {
+    // Code blocks
+    if (line.startsWith("```")) {
+      inCodeBlock = !inCodeBlock;
+      if (inCodeBlock) {
+        out.push(chalk.dim("┌─ code ──────────────────────"));
+      } else {
+        out.push(chalk.dim("└──────────────────────────────"));
+      }
+      continue;
+    }
+    if (inCodeBlock) {
+      out.push(chalk.dim("│ " + line));
+      continue;
+    }
+
+    let rendered = line;
+
+    // Headers
+    if (/^### /.test(rendered)) {
+      rendered = chalk.bold.underline(rendered.replace(/^### /, ""));
+    } else if (/^## /.test(rendered)) {
+      rendered = chalk.bold.underline(rendered.replace(/^## /, ""));
+    } else if (/^# /.test(rendered)) {
+      rendered = chalk.bold.underline(rendered.replace(/^# /, ""));
+    }
+
+    // Bold
+    rendered = rendered.replace(/\*\*(.+?)\*\*/g, (_, t) => chalk.bold(t));
+
+    // Inline code
+    rendered = rendered.replace(/`([^`]+)`/g, (_, t) => chalk.cyan(t));
+
+    // Bullet lists
+    if (/^\s*- \s/.test(rendered)) {
+      rendered = rendered.replace(/^(\s*)- /, "$1  • ");
+    }
+
+    // Numbered lists — indent slightly
+    if (/^\d+\.\s/.test(rendered)) {
+      rendered = "  " + rendered;
+    }
+
+    out.push(rendered);
+  }
+
+  return out.join("\n");
+}
+
 // ── chat ──
 
 program
@@ -758,7 +814,8 @@ program
     console.log(chalk.bold("\n🤖 ABS Assistant — describe the agent behavior you want to test\n"));
     console.log(chalk.dim("  I'll ask you guided questions to understand your flow and build the best possible test."));
     console.log(chalk.dim("  Some questions may feel extra — they're there to make sure we don't miss edge cases.\n"));
-    console.log(chalk.dim("  Type /save <path> to save the generated YAML, /quit to exit.\n"));
+    console.log(chalk.dim("  Type /save <filename> to save (e.g. /save refunds → refunds.abs.yaml), /quit to exit.\n"));
+    console.log(chalk.dim("  ⚠️  Not all agents expose intermediate steps. The assistant will ask about this first.\n"));
 
     let lastYaml: string | null = null;
 
@@ -786,12 +843,27 @@ program
         }
 
         if (trimmed.startsWith("/save")) {
-          const path = trimmed.split(/\s+/)[1];
+          let path = trimmed.split(/\s+/)[1];
           if (!lastYaml) {
             console.log(chalk.yellow("No YAML generated yet. Chat a bit first.\n"));
           } else if (!path) {
-            console.log(chalk.yellow("Usage: /save <path>\n"));
+            console.log(chalk.dim("Usage: /save <filename>  (e.g. /save refunds → refunds.abs.yaml)\n"));
           } else {
+            // Auto-append .abs.yaml if no yaml extension
+            if (!path.endsWith(".yaml") && !path.endsWith(".abs.yaml")) {
+              path = path + ".abs.yaml";
+            }
+
+            // Check for directory
+            const { existsSync, statSync } = await import("fs");
+            try {
+              if (existsSync(path) && statSync(path).isDirectory()) {
+                console.log(chalk.red(`❌ '${path}' is a directory. Provide a filename, e.g. /save refunds\n`));
+                ask();
+                return;
+              }
+            } catch (_) {}
+
             // Validate YAML before saving
             try {
               const { parseYaml, expandFragments } = await import("./parser");
@@ -799,10 +871,10 @@ program
               expandFragments(docs[0]);
               const { writeFileSync } = await import("fs");
               writeFileSync(path, lastYaml);
-              console.log(chalk.green(`✅ Valid YAML — saved to ${path}\n`));
+              console.log(chalk.green(`✅ Saved to ${path}\n`));
             } catch (err: any) {
               console.log(chalk.red(`❌ Invalid YAML: ${err.message}`));
-              console.log(chalk.yellow("  The generated YAML has errors. Keep chatting to refine it, or /save anyway with /force.\n"));
+              console.log(chalk.yellow("  Keep chatting to refine it, or use /force to save anyway.\n"));
             }
           }
           ask();
@@ -810,10 +882,13 @@ program
         }
 
         if (trimmed.startsWith("/force")) {
-          const path = trimmed.split(/\s+/)[1];
+          let path = trimmed.split(/\s+/)[1];
           if (!lastYaml) {
             console.log(chalk.yellow("No YAML generated yet.\n"));
           } else if (path) {
+            if (!path.endsWith(".yaml") && !path.endsWith(".abs.yaml")) {
+              path = path + ".abs.yaml";
+            }
             const { writeFileSync } = await import("fs");
             writeFileSync(path, lastYaml);
             console.log(chalk.yellow(`⚠️  Saved without validation to ${path}\n`));
@@ -829,7 +904,7 @@ program
           const response = await chat(messages, { apiKey, model, baseUrl });
           stop?.();
           console.log(chalk.blue("Assistant: "));
-          console.log(response);
+          console.log(renderMd(response));
           console.log();
 
           messages.push({ role: "assistant", content: response });
@@ -842,7 +917,7 @@ program
               const docs = parseYaml(yaml);
               expandFragments(docs[0]);
               lastYaml = yaml;
-              console.log(chalk.dim("  ✅ Valid YAML extracted. Use /save <path> to write it.\n"));
+              console.log(chalk.dim("  ✅ Valid YAML extracted. Use /save <name> (e.g. /save refunds) or /save path/name\n"));
             } catch (err: any) {
               lastYaml = yaml; // still save it so user can /force
               console.log(chalk.yellow(`  ⚠️  YAML extracted but has issues: ${err.message}`));
