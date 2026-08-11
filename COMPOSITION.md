@@ -100,3 +100,47 @@ Two consequences worth stating plainly:
 **Fragments as a unit of reuse across Sessions of different agents** — this is really the cross-file question plus a governance question, and belongs with the Variable/Context Specification.
 
 See ROADMAP.md.
+
+## v0.2 — Optional Behaviors and composition
+
+v0.2 introduces `optional` behaviors — steps that may or may not match depending on the agent's response. This affects composition in two ways:
+
+### Fragments with optional behaviors
+
+Fragments CAN contain `optional` behaviors, `requires`, and `matches_when`. After expansion, they become part of the flat behavior list and work exactly as documented in SPECIFICATION.md §7.
+
+```yaml
+fragments:
+  check-order:
+    - id: user_asks
+      actor: user
+      action: says
+      content: "{{cases.userQuery}}"
+    - id: ask_id
+      actor: assistant
+      action: asks
+      optional: true
+      matches_when:
+        type: llm_judge
+        criteria: "The agent is requesting the order ID"
+    - id: user_gives_id
+      actor: user
+      action: says
+      content: "{{cases.orderId}}"
+      requires: ask_id
+```
+
+### `expected` and `after` instead of `sequence`
+
+`sequence` and `optional` are mutually exclusive. For ordering constraints on optional behaviors, use `expected` + `after`:
+
+```yaml
+evaluations:
+  - type: expected
+    behavior: ask_id
+    when: "{{cases.hasOrderId}} == false"
+    after: { actor: user, action: says }
+    reason: "Should ask for ID after user speaks"
+```
+
+This replaces what would have been `sequence` in v0.1 — it validates that an optional behavior occurred AND that it occurred in the right place.

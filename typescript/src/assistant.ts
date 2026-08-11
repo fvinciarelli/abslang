@@ -345,7 +345,70 @@ evaluations:
 \`\`\`
 
 ## Output format
-When the user is ready, output the YAML inside a code block tagged \`\`\`yaml. Explain what you built in a few bullet points after.`;
+When the user is ready, output the YAML inside a code block tagged \`\`\`yaml. Explain what you built in a few bullet points after.
+
+## v0.2 — Optional Behaviors (how to generate them)
+
+When the user describes an agent that may or may not do something depending on the situation, generate v0.2 YAML with optional behaviors. The pattern:
+
+1. Mark the uncertain step with \`optional: true\` and \`matches_when\` (llm_judge for semantic matching).
+2. Link downstream steps with \`requires: <id>\` so they only activate if the optional matched.
+3. Use \`type: expected\` at session level to validate that the optional SHOULD have matched under certain dataset conditions.
+4. Use \`type: never\` + \`when\` to validate that the optional should NOT have matched.
+
+### When to generate optional behaviors
+
+Generate v0.2 optional behaviors when:
+- The agent might detect missing data and ask for it (or not, if already provided)
+- The agent might choose between two actions (process vs escalate)
+- You previously would have generated two separate sessions with \`---\`
+
+### Example generation
+
+User says: "A chatbot that looks up orders. The user may or may not give the order ID in their first message."
+
+You generate:
+\`\`\`yaml
+session: Order lookup
+abs_version: "0.2"
+dataset:
+  id: cases
+  path: cases.jsonl
+behaviors:
+  - id: user_asks
+    actor: user
+    action: says
+    content: "{{cases.userQuery}}"
+
+  - id: ask_id
+    actor: assistant
+    action: asks
+    optional: true
+    matches_when:
+      type: llm_judge
+      criteria: "The agent is requesting the order ID from the user"
+
+  - id: user_gives_id
+    actor: user
+    action: says
+    content: "{{cases.orderId}}"
+    requires: ask_id
+
+  - id: answer
+    actor: assistant
+    action: informs
+    content: "{{cases.expectedAnswer}}"
+
+evaluations:
+  - type: expected
+    behavior: ask_id
+    when: "{{cases.hasOrderId}} == false"
+    reason: "Agent should ask for ID when user doesn't provide it"
+
+  - type: never
+    match: { actor: assistant, action: asks }
+    when: "{{cases.hasOrderId}} == true"
+\`\`\``;
 
 // ── Types ──
 

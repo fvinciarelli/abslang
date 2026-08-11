@@ -586,6 +586,77 @@ adapter.evaluate(
 |---|---|
 | *"I used `says` but the agent was calling an API"* | Use `calls` + `target` for APIs. `says`/`informs`/`asks` is for talking. |
 | *"`sequence` fails but all steps are present"* | `sequence` checks relative order, not adjacency. If A is before B, it matches even with steps in between. |
-| *"I want an IF branch in the conversation"* | **Agent Behavior Specification** v0.1 has no branching. Two paths = two Sessions. Write one for the happy path, another for the alternative. |
+| *"I want an IF branch in the conversation"* | v0.1: two paths = two Sessions. `---` separates them in one file. v0.2: use `optional` + `expected` for agent-driven branching (see below). |
 | *"My `llm_judge` passes sometimes and fails other times"* | Vague criteria ("be friendly") produce inconsistent results. Be specific: "greets, introduces itself, doesn't interrupt." |
 | *"I don't know which actor to use"* | `user` = the tester. `assistant` = the bot. `tool` = external API/system. `human` = real person (for hand-offs). |
+
+## v0.2 — Optional Behaviors
+
+### The problem: does the agent ask for missing data?
+
+You're testing a chatbot that looks up orders. Sometimes the user gives the order ID upfront, sometimes not. A good agent should detect when data is missing and ask for it. A bad agent hallucinates.
+
+In v0.1 you'd need two separate sessions. In v0.2 you write one session with an **optional** behavior:
+
+```yaml
+session: Order lookup
+abs_version: "0.2"
+dataset:
+  id: cases
+  path: cases.jsonl
+behaviors:
+  - id: user_asks
+    actor: user
+    action: says
+    content: "{{cases.userQuery}}"
+
+  - id: ask_id
+    actor: assistant
+    action: asks
+    optional: true                          # ← v0.2: may or may not happen
+    matches_when:
+      type: llm_judge
+      criteria: "The agent is requesting the order ID"
+
+  - id: user_gives_id
+    actor: user
+    action: says
+    content: "{{cases.orderId}}"
+    requires: ask_id                        # ← v0.2: only if agent asked
+
+  - id: answer
+    actor: assistant
+    action: informs
+    content: "{{cases.expectedAnswer}}"
+
+evaluations:
+  - type: expected                          # ← v0.2: should it have matched?
+    behavior: ask_id
+    when: "{{cases.hasOrderId}} == false"
+    reason: "Agent should ask for ID when user doesn't provide it"
+
+  - type: never
+    match: { actor: assistant, action: asks }
+    when: "{{cases.hasOrderId}} == true"
+```
+
+### How it works
+
+1. The runner sends `{{cases.userQuery}}` to your agent.
+2. If `hasOrderId` is `false`, the `expected` evaluator expects `ask_id` to match.
+3. The runner evaluates `matches_when` against the agent's real response — using LLM to understand intent, not just checking if it's literally an `asks` action.
+4. If the agent asked → `ask_id` matches → runner sends `{{cases.orderId}}` → agent responds → `answer` matches.
+5. If the agent didn't ask → `ask_id` is skipped (not a failure for optional behaviors) → `expected` evaluator FAILS because it should have matched.
+
+### Dataset
+
+```jsonl
+{"hasOrderId": false, "userQuery": "Quiero saber de mi orden", "orderId": "5678", "expectedAnswer": "Preparando"}
+{"hasOrderId": true,  "userQuery": "Estado de #8291",          "orderId": "8291", "expectedAnswer": "En camino"}
+```
+
+### Run it
+
+```bash
+abslang run examples/missing-data.abs.yaml --agent $URL --dataset examples/missing-data.jsonl
+```

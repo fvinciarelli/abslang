@@ -4,6 +4,8 @@ import {
   EvalResult,
   evaluateStep,
   evaluateWithAdapter,
+  expected,
+  evalWhen,
 } from "./evaluators";
 
 // ── Agent adapter interface ──
@@ -272,16 +274,31 @@ const agentAdapters: Record<string, AgentAdapterFn> = {
 
 export async function run(
   session: NormalizedSession,
-  agentConfig: AgentConfig
+  agentConfig: AgentConfig,
+  rowVars?: Record<string, any>
 ): Promise<RunResult> {
   const adapter = agentAdapters[agentConfig.format ?? "openai"] ?? openaiAdapter;
   const trace: ObservedStep[] = [];
   const stepResults: StepResult[] = [];
   const messages: AgentMessage[] = [];
+  const skippedIds = new Set<string>(); // v0.2: track skipped optional behaviors
   let stepNum = 0;
 
   for (const behavior of session.behaviors) {
     stepNum++;
+
+    // ── v0.2: skip if dependency was not matched ──
+    if (behavior.requires && skippedIds.has(behavior.requires)) {
+      if (behavior.id) skippedIds.add(behavior.id);
+      stepResults.push({
+        step: stepNum,
+        behavior,
+        observed: null,
+        matched: false,
+        evaluations: [],
+      });
+      continue;
+    }
 
     if (behavior.actor === "user") {
       // Send to agent
@@ -413,19 +430,57 @@ export async function run(
 
       // Communication actions are equivalent for matching purposes
       const commActions = ["says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests", "shows", "hands_off"];
-      // Execution actions are equivalent (all result in tool_calls)
       const execActions = ["calls", "submits", "retrieves", "stores", "updates"];
       const isExecAction = execActions.includes(behavior.action);
-      const matched = observed
-        ? observed.actor === behavior.actor &&
-          (observed.action === behavior.action ||
-           (commActions.includes(observed.action) && commActions.includes(behavior.action)) ||
-           (execActions.includes(observed.action) && execActions.includes(behavior.action))) &&
-          // Skip target check for communication actions (runner can't detect target from text)
-          (commActions.includes(behavior.action) || !behavior.target || observed.target === behavior.target) &&
-          // Validate with / with_only parameter matching for execution actions
-          matchWithParams(behavior, observed)
-        : false;
+
+      let matched: boolean;
+
+      // ── v0.2: matches_when overrides default matching ──
+      if (behavior.matches_when) {
+        const mw = behavior.matches_when;
+        if (mw.type === "contains" && mw.value && observed?.content) {
+          matched = String(observed.content).includes(mw.value);
+        } else if (mw.type === "regex" && mw.pattern && observed?.content) {
+          try {
+            matched = new RegExp(mw.pattern).test(String(observed.content));
+          } catch {
+            matched = false;
+          }
+        } else if (mw.type === "llm_judge") {
+          // llm_judge: try adapter, fallback to contains on criteria
+          const llmResult = await evaluateWithAdapter("llm_judge", trace, {
+            type: "llm_judge",
+            criteria: mw.criteria,
+            query: String(observed?.content ?? ""),
+          });
+          matched = llmResult?.passed ?? false;
+        } else {
+          matched = false;
+        }
+      } else {
+        // Default matching (v0.1)
+        matched = observed
+          ? observed.actor === behavior.actor &&
+            (observed.action === behavior.action ||
+             (commActions.includes(observed.action) && commActions.includes(behavior.action)) ||
+             (execActions.includes(observed.action) && execActions.includes(behavior.action))) &&
+            (commActions.includes(behavior.action) || !behavior.target || observed.target === behavior.target) &&
+            matchWithParams(behavior, observed)
+          : false;
+      }
+
+      // ── v0.2: optional — skip if no match ──
+      if (behavior.optional && !matched) {
+        if (behavior.id) skippedIds.add(behavior.id);
+        stepResults.push({
+          step: stepNum,
+          behavior,
+          observed,
+          matched: false,
+          evaluations: [],
+        });
+        continue;
+      }
 
       const matchObserved: ObservedStep | null = matched ? observed : null;
 
@@ -463,6 +518,23 @@ export async function run(
   const chainEvaluations: EvalResult[] = [];
   if (session.evaluations) {
     for (const evalRule of session.evaluations) {
+      // ── v0.2: expected evaluator (needs stepResults) ──
+      if (evalRule.type === "expected") {
+        chainEvaluations.push(expected(
+          stepResults.filter(s => !s.sent),
+          evalRule,
+          rowVars || {}
+        ));
+        continue;
+      }
+
+      // ── v0.2: when on never ──
+      if (evalRule.type === "never" && evalRule.when) {
+        if (!evalWhen(evalRule.when, rowVars || {})) {
+          chainEvaluations.push({ type: "never", passed: true, score: 1, reason: "when condition not met — skipped" });
+          continue;
+        }
+      }
       const adapterResult = await evaluateWithAdapter(
         evalRule.type,
         trace,

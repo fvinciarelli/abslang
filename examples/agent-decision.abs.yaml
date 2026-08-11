@@ -1,0 +1,39 @@
+session: Agent decision — process vs escalate
+description: Agent must decide whether to process a refund or escalate to a human. Dataset controls the expected path.
+abs_version: "0.2"
+dataset:
+  id: cases
+  path: agent-decision.jsonl
+behaviors:
+  - id: user_asks
+    actor: user
+    action: says
+    content: "{{cases.userQuery}}"
+
+  - id: process_refund
+    actor: assistant
+    action: informs
+    optional: true
+    matches_when:
+      type: llm_judge
+      criteria: "The agent is processing a refund — providing confirmation, amount, and reference."
+
+  - id: escalate
+    actor: assistant
+    action: hands_off
+    optional: true
+    target: Human agent
+    matches_when:
+      type: llm_judge
+      criteria: "The agent is escalating to a human — indicating it cannot resolve the issue directly and transferring."
+
+evaluations:
+  - type: expected
+    behavior: process_refund
+    when: "{{cases.expectedPath}} == 'process'"
+    reason: "Expected agent to process the refund"
+
+  - type: expected
+    behavior: escalate
+    when: "{{cases.expectedPath}} == 'escalate'"
+    reason: "Expected agent to escalate to a human"

@@ -539,3 +539,68 @@ async def evaluate_with_adapter(
     if adapter is None:
         return None
     return await adapter(trace, evaluation)
+
+
+# ── v0.2 — when expression evaluator ──
+
+import re
+
+def eval_when(expression: str | None, row_vars: dict[str, Any]) -> bool:
+    """Evaluate a when expression against dataset row variables."""
+    if not expression:
+        return True
+
+    def _replacer(m: re.Match) -> str:
+        name = m.group(1)
+        if name in row_vars:
+            val = row_vars[name]
+            if isinstance(val, str):
+                return json.dumps(val)
+            return str(val)
+        return "undefined"
+
+    resolved = re.sub(r"\{\{([\w.]+)\}\}", _replacer, expression)
+    # Normalize JS-style booleans for Python eval
+    resolved = resolved.replace("true", "True").replace("false", "False")
+
+    try:
+        return bool(eval(resolved, {"__builtins__": {}}, {}))
+    except Exception:
+        return False
+
+
+# ── v0.2 — expected evaluator ──
+
+def evaluate_expected(
+    step_results: list[dict[str, Any]],
+    evaluation: dict[str, Any],
+    row_vars: dict[str, Any],
+) -> EvalResult:
+    """Validate that an optional behavior matched when expected."""
+    if not eval_when(evaluation.get("when"), row_vars):
+        return EvalResult(type="expected", passed=True, score=1.0, reason="when condition not met — skipped")
+
+    behavior_id = evaluation.get("behavior")
+    ref_step = next((s for s in step_results if s.get("behavior_id") == behavior_id), None)
+
+    if not ref_step:
+        return EvalResult(type="expected", passed=False, score=0.0,
+                          reason=f'Behavior "{behavior_id}" not found in trace')
+
+    if not ref_step.get("matched"):
+        msg = evaluation.get("reason") or f'Expected behavior "{behavior_id}" to match, but it did not'
+        return EvalResult(type="expected", passed=False, score=0.0, reason=msg)
+
+    # after constraint
+    after = evaluation.get("after")
+    if after:
+        after_idx = next((i for i, s in enumerate(step_results)
+                          if (not after.get("actor") or s.get("behavior_actor") == after["actor"])
+                          and (not after.get("action") or s.get("behavior_action") == after["action"])
+                          and (not after.get("target") or s.get("behavior_target") == after["target"])), -1)
+        ref_idx = step_results.index(ref_step)
+        if after_idx == -1 or ref_idx <= after_idx:
+            msg = evaluation.get("reason") or f'Expected "{behavior_id}" after {json.dumps(after)}, but it did not'
+            return EvalResult(type="expected", passed=False, score=0.0, reason=msg)
+
+    return EvalResult(type="expected", passed=True, score=1.0, reason=f'Behavior "{behavior_id}" matched as expected')

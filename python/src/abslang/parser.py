@@ -25,6 +25,10 @@ class Behavior:
     with_: dict[str, Any] | None = None
     with_only: dict[str, Any] | None = None
     evaluations: list[dict[str, Any]] | None = None
+    # v0.2 — Optional Behaviors
+    optional: bool = False
+    requires: str | None = None
+    matches_when: dict[str, Any] | None = None
 
 
 @dataclass
@@ -90,6 +94,9 @@ def _dict_to_document(data: dict[str, Any]) -> ABSDocument:
                 with_=b.get("with"),
                 with_only=b.get("with_only"),
                 evaluations=b.get("evaluations"),
+                optional=b.get("optional", False),
+                requires=b.get("requires"),
+                matches_when=b.get("matches_when"),
             ))
 
     fragments_raw = data.get("fragments", {})
@@ -104,6 +111,9 @@ def _dict_to_document(data: dict[str, Any]) -> ABSDocument:
                 capture=b.get("capture"),
                 with_=b.get("with"),
                 evaluations=b.get("evaluations"),
+                optional=b.get("optional", False),
+                requires=b.get("requires"),
+                matches_when=b.get("matches_when"),
             )
             for b in items if isinstance(b, dict) and "actor" in b
         ]
@@ -140,7 +150,7 @@ def expand_fragments(doc: ABSDocument) -> NormalizedSession:
                 result.append(entry)
         return result
 
-    return NormalizedSession(
+    expanded = NormalizedSession(
         session=doc.session,
         behaviors=expand(doc.behaviors),
         description=doc.description,
@@ -148,6 +158,38 @@ def expand_fragments(doc: ABSDocument) -> NormalizedSession:
         dataset=doc.dataset,
         evaluations=doc.evaluations,
     )
+
+    # ── v0.2 semantic validation ──
+    behavior_ids = {b.id for b in expanded.behaviors if b.id}
+
+    # Validate requires references
+    for b in expanded.behaviors:
+        if b.requires and b.requires not in behavior_ids:
+            raise ValueError(
+                f'Behavior "{b.id or "(unnamed)"}" requires "{b.requires}" '
+                f'but no behavior with that id exists.'
+            )
+
+    # Validate sequence does not reference optional behaviors
+    if expanded.evaluations:
+        for ev in expanded.evaluations:
+            if ev.get("type") == "sequence" and "order" in ev:
+                for sel in ev["order"]:
+                    matched = None
+                    for b in expanded.behaviors:
+                        if (not sel.get("actor") or b.actor == sel["actor"]) and \
+                           (not sel.get("action") or b.action == sel["action"]) and \
+                           (not sel.get("target") or b.target == sel["target"]):
+                            matched = b
+                            break
+                    if matched and matched.optional:
+                        raise ValueError(
+                            f'sequence references behavior "{matched.id or "(unnamed)"}" '
+                            f'which is optional. sequence and optional are mutually exclusive. '
+                            f'Use expected + after instead.'
+                        )
+
+    return expanded
 
 
 # ── Variable resolution ──
@@ -165,6 +207,7 @@ def resolve_variables(
 
     for b in behaviors:
         r = Behavior(
+            id=b.id,
             actor=b.actor,
             action=b.action,
             target=b.target,
@@ -173,6 +216,9 @@ def resolve_variables(
             with_=_resolve_value(b.with_, variables) if b.with_ else None,
             with_only=_resolve_value(b.with_only, variables) if b.with_only else None,
             evaluations=b.evaluations,
+            optional=b.optional,
+            requires=b.requires,
+            matches_when=_resolve_value(b.matches_when, variables) if b.matches_when else None,
         )
 
         if b.capture:

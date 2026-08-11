@@ -562,7 +562,72 @@ function evaluateComposition(
   };
 }
 
-// ── Adaptive evaluator (calls external adapter) ──
+// ── v0.2 — when expression evaluator ──
+
+export function evalWhen(expression: string | undefined, rowVars: Record<string, any>): boolean {
+  if (!expression) return true; // no when = always applies
+
+  // Replace {{var}} references with their values
+  let resolved = expression.replace(/\{\{([\w.]+)\}\}/g, (_, name) => {
+    if (name in rowVars) {
+      const val = rowVars[name];
+      if (typeof val === "string") return JSON.stringify(val);
+      return String(val);
+    }
+    return "undefined";
+  });
+
+  // Simple boolean eval — supports ==, !=, true, false, quoted strings
+  try {
+    // Note: == and != work fine in JS for dataset comparisons (booleans, strings, numbers)
+    // biome-ignore security/detect-eval-with-expression: resolved contains only literal values from dataset
+    return eval(resolved);
+  } catch {
+    return false;
+  }
+}
+
+// ── v0.2 — expected evaluator ──
+
+export function expected(
+  stepResults: { step: number; behavior: Behavior; matched: boolean }[],
+  evaluation: any,
+  rowVars: Record<string, any>
+): EvalResult {
+  // Check when condition
+  if (!evalWhen(evaluation.when, rowVars)) {
+    return { type: "expected", passed: true, score: 1, reason: "when condition not met — skipped" };
+  }
+
+  // Find the referenced behavior
+  const refStep = stepResults.find(s => s.behavior.id === evaluation.behavior);
+  if (!refStep) {
+    return { type: "expected", passed: false, score: 0, reason: `Behavior "${evaluation.behavior}" not found in trace` };
+  }
+
+  if (!refStep.matched) {
+    const msg = evaluation.reason || `Expected behavior "${evaluation.behavior}" to match, but it did not`;
+    return { type: "expected", passed: false, score: 0, reason: msg };
+  }
+
+  // Check after constraint
+  if (evaluation.after) {
+    const afterIdx = stepResults.findIndex(s =>
+      (!evaluation.after!.actor || s.behavior.actor === evaluation.after!.actor) &&
+      (!evaluation.after!.action || s.behavior.action === evaluation.after!.action) &&
+      (!evaluation.after!.target || s.behavior.target === evaluation.after!.target)
+    );
+    const refIdx = stepResults.indexOf(refStep);
+    if (afterIdx === -1 || refIdx <= afterIdx) {
+      const msg = evaluation.reason || `Expected "${evaluation.behavior}" to match after ${JSON.stringify(evaluation.after)}, but it did not`;
+      return { type: "expected", passed: false, score: 0, reason: msg };
+    }
+  }
+
+  return { type: "expected", passed: true, score: 1, reason: `Behavior "${evaluation.behavior}" matched as expected` };
+}
+
+// ── v0.2 — matches_when matcher ──
 
 export type AdapterFunction = (
   trace: ObservedStep[],

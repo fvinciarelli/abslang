@@ -1,0 +1,49 @@
+session: Missing data detection — order ID
+description: Agent should ask for order ID when user doesn't provide it.
+abs_version: "0.2"
+dataset:
+  id: cases
+  path: missing-data.jsonl
+behaviors:
+  - id: user_asks
+    actor: user
+    action: says
+    content: "{{cases.userQuery}}"
+
+  - id: ask_id
+    actor: assistant
+    action: asks
+    optional: true
+    matches_when:
+      type: llm_judge
+      criteria: "The agent is requesting the order ID from the user — whether by asking directly, stating that it's needed, or suggesting the user provide it."
+    evaluations:
+      - type: llm_judge
+        criteria: "Politely asks for the order ID, explains why it's needed, doesn't assume the order exists yet"
+
+  - id: user_gives_id
+    actor: user
+    action: says
+    content: "{{cases.orderId}}"
+    requires: ask_id
+
+  - id: answer
+    actor: assistant
+    action: informs
+    content: "{{cases.expectedAnswer}}"
+    evaluations:
+      - type: Groundedness
+        query: user_asks.says
+        context: "{{cases.kbSnippet}}"
+        response: self
+        threshold: 0.8
+
+evaluations:
+  - type: expected
+    behavior: ask_id
+    when: "{{cases.hasOrderId}} == false"
+    reason: "Agent should ask for order ID when user doesn't provide it"
+
+  - type: never
+    match: { actor: assistant, action: asks }
+    when: "{{cases.hasOrderId}} == true"

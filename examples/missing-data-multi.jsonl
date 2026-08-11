@@ -1,0 +1,4 @@
+{"hasOrderId": true,  "hasEmail": true,  "userQuery": "Estado de #8291, soy franco@mail.com",   "orderId": "8291", "email": "franco@mail.com", "expectedAnswer": "En camino"}
+{"hasOrderId": false, "hasEmail": true,  "userQuery": "Quiero saber de mi orden, franco@mail.com", "orderId": "5678", "email": "franco@mail.com", "expectedAnswer": "Preparando"}
+{"hasOrderId": true,  "hasEmail": false, "userQuery": "Dónde está #1234",                          "orderId": "1234", "email": "juan@mail.com",   "expectedAnswer": "Entregado"}
+{"hasOrderId": false, "hasEmail": false, "userQuery": "Chequeame una orden",                        "orderId": "9999", "email": "ana@mail.com",    "expectedAnswer": "Enviado"}

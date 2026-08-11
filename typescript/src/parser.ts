@@ -14,6 +14,15 @@ export interface Behavior {
   with?: Record<string, any>;
   with_only?: Record<string, any>;
   evaluations?: Evaluation[];
+  // v0.2 — Optional Behaviors
+  optional?: boolean;
+  requires?: string;
+  matches_when?: {
+    type: "llm_judge" | "contains" | "regex";
+    criteria?: string;
+    value?: string;
+    pattern?: string;
+  };
 }
 
 export interface Evaluation {
@@ -93,7 +102,7 @@ export function expandFragments(doc: ABSDocument): NormalizedSession {
     return result;
   }
 
-  return {
+  const expanded: NormalizedSession = {
     session: doc.session,
     description: doc.description,
     abs_version: doc.abs_version,
@@ -101,6 +110,40 @@ export function expandFragments(doc: ABSDocument): NormalizedSession {
     behaviors: expand(doc.behaviors),
     evaluations: doc.evaluations,
   };
+
+  // ── v0.2 semantic validation ──
+  const behaviorIds = new Set(expanded.behaviors.filter(b => b.id).map(b => b.id!));
+
+  // Validate requires references
+  for (const b of expanded.behaviors) {
+    if (b.requires && !behaviorIds.has(b.requires)) {
+      throw new Error(
+        `Behavior "${b.id || "(unnamed)"}" requires "${b.requires}" but no behavior with that id exists.`
+      );
+    }
+  }
+
+  // Validate sequence does not reference optional behaviors
+  if (expanded.evaluations) {
+    for (const ev of expanded.evaluations) {
+      if (ev.type === "sequence" && ev.order) {
+        for (const sel of ev.order) {
+          const matched = expanded.behaviors.find(b => {
+            return (!sel.actor || b.actor === sel.actor) &&
+                   (!sel.action || b.action === sel.action) &&
+                   (!sel.target || b.target === sel.target);
+          });
+          if (matched?.optional) {
+            throw new Error(
+              `sequence references behavior "${matched.id || "(unnamed)"}" which is optional. sequence and optional are mutually exclusive. Use expected + after instead.`
+            );
+          }
+        }
+      }
+    }
+  }
+
+  return expanded;
 }
 
 // ── Variable resolution ──
@@ -135,6 +178,11 @@ export function resolveVariables(
     // Resolve {{var}} references inside evaluations (value, criteria, query, context, response, etc.)
     if (b.evaluations) {
       resolved.evaluations = b.evaluations.map((e) => resolveObject(e, variables));
+    }
+
+    // Resolve {{var}} references inside matches_when
+    if (b.matches_when) {
+      resolved.matches_when = resolveObject(b.matches_when, variables);
     }
 
     // Apply captures after resolution

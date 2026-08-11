@@ -1,18 +1,18 @@
 import Ajv, { ValidateFunction } from "ajv";
 
-// Normative JSON Schema for v0.1 — embedded so the npm package is self-contained.
+// Normative JSON Schema for v0.2 — embedded so the npm package is self-contained.
 // When updating the schema, update this constant from schema/abs.schema.json.
 const SCHEMA_V01 = {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/fvinciarelli/abslang/blob/main/schema/abs.schema.json",
-  "title": "ABS Document v0.1",
-  "description": "Normative JSON Schema for Agent Behavior Specification v0.1 documents.",
+  "title": "ABS Document v0.2",
+  "description": "Normative JSON Schema for Agent Behavior Specification v0.2 documents.",
   "type": "object",
   "required": ["session", "behaviors"],
   "properties": {
     "session": { "type": "string" },
     "description": { "type": "string" },
-    "abs_version": { "type": "string", "pattern": "^0\\.1$" },
+    "abs_version": { "type": "string", "pattern": "^0\\.(1|2)$" },
     "dataset": {
       "type": "object",
       "required": ["id", "path"],
@@ -70,6 +70,20 @@ const SCHEMA_V01 = {
         "evaluations": {
           "type": "array",
           "items": { "$ref": "#/definitions/evaluation" }
+        },
+        "optional": { "type": "boolean", "description": "v0.2+: if true, skipped silently when agent does not emit it." },
+        "requires": { "type": "string", "description": "v0.2+: ID of a behavior that must have matched for this to activate." },
+        "matches_when": {
+          "type": "object",
+          "description": "v0.2+: semantic criterion to decide if this behavior matched the agent's response.",
+          "required": ["type"],
+          "properties": {
+            "type": { "type": "string", "enum": ["llm_judge", "contains", "regex"] },
+            "criteria": { "type": "string" },
+            "value": { "type": "string" },
+            "pattern": { "type": "string" }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false,
@@ -86,12 +100,16 @@ const SCHEMA_V01 = {
             "llm_judge", "custom",
             "Groundedness", "Relevance", "Coherence", "Fluency",
             "sequence", "eventually", "never", "count", "within", "variable_consistency",
-            "all_of", "any_of", "none_of"
+            "all_of", "any_of", "none_of",
+            "expected"
           ]
         },
         "blocking": { "type": "boolean" },
         "threshold": { "type": "number", "minimum": 0, "maximum": 1 },
         "adapter": { "type": "string" },
+        "behavior": { "type": "string", "description": "v0.2+: for expected, ID of the optional behavior to check." },
+        "reason": { "type": "string", "description": "v0.2+: for expected, human-readable failure message." },
+        "when": { "type": "string", "description": "v0.2+: dataset expression, evaluation only runs when true." },
         "dataset": {},
         "prompt": { "type": "string" },
         "query": { "type": "string" },
@@ -110,7 +128,7 @@ const SCHEMA_V01 = {
         "variable": { "type": "string" },
         "min": { "type": "integer" },
         "max": { "type": "integer" },
-        "after": { "$ref": "#/definitions/selector" },
+        "after": { "$ref": "#/definitions/selector", "description": "v0.2+: for expected, the behavior must match after this selector." },
         "max_steps": { "type": "integer" },
         "evaluations": { "type": "array", "items": { "$ref": "#/definitions/evaluation" } }
       },

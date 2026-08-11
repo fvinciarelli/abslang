@@ -3,6 +3,8 @@ export {
   evaluateWithAdapter,
   registerAdapter,
   matchesSelector,
+  expected,
+  evalWhen,
   ObservedStep,
   EvalResult,
   AdapterFunction,

@@ -1,0 +1,4 @@
+{"userQuery": "Quiero reembolso para orden #8291", "expectedPath": "process"}
+{"userQuery": "Quiero reembolso para orden #5678", "expectedPath": "escalate"}
+{"userQuery": "Devolución para #1234, llegó roto", "expectedPath": "process"}
+{"userQuery": "Devolución para #9999, es un producto digital", "expectedPath": "escalate"}

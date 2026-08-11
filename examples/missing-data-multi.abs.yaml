@@ -1,0 +1,69 @@
+session: Missing data detection — order ID and email
+description: Agent should ask for missing data (order ID and/or email) when user doesn't provide it.
+abs_version: "0.2"
+dataset:
+  id: cases
+  path: missing-data-multi.jsonl
+behaviors:
+  - id: user_asks
+    actor: user
+    action: says
+    content: "{{cases.userQuery}}"
+
+  - id: ask_id
+    actor: assistant
+    action: asks
+    optional: true
+    matches_when:
+      type: llm_judge
+      criteria: "The agent is requesting the order ID from the user."
+    evaluations:
+      - type: llm_judge
+        criteria: "Politely asks for the order ID"
+
+  - id: user_gives_id
+    actor: user
+    action: says
+    content: "{{cases.orderId}}"
+    requires: ask_id
+
+  - id: ask_email
+    actor: assistant
+    action: asks
+    optional: true
+    matches_when:
+      type: llm_judge
+      criteria: "The agent is requesting an email address from the user."
+    evaluations:
+      - type: llm_judge
+        criteria: "Politely asks for the email"
+
+  - id: user_gives_email
+    actor: user
+    action: says
+    content: "{{cases.email}}"
+    requires: ask_email
+
+  - id: answer
+    actor: assistant
+    action: informs
+    content: "{{cases.expectedAnswer}}"
+
+evaluations:
+  - type: expected
+    behavior: ask_id
+    when: "{{cases.hasOrderId}} == false"
+    reason: "Debió pedir el ID de orden"
+
+  - type: never
+    match: { actor: assistant, action: asks }
+    when: "{{cases.hasOrderId}} == true"
+
+  - type: expected
+    behavior: ask_email
+    when: "{{cases.hasEmail}} == false"
+    reason: "Debió pedir el email"
+
+  - type: never
+    match: { actor: assistant, action: asks }
+    when: "{{cases.hasEmail}} == true"

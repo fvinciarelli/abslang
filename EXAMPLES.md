@@ -477,3 +477,23 @@ See [examples/chatbot-greeting.yaml](./examples/chatbot-greeting.yaml).
 | **`llm_judge`** | Free-form criteria in natural language | Built-in judge (auto-detects OpenAI/Anthropic/Gemini) or `--adapter llm_judge=aievaluator` |
 | **Dimension** | `Groundedness`, `Relevance`, `Coherence`, `Fluency` | Adapter required — `--adapter llm_judge=aievaluator` |
 | **Composition** | `all_of`, `any_of`, `none_of` | Nothing — wraps other evaluators |
+
+## v0.2 — Optional Behaviors
+
+### Missing data detection
+
+[examples/missing-data.abs.yaml](./examples/missing-data.abs.yaml) — Agent detects when the user didn't provide an order ID and asks for it.
+
+```bash
+abslang run examples/missing-data.abs.yaml --agent $URL --dataset examples/missing-data.jsonl
+```
+
+Two rows have `hasOrderId: true` → agent should NOT ask. Two have `hasOrderId: false` → agent MUST ask. The `expected` evaluator validates the decision.
+
+### Multi-parameter missing data
+
+[examples/missing-data-multi.abs.yaml](./examples/missing-data-multi.abs.yaml) — Same pattern with order ID AND email. Four combinations. A single agent response matching both optionals is handled correctly (batch resolution).
+
+### Agent decision
+
+[examples/agent-decision.abs.yaml](./examples/agent-decision.abs.yaml) — Agent chooses between processing a refund or escalating. Dataset row specifies which path is expected. Two optional behaviors compete; `expected` validates the winner.

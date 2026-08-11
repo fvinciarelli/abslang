@@ -13,6 +13,8 @@ from .evaluators import (
     evaluate_step,
     apply_threshold,
     evaluate_with_adapter,
+    evaluate_expected,
+    eval_when,
     matches_selector,
 )
 
@@ -230,15 +232,26 @@ _AGENT_ADAPTERS = {
 
 # ── Runner ──
 
-async def run(session: NormalizedSession, agent_config: AgentConfig) -> RunResult:
+async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: dict[str, Any] | None = None) -> RunResult:
     adapter = _AGENT_ADAPTERS.get(agent_config.format, _openai_adapter)
     trace: list[ObservedStep] = []
     step_results: list[StepResult] = []
     messages: list[AgentMessage] = []
+    skipped_ids: set[str] = set()  # v0.2: track skipped optional behaviors
     step_num = 0
 
     for behavior in session.behaviors:
         step_num += 1
+
+        # ── v0.2: skip if dependency was not matched ──
+        if behavior.requires and behavior.requires in skipped_ids:
+            if behavior.id:
+                skipped_ids.add(behavior.id)
+            step_results.append(StepResult(
+                step=step_num, behavior=behavior,
+                observed=None, matched=False, evaluations=[],
+            ))
+            continue
 
         if behavior.actor == "user":
             messages.append(AgentMessage(
@@ -323,23 +336,51 @@ async def run(session: NormalizedSession, agent_config: AgentConfig) -> RunResul
 
         else:
             # Match against trace — skip tool/responds steps in the index
-            # because they bridge the conversation but don't consume trace entries
             matched_idx = sum(
                 1 for s in step_results
                 if not s.sent and not (s.behavior.actor == "tool" and s.behavior.action == "responds")
             )
             observed = trace[matched_idx] if matched_idx < len(trace) else None
 
-            # Communication and execution actions are equivalent for matching
-            matched = observed is not None and (
-                observed.actor == behavior.actor
-                and (observed.action == behavior.action
-                     or (observed.action in COMM_ACTIONS and behavior.action in COMM_ACTIONS)
-                     or (observed.action in EXEC_ACTIONS and behavior.action in EXEC_ACTIONS))
-                # Skip target check for communication actions (runner can't detect target from text)
-                and (behavior.action in COMM_ACTIONS or not behavior.target or observed.target == behavior.target)
-                and _match_with_params(behavior, observed)
-            )
+            # ── v0.2: matches_when overrides default matching ──
+            mw = behavior.matches_when
+            if mw:
+                if mw.get("type") == "contains" and mw.get("value") and observed and observed.content:
+                    matched = str(mw["value"]) in str(observed.content)
+                elif mw.get("type") == "regex" and mw.get("pattern") and observed and observed.content:
+                    try:
+                        matched = bool(re.search(mw["pattern"], str(observed.content)))
+                    except Exception:
+                        matched = False
+                elif mw.get("type") == "llm_judge":
+                    llm_result = await evaluate_with_adapter("llm_judge", trace, {
+                        "type": "llm_judge",
+                        "criteria": mw.get("criteria"),
+                        "query": str(observed.content) if observed else "",
+                    })
+                    matched = llm_result.passed if llm_result else False
+                else:
+                    matched = False
+            else:
+                # Default matching (v0.1)
+                matched = observed is not None and (
+                    observed.actor == behavior.actor
+                    and (observed.action == behavior.action
+                         or (observed.action in COMM_ACTIONS and behavior.action in COMM_ACTIONS)
+                         or (observed.action in EXEC_ACTIONS and behavior.action in EXEC_ACTIONS))
+                    and (behavior.action in COMM_ACTIONS or not behavior.target or observed.target == behavior.target)
+                    and _match_with_params(behavior, observed)
+                )
+
+            # ── v0.2: optional — skip if no match ──
+            if behavior.optional and not matched:
+                if behavior.id:
+                    skipped_ids.add(behavior.id)
+                step_results.append(StepResult(
+                    step=step_num, behavior=behavior,
+                    observed=observed, matched=False, evaluations=[],
+                ))
+                continue
 
             match_observed = observed if matched else None
 
@@ -369,6 +410,23 @@ async def run(session: NormalizedSession, agent_config: AgentConfig) -> RunResul
     chain_evals: list[EvalResult] = []
     if session.evaluations:
         for rule in session.evaluations:
+            # ── v0.2: expected evaluator (needs step_results) ──
+            if rule.get("type") == "expected":
+                chain_evals.append(evaluate_expected(
+                    [{"behavior_id": s.behavior.id, "matched": s.matched,
+                      "behavior_actor": s.behavior.actor, "behavior_action": s.behavior.action,
+                      "behavior_target": s.behavior.target}
+                     for s in step_results if not s.sent],
+                    rule,
+                    row_vars or {},
+                ))
+                continue
+
+            # ── v0.2: when on never ──
+            if rule.get("type") == "never" and rule.get("when"):
+                if not eval_when(rule["when"], row_vars or {}):
+                    chain_evals.append(EvalResult(type="never", passed=True, score=1.0, reason="when condition not met — skipped"))
+                    continue
             adapter_result = await evaluate_with_adapter(rule["type"], trace, rule)
             if adapter_result is not None:
                 chain_evals.append(apply_threshold(adapter_result, rule))
