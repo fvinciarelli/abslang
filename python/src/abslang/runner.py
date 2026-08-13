@@ -282,6 +282,7 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
                             action="calls",
                             target=tc["function"]["name"],
                             with_=args if isinstance(args, dict) else None,
+                            tool_call_id=tc.get("id"),
                         ))
                 elif msg.role == "assistant":
                     trace.append(ObservedStep(
@@ -301,6 +302,15 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
                 if m.role == "assistant" and m.tool_calls:
                     last_asst = m
                     break
+
+            tool_call_id = None
+            if last_asst and last_asst.tool_calls:
+                for tc in last_asst.tool_calls:
+                    if tc.get("function", {}).get("name") == behavior.target:
+                        tool_call_id = tc.get("id")
+                        break
+                if tool_call_id is None:
+                    tool_call_id = last_asst.tool_calls[0].get("id")
 
             if last_asst and last_asst.tool_calls:
                 for tc in last_asst.tool_calls:
@@ -330,6 +340,7 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
                 observed=ObservedStep(
                     actor="tool", action="responds",
                     target=behavior.target, content=behavior.content,
+                    tool_call_id=tool_call_id,
                 ),
                 matched=True,
             ))
@@ -389,7 +400,7 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
             if behavior.evaluations:
                 for rule in behavior.evaluations:
                     adapter_result = await evaluate_with_adapter(
-                        rule["type"], trace, rule,
+                        rule["type"], trace, rule, rule.get("adapter"),
                     )
                     if adapter_result is not None:
                         eval_results.append(apply_threshold(adapter_result, rule))
@@ -427,7 +438,7 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
                 if not eval_when(rule["when"], row_vars or {}):
                     chain_evals.append(EvalResult(type="never", passed=True, score=1.0, reason="when condition not met — skipped"))
                     continue
-            adapter_result = await evaluate_with_adapter(rule["type"], trace, rule)
+            adapter_result = await evaluate_with_adapter(rule["type"], trace, rule, rule.get("adapter"))
             if adapter_result is not None:
                 chain_evals.append(apply_threshold(adapter_result, rule))
             else:

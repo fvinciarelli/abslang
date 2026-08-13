@@ -13,7 +13,8 @@ import json
 import os
 from typing import Any
 
-from .. import ObservedStep, EvalResult, register_adapter
+from .. import ObservedStep, EvalResult
+from ..trace_utils import resolve_ref, trace_to_text
 
 
 # ── Metric mapping ──
@@ -88,11 +89,7 @@ async def aievaluator_adapter(
 
     if eval_type == "llm_judge":
         criteria = evaluation.get("criteria", "Is the response helpful and accurate?")
-        trace_text = "\n".join(
-            f"[{s.actor}] {s.action}{' → ' + s.target if s.target else ''}: "
-            f"{s.content if isinstance(s.content, str) else json.dumps(s.content)}"
-            for s in trace
-        )
+        trace_text = trace_to_text(trace)
         input_text = f"Given this conversation:\n\n{trace_text}\n\nEvaluate: {criteria}"
 
         last_asst = None
@@ -110,31 +107,9 @@ async def aievaluator_adapter(
                 break
         self_content = str(last_asst.content) if last_asst and last_asst.content else ""
 
-        def _resolve(ref: str | None) -> str:
-            if not ref:
-                return ""
-            if ref == "self":
-                return self_content
-            parts = ref.split(".", 1)
-            ref_id = parts[0]
-            action = parts[1] if len(parts) > 1 else None
-            defaults = {"user": "says", "assistant": "informs", "tool": "responds"}
-            resolved_action = action or defaults.get(ref_id, "says")
-            comm_actions = {"says", "asks", "informs", "greets", "responds",
-                            "clarifies", "confirms", "rejects", "suggests", "shows"}
-            for step in trace:
-                step_matches = step.actor == ref_id
-                action_matches = (
-                    step.action == resolved_action
-                    or (step.action in comm_actions and resolved_action in comm_actions)
-                )
-                if step_matches and action_matches:
-                    return str(step.content) if isinstance(step.content, str) else json.dumps(step.content or "")
-            return ref
-
-        input_text = _resolve(evaluation.get("query"))
-        context = _resolve(evaluation.get("context"))
-        response = _resolve(evaluation.get("response"))
+        input_text = resolve_ref(trace, evaluation.get("query"), self_content)
+        context = resolve_ref(trace, evaluation.get("context"), self_content)
+        response = resolve_ref(trace, evaluation.get("response"), self_content)
 
     # ── Call /api/v1/evaluations/direct via aievaluator APIClient ──
 
@@ -207,13 +182,14 @@ def configure(
     engine_url: str | None = None,
     judge_model: str | None = None,
 ) -> None:
-    """Called via --adapter llm_judge=aievaluator. Registers for all LLM-based types."""
+    """Prepare the AI Evaluator client.
+
+    Called via --adapter aievaluator / --adapter <type>=aievaluator. Adapter
+    registration (default + named) is handled by the CLI's generic adapter setup.
+    """
     global _client
     if api_key:
         os.environ["AIEVALUATOR_API_KEY"] = api_key
     if engine_url:
         os.environ["AIEVALUATOR_ENGINE_URL"] = engine_url
     _client = None
-
-    for t in ("llm_judge", "Groundedness", "Relevance", "Coherence", "Fluency"):
-        register_adapter(t, aievaluator_adapter)

@@ -21,6 +21,12 @@ Every evaluator type accepts these optional fields in addition to its type-speci
 | `dataset` | string, array, or object | Reference data passed to the evaluator. Can be: a UUID string referencing an external dataset registry, an inline array of objects (`[{context: ..., response: ...}]`), or a JSONL string. The adapter decides how to use it. |
 | `prompt` | string | Custom prompt template for evaluators that call an LLM. Variables like `{{criteria}}`, `{{context}}`, `{{response}}` are interpolated by the adapter before sending to the judge. |
 
+### Adapter selection and score normalization
+
+`adapter` is enforced at run time. Resolution order: a named adapter registered for `(type, adapter)` wins; otherwise the default adapter for that type is used. If `adapter: <name>` names an adapter that was never registered, the run reports a clear error instead of silently falling back. Register adapters with `--adapter <provider>`, `--adapter <type>=<provider>`, or `adapters:` in `abs.config.yaml`.
+
+Adapters return scores normalized to 0–1. Provider scales (e.g. Azure's 1–5 Likert) are normalized by the adapter before `threshold` is applied, so a `threshold` of 0–1 is meaningful regardless of provider.
+
 ### Threshold on composition types
 
 When `threshold` is set on `all_of`, `any_of`, or `none_of`, it applies to the **average score** of all sub-evaluations:

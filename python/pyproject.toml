@@ -24,6 +24,9 @@ dependencies = [
 
 [project.optional-dependencies]
 ai = ["aievaluator"]
+azure = ["azure-ai-evaluation"]
+azure-cloud = ["azure-ai-projects"]
+aws = ["boto3"]
 
 [project.scripts]
 abslang = "abslang.cli:main"

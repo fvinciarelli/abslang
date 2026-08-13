@@ -24,6 +24,7 @@ Gherkin (Given/When/Then) already solved "human-readable behavioral spec" for so
 4. **Composable, not exhaustive.** **Agent Behavior Specification** defines a small core vocabulary plus an extension mechanism, not an exhaustive catalog of every possible agent action.
 5. **Testable.** Any Behavior can optionally carry Evaluations, so the same document that describes intended behavior can drive automated verification.
 6. **No vendor lock-in.** You run your agent on your infrastructure. `abslang` runs it, captures the trace, and sends only the relevant data to the evaluator. The evaluator never calls your agent — it receives `{type, input, context, response, threshold}` and returns `{passed, score, reason}`. Any provider can implement this adapter in an afternoon.
+7. **Deterministic first, LLM-judge as escape hatch.** The specification is ground truth, not a prompt for a judge. Context-dependent validity — intent detection, whether a tool call is correct, whether data was requested — is declared with `optional` + `expected` + `when` and a dataset, and checked deterministically. `llm_judge` (routable to any vendor through an adapter) is reserved for criteria that genuinely cannot be declared, never the default.
 
 ### The anti-lock-in architecture
 
@@ -57,6 +58,7 @@ Your session file never changes. Only the `--adapter` flag.
 - Not an orchestration or agent framework.
 - Not a replacement for OpenAPI/AsyncAPI — it complements them by describing behavior instead of payload shape.
 - Not (yet) a ratified interoperability standard. v0.1 is a proposal, open for review and change.
+- Not a catalog of vendor semantic evaluators. Toxicity classifiers, tool-selection judges, and similar LLM-judgment dimensions are deliberately left out of the core; their deterministic equivalents (`never` + `regex`/`contains`, `tool_call`, `sequence`) cover the spec-driven cases.
 
 ## Status
 

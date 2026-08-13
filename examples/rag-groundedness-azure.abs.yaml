@@ -1,0 +1,56 @@
+session: Return policy RAG — Azure AI Foundry evaluation
+dataset:
+  id: cases
+  path: cases.jsonl
+# cases.jsonl:
+# {"userQuery": "What's your return policy?"}
+# {"userQuery": "Can I return opened items?"}
+description: |
+  Same spec as rag-groundedness.yaml, but evaluations route through Azure AI
+  Foundry Evaluation. Run with: abslang run ... --adapter azure
+
+behaviors:
+  - id: user_asks
+    actor: user
+    action: says
+    content: "{{cases.userQuery}}"
+
+  - id: kb_call
+    actor: assistant
+    action: calls
+    target: Knowledge Base
+
+  - id: kb_result
+    actor: tool
+    action: responds
+    target: Knowledge Base
+
+  - id: answer
+    actor: assistant
+    action: informs
+    evaluations:
+      - type: Groundedness
+        adapter: azure
+        query: user_asks.says
+        context: kb_result.responds
+        response: self
+        threshold: 0.8
+      - type: Relevance
+        adapter: azure
+        query: user_asks.says
+        response: self
+        threshold: 0.7
+      - type: Coherence
+        adapter: azure
+        response: self
+        threshold: 0.7
+      - type: custom
+        id: azure.tool_call_accuracy
+        adapter: azure
+        threshold: 0.6
+
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: calls, target: "Knowledge Base" }
+      - { actor: assistant, action: informs }

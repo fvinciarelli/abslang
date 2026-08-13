@@ -17,6 +17,7 @@ class ObservedStep:
     target: str | None = None
     content: Any = None
     with_: dict[str, Any] | None = None
+    tool_call_id: str | None = None
 
 
 @dataclass
@@ -514,6 +515,7 @@ def _evaluate_composition(
 # ── Adapter registry ──
 
 _adapters: dict[str, AdapterFunction] = {}
+_named_adapters: dict[tuple[str, str], AdapterFunction] = {}
 
 # Import built-in LLM judge (registers itself via setup function below)
 from . import builtin_judge as _builtin_judge
@@ -524,17 +526,45 @@ _adapters["g_eval"] = _builtin_judge.evaluate
 _adapters["faithfulness"] = _builtin_judge.evaluate
 
 
-def register_adapter(etype: str, fn: AdapterFunction) -> None:
-    """Register an external evaluator adapter."""
-    _adapters[etype] = fn
+def register_adapter(etype: str, fn: AdapterFunction, name: str | None = None) -> None:
+    """Register an external evaluator adapter.
+
+    When ``name`` is None the adapter becomes the default for ``etype``.
+    When ``name`` is given, it is registered under ``(etype, name)`` so a rule
+    can select it per-evaluation via the ``adapter:`` field.
+    """
+    if name is None:
+        _adapters[etype] = fn
+    else:
+        _named_adapters[(etype, name)] = fn
 
 
 async def evaluate_with_adapter(
     etype: str,
     trace: list[ObservedStep],
     evaluation: dict[str, Any],
+    adapter_name: str | None = None,
 ) -> EvalResult | None:
-    """Try to evaluate using a registered adapter. Returns None if no adapter."""
+    """Try to evaluate using a registered adapter. Returns None if no adapter.
+
+    Resolution order:
+    1. ``adapter_name`` selects a named adapter registered for ``(etype, name)``.
+       If the name is given but not registered, a clear error result is returned.
+    2. Otherwise the default adapter for ``etype`` is used.
+    """
+    if adapter_name:
+        named = _named_adapters.get((etype, adapter_name))
+        if named is not None:
+            return await named(trace, evaluation)
+        return EvalResult(
+            type=etype,
+            passed=False,
+            score=0.0,
+            reason=(
+                f"Adapter '{adapter_name}' is not registered for '{etype}'. "
+                f"Run with --adapter {etype}={adapter_name} (or --adapter {adapter_name})."
+            ),
+        )
     adapter = _adapters.get(etype)
     if adapter is None:
         return None

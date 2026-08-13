@@ -8,6 +8,7 @@ Commands:
 """
 
 import asyncio
+import importlib
 import json
 import os
 import sys
@@ -86,6 +87,79 @@ def _parse_var_bindings(var_list: tuple[str, ...]) -> dict[str, str]:
             k, v = item.split("=", 1)
             result[k.strip()] = v.strip()
     return result
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  Evaluator adapter registry
+# ═══════════════════════════════════════════════════════════════════
+
+# provider -> (module path, adapter function name, supported eval types)
+ADAPTER_PROVIDERS: dict[str, tuple[str, str, tuple[str, ...]]] = {
+    "aievaluator": (
+        "abslang.evaluators.adapters.aievaluator",
+        "aievaluator_adapter",
+        ("llm_judge", "Groundedness", "Relevance", "Coherence", "Fluency"),
+    ),
+    "azure": (
+        "abslang.evaluators.adapters.azure",
+        "azure_adapter",
+        ("llm_judge", "Groundedness", "Relevance", "Coherence", "Fluency", "custom"),
+    ),
+    "aws": (
+        "abslang.evaluators.adapters.aws",
+        "aws_adapter",
+        ("llm_judge", "custom"),
+    ),
+}
+
+
+def _setup_adapters(cli_adapters: tuple[str, ...], config_adapters: dict | None) -> None:
+    """Configure evaluator adapters from --adapter flags and abs.config.yaml.
+
+    Accepts:
+      - ``--adapter azure``             → azure becomes the default for all its types
+      - ``--adapter llm_judge=azure``   → azure becomes the default for llm_judge only
+      - ``adapters: { llm_judge: aievaluator }`` in abs.config.yaml
+
+    Every configured provider is also registered *by name* so a rule can select it
+    per-evaluation via the ``adapter:`` field.
+    """
+    from abslang.evaluators import register_adapter
+
+    specs: list[tuple[str | None, str]] = []
+
+    if isinstance(config_adapters, dict):
+        for etype, provider in config_adapters.items():
+            specs.append((etype, str(provider)))
+
+    for spec in cli_adapters:
+        if "=" in spec:
+            etype, provider = spec.split("=", 1)
+            specs.append((etype.strip() or None, provider.strip()))
+        else:
+            specs.append((None, spec.strip()))
+
+    for etype, provider in specs:
+        if provider not in ADAPTER_PROVIDERS:
+            continue
+        mod_path, fn_name, supported = ADAPTER_PROVIDERS[provider]
+        mod = importlib.import_module(mod_path)
+
+        configure = getattr(mod, "configure", None)
+        if configure is not None:
+            configure()
+
+        fn = getattr(mod, fn_name)
+
+        # Named registration → selectable per-rule via ``adapter: <provider>``
+        for t in supported:
+            register_adapter(t, fn, name=provider)
+
+        # Default registration
+        targets = [etype] if etype else list(supported)
+        for t in targets:
+            if t in supported:
+                register_adapter(t, fn)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -242,15 +316,8 @@ def run_cmd(
         click.echo("❌ Provide --agent or set ABS_AGENT_URL.", err=True)
         sys.exit(2)
 
-    # Configure AI Evaluator
-    for adapter_spec in adapters:
-        if "=" in adapter_spec:
-            etype, provider = adapter_spec.split("=", 1)
-            if provider.strip() == "aievaluator":
-                __import__('abslang.evaluators.adapters.aievaluator', fromlist=['configure']).configure(
-                    api_key=os.environ.get("AIEVALUATOR_API_KEY"),
-                    engine_url=os.environ.get("AIEVALUATOR_ENGINE_URL"),
-                )
+    # Configure evaluator adapters (CLI --adapter + abs.config.yaml adapters:)
+    _setup_adapters(adapters, cfg.get("adapters"))
 
     agent_config = AgentConfig(
         url=agent_url,
