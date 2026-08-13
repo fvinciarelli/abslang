@@ -252,8 +252,29 @@ Every flag can also be set via environment variable:
 | `ABS_AGENT_FORMAT` | `--agent-format` |
 | `ABS_AGENT_AUTH` | `--agent-auth` |
 | `ABS_AGENT_TOKEN` | `--agent-token` |
-| `ABS_ADAPTER_LLM_JUDGE` | `--adapter llm_judge=...` |
 | `ABS_VAR_orderId` | `--var orderId=...` |
+
+### Evaluator adapters
+
+Pick where LLM-based evaluations are judged — without touching the session file:
+
+```bash
+# Built-in judge — auto-detects OpenAI / Anthropic / Gemini
+OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
+
+# Azure AI Foundry — quality dimensions (Groundedness, Relevance, …)
+abslang run session.abs.yaml --agent $URL --adapter azure
+
+# AWS Bedrock — llm_judge + custom metrics
+abslang run session.abs.yaml --agent $URL --adapter aws
+
+# AI Evaluator — free tier, no infrastructure
+abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
+```
+
+Safety dimensions (`Violence`, `HateUnfairness`, `Sexual`, `SelfHarm`) work with the
+built-in judge out of the box — no criteria required. See
+[EVALUATIONS.md](./EVALUATIONS.md) and [docs/adapters/](./docs/adapters/).
 
 ---
 

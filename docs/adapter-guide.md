@@ -188,3 +188,5 @@ If you build an adapter for a public evaluation service, we'd love to list it. O
 - Configuration example
 
 Examples of adapters that can be built with this contract: Azure AI Evaluation, LangSmith, Galileo, Promptfoo, DeepEval, Ragas, your in-house evaluation service.
+
+Already shipped: [Azure AI Foundry](./adapters/azure.md) and [AWS Bedrock](./adapters/aws.md) — use them directly, or read them as reference implementations.

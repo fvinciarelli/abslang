@@ -56,6 +56,9 @@
 | All chain evaluators | ✅ | ✅ |
 | Composition (`all_of`/`any_of`/`none_of`) | ✅ | ✅ |
 | AI Evaluator adapter (LLM judge) | ✅ | ✅ |
+| Azure AI Foundry adapter (quality + agentic) | — | ✅ |
+| AWS Bedrock adapter (LLM-as-judge) | — | ✅ |
+| Safety dimensions (curated rubrics) | — | ✅ |
 | CLI (`init`, `run`, `report`) | ✅ | ✅ |
 | Table formatter | ✅ | ✅ |
 | JSON/JUnit output | ✅ | ✅ |

@@ -16,7 +16,7 @@ To run a **Agent Behavior Specification** session you only need two things:
 That's it. The Runner handles the rest.
 
 ```bash
-abs run ./order-status.abs.yaml --agent http://localhost:8080/chat
+abslang run ./order-status.abs.yaml --agent http://localhost:8080/chat
 ```
 
 ---
@@ -208,14 +208,19 @@ Adapters implement these evaluator types (the runner dispatches to the configure
 | `Fluency` | Natural language quality |
 | `custom` | Arbitrary evaluator identified by `id` |
 
+Safety dimensions (`HateUnfairness`, `Violence`, `Sexual`, `SelfHarm`) are a special
+case: they ship with a curated rubric and run on the **built-in judge** out of the
+box — no adapter, no criteria. You can still route them to an external engine with
+`adapter:` if one supports them.
+
 ### Adapter registry
 
 Adapters are registered by evaluator type. The Runner ships with a built-in judge that auto-detects OpenAI, Anthropic, or Gemini from your environment. You can override it with an external adapter like AI Evaluator:
 
 ```bash
-abs run session.abs.yaml \
-  --adapter llm_judge=azure \
-  --adapter llm_judge=langsmith
+abslang run session.abs.yaml --agent $URL --adapter azure   # Azure AI Foundry
+abslang run session.abs.yaml --agent $URL --adapter aws     # AWS Bedrock
+abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
 ```
 
 Or in a config file:
@@ -224,36 +229,53 @@ Or in a config file:
 # abs.config.yaml
 adapters:
   llm_judge: aievaluator
-  custom: langsmith
+  Groundedness: azure
 ```
 
 ---
 
-## AI Evaluator as the first adapter
+## Evaluator adapters
 
-AI Evaluator ([aievaluator.dev](https://aievaluator.dev)) provides LLM-as-a-judge with multiple judge models (DeepSeek, GPT-4, Gemini, Mistral) and metrics (faithfulness, groundedness, toxicity, and custom evaluators). It already has the infrastructure **Agent Behavior Specification** needs — a judge factory, BYOK support, and a sync evaluation API.
+An adapter is where the LLM judgment actually happens. The runner ships with three
+ready-to-use engines, plus a built-in judge that needs nothing but an API key.
 
-When the Runner starts with the AI Evaluator adapter configured, it sends `llm_judge` evaluations to the AI Evaluator API with the trace and criteria. The adapter handles the rest.
-
-The built-in judge works out of the box — just set your LLM provider's API key:
+**Built-in judge** — auto-detects OpenAI, Anthropic, or Gemini from your environment
+and handles `llm_judge` plus the safety dimensions:
 
 ```bash
-# Built-in judge auto-detects your provider:
-OPENAI_API_KEY=sk-... abs run session.abs.yaml --agent $AGENT_URL
-ANTHROPIC_API_KEY=sk-ant-... abs run session.abs.yaml --agent $AGENT_URL
+OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $AGENT_URL
+ANTHROPIC_API_KEY=sk-ant-... abslang run session.abs.yaml --agent $AGENT_URL
+GEMINI_API_KEY=... abslang run session.abs.yaml --agent $AGENT_URL
 ```
 
-To use AI Evaluator instead, opt in with `--adapter`:
+**Azure AI Foundry** — `Groundedness`, `Relevance`, `Coherence`, `Fluency`, plus
+agentic evaluators (`azure.task_adherence`, `azure.tool_call_accuracy`, …):
 
 ```bash
-# Route llm_judge through AI Evaluator:
+pip install "abslang[azure]"
+export AZURE_OPENAI_ENDPOINT=... AZURE_OPENAI_KEY=... AZURE_OPENAI_DEPLOYMENT=...
+abslang run session.abs.yaml --agent $AGENT_URL --adapter azure
+```
+
+**AWS Bedrock** — `llm_judge` and custom metrics through a Bedrock model:
+
+```bash
+pip install "abslang[aws]"
+export AWS_REGION=us-east-1
+abslang run session.abs.yaml --agent $AGENT_URL --adapter aws
+```
+
+**AI Evaluator** — free tier, no infrastructure:
+
+```bash
 abslang run session.abs.yaml --agent $AGENT_URL --adapter llm_judge=aievaluator
-
-# Uses AI Evaluator's playground (5 free evals/day, no API key)
-# Or set AIEVALUATOR_API_KEY for 100 free evals/month
 ```
 
-Other evaluator providers (Azure AI, LangSmith, Promptfoo, Galileo, Arize) can ship adapters that implement the same interface. **Agent Behavior Specification** doesn't care which one you use — it just calls `adapter.evaluate(trace, rule)` and expects an `EvalResult` back.
+Any provider can ship an adapter implementing the same interface — **Agent Behavior
+Specification** doesn't care which one you use. It just calls
+`adapter.evaluate(trace, rule)` and expects an `EvalResult` back. See
+[docs/adapters/](./docs/adapters/) for the shipped adapters and
+[docs/adapter-guide.md](./docs/adapter-guide.md) to build your own.
 
 For the full evaluator type reference, see [EVALUATIONS.md](./EVALUATIONS.md).
 
@@ -380,7 +402,7 @@ Agents are rarely wide open. The Runner supports the four most common auth metho
 For `oauth2`, the Runner can optionally handle token refresh automatically:
 
 ```bash
-abs run session.abs.yaml \
+abslang run session.abs.yaml \
   --agent $AGENT_URL \
   --agent-auth oauth2 \
   --agent-token $ACCESS_TOKEN \
@@ -392,7 +414,7 @@ abs run session.abs.yaml \
 In CI, these typically come from secrets:
 
 ```bash
-abs run session.abs.yaml \
+abslang run session.abs.yaml \
   --agent $STAGING_AGENT \
   --agent-auth bearer \
   --agent-token $AGENT_API_KEY

@@ -103,7 +103,7 @@ abslang generate-ci --platform gitlab   # GitLab CI
 
 Evaluations like `llm_judge`, `Groundedness`, and `Relevance` need an LLM to produce the judgment. `abslang` routes them through an adapter — you pick where the judgment runs.
 
-**Built-in judge (zero setup, `llm_judge` only):**
+**Built-in judge (zero setup — `llm_judge` + safety dimensions):**
 
 ```bash
 # Auto-detects OpenAI, Anthropic, or Gemini from env
@@ -111,21 +111,32 @@ OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
 ANTHROPIC_API_KEY=sk-ant-... abslang run session.abs.yaml --agent $URL
 ```
 
-**AI Evaluator (currently the only adapter available for dimension types):**
+**Azure AI Foundry** (quality dimensions + agentic evaluators):
+
+```bash
+pip install "abslang[azure]"
+export AZURE_OPENAI_ENDPOINT=... AZURE_OPENAI_KEY=... AZURE_OPENAI_DEPLOYMENT=...
+abslang run session.abs.yaml --agent $URL --adapter azure
+```
+
+**AWS Bedrock** (LLM-as-judge):
+
+```bash
+pip install "abslang[aws]"
+export AWS_REGION=us-east-1
+abslang run session.abs.yaml --agent $URL --adapter aws
+```
+
+**AI Evaluator** (free tier):
 
 ```bash
 abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
 ```
 
-**Private LLM (Ollama, vLLM, any OpenAI-compatible endpoint):**
-
-```bash
-abslang run session.abs.yaml --agent $URL \
-  --adapter llm_judge=local \
-  --adapter-url http://localhost:11434/v1
-```
-
-**Other providers** (Azure, Vertex AI, LangSmith, Galileo) can ship adapters implementing the same interface. Your session file doesn't change — only the `--adapter` flag.
+Safety dimensions (`Violence`, `HateUnfairness`, `Sexual`, `SelfHarm`) work with the
+built-in judge out of the box — no criteria required. Other providers can ship
+adapters implementing the same interface. Your session file doesn't change — only the
+`--adapter` flag.
 
 ## Test with the mock agent
 

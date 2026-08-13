@@ -39,8 +39,8 @@ A `{{variable}}` that has no prior `capture:` in the Session is not an error —
 | Source | Example | Typical use |
 |--------|---------|-------------|
 | Dataset column | `{{cases.userQuery}}` | Bound from the `dataset:` block declared in the session file |
-| CLI flag | `abs run session.abs.yaml --var orderId=12345` | Quick one-off with a single value |
-| Environment variable | `ABS_VAR_orderId=12345 abs run session.abs.yaml` | CI pipelines, secrets |
+| CLI flag | `abslang run session.abs.yaml --var orderId=12345` | Quick one-off with a single value |
+| Environment variable | `ABS_VAR_orderId=12345 abslang run session.abs.yaml` | CI pipelines, secrets |
 
 A Session becomes a template, and a dataset is what turns it into many test cases.
 

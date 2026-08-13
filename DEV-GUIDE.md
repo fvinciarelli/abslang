@@ -328,7 +328,7 @@ Three Amigos produces:  refund.abs.yaml
 └─────────────────────────────────────┘
             │
             ▼
-  QA runs: abs run refund.abs.yaml
+  QA runs: abslang run refund.abs.yaml
             │
             ▼
   ✅ 8/8 steps matched · 7/7 evals passed
@@ -357,7 +357,7 @@ Yes. The runner handles both streaming and non-streaming responses. Set `stream:
 **How do I test my agent locally during development?**
 ```bash
 python tools/mock_agent.py --port 8080
-abs run session.abs.yaml --agent http://localhost:8080/chat
+abslang run session.abs.yaml --agent http://localhost:8080/chat
 ```
 
 The mock agent returns predefined responses so you can verify your spec parses and evaluates correctly before connecting to a real agent.
