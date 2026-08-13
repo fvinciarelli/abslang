@@ -1,0 +1,57 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: 'Azure AI Foundry adapter', description: 'Route ABS evaluations through Azure AI Foundry — quality dimensions, agentic evaluators, and an LLM judge.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+Routes ABS LLM-based evaluations through Azure AI Foundry (local SDK). The adapter
+never re-runs your agent — it receives the trace ABS collected, maps it to Azure's
+input, and returns a normalized `EvalResult`.
+
+## Install
+
+```bash
+pip install "abslang[azure]"
+```
+
+Optional (cloud evaluation runs, Foundry dashboard): `pip install "abslang[azure-cloud]"`.
+
+## Configure
+
+```bash
+export AZURE_OPENAI_ENDPOINT="https://<account>.services.ai.azure.com"
+export AZURE_OPENAI_KEY="..."
+export AZURE_OPENAI_DEPLOYMENT="<judge-model-deployment>"
+```
+
+The evaluators are AI-assisted — they call an Azure OpenAI model as the judge and
+incur token usage per evaluation.
+
+## Run
+
+```bash
+abslang run session.abs.yaml --agent $AGENT_URL --adapter azure
+```
+
+Or per rule with `adapter: azure`. If a rule declares `adapter: azure` but azure was
+never registered, the runner reports a clear error instead of silently falling back.
+
+## Supported evaluators
+
+| ABS | Azure evaluator | Inputs |
+|---|---|---|
+| `Groundedness` | `GroundednessEvaluator` | `query` (opt), `response`, `context` |
+| `Relevance` | `RelevanceEvaluator` | `query`, `response` |
+| `Coherence` | `CoherenceEvaluator` | `query`, `response` |
+| `Fluency` | `FluencyEvaluator` | `response` |
+| `llm_judge` | Azure OpenAI judge | `criteria` |
+| `custom` id `azure.task_adherence` | `TaskAdherenceEvaluator` | conversation |
+| `custom` id `azure.intent_resolution` | `IntentResolutionEvaluator` | conversation |
+| `custom` id `azure.tool_call_accuracy` | `ToolCallAccuracyEvaluator` | conversation + `tool_definitions` |
+
+## Score normalization
+
+Azure returns 1–5 Likert scores for many evaluators. The adapter normalizes
+everything to 0–1 (values above 1 are divided by 5) before `threshold` is applied.
+
+</DocsLayout>

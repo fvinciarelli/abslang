@@ -190,14 +190,29 @@ assistant informs        ←──────   { "role": "assistant", "content
 
 ## Evaluator adapters
 
-ABS defines *what* to check. An evaluator adapter defines *how* to check it. The built-in evaluators (`exact_match`, `contains`, `regex`, `schema`, `tool_call`, `sequence`, `eventually`, `never`, `count`, `within`, `variable_consistency`) ship with the Runner. `llm_judge`, `Groundedness`, `Relevance`, `Coherence`, `Fluency`, and `custom` go through adapters.
+ABS defines *what* to check. An evaluator adapter defines *how* to check it. The
+built-in evaluators (`exact_match`, `contains`, `regex`, `schema`, `tool_call`,
+`sequence`, `eventually`, `never`, `count`, `within`, `variable_consistency`) ship
+with the Runner. `llm_judge`, `Groundedness`, `Relevance`, `Coherence`, `Fluency`,
+and `custom` go through adapters.
 
-The default adapter for `llm_judge` is [AI Evaluator](https://aievaluator.dev). Other providers (Azure AI, LangSmith, Promptfoo) can ship adapters implementing the same interface.
+The default adapter for `llm_judge` is the **built-in judge** — it auto-detects
+OpenAI, Anthropic, or Gemini from your environment. Azure AI Foundry and AWS Bedrock
+ship as ready-to-use engines; safety dimensions (`HateUnfairness`, `Violence`,
+`Sexual`, `SelfHarm`) run on the built-in judge with a curated rubric — no criteria.
 
 ```bash
-abslang run session.abs.yaml \
-  --adapter llm_judge=azure \
-  --adapter llm_judge=langsmith
+# Built-in judge
+OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
+
+# Azure AI Foundry
+abslang run session.abs.yaml --agent $URL --adapter azure
+
+# AWS Bedrock
+abslang run session.abs.yaml --agent $URL --adapter aws
+
+# AI Evaluator
+abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
 ```
 
 ---

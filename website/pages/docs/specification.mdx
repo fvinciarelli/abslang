@@ -99,12 +99,18 @@ v0.1 does not model branching within a single Session. Alternate paths MUST be r
 
 ## 8. Conformance
 
-An implementation is ABS v0.1 conformant if it:
+An implementation is ABS v0.2 conformant if it:
 
 1. Parses a document per §2, resolving `target` per §4;
 2. Resolves variables per §6;
 3. If it claims step-level evaluation support, implements at minimum `exact_match` and `contains` evaluators;
 4. If it claims session-level evaluation support, implements at minimum `sequence` and `never`.
+
+The full evaluator vocabulary — deterministic checks, quality dimensions
+(`Groundedness`, `Relevance`, `Coherence`, `Fluency`), safety dimensions
+(`HateUnfairness`, `Violence`, `Sexual`, `SelfHarm`), and the vendor-agnostic
+`adapter` selection mechanism — is defined in [Evaluations](/abslang/docs/evaluations)
+and enforced by the JSON Schema. Adding a new evaluator type is non-breaking per §9.
 
 ## 9. Versioning
 
@@ -114,7 +120,7 @@ ABS uses simple integer versions: `0.1`, `0.2`, …, `1.0`. No patch numbers. Ev
 
 ### Declaring the version
 
-Documents SHOULD declare `abs_version: "0.1"`. This becomes REQUIRED in v0.2.
+Documents MUST declare `abs_version: "0.2"`.
 
 ### Schema versioning
 

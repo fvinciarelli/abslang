@@ -36,7 +36,7 @@ abslang generate-ci   Generate a CI/CD workflow
 
 ---
 
-### `abs chat` — generate YAML from plain language
+### `abslang chat` — generate YAML from plain language
 
 ```bash
 # Auto-detects provider from OPENAI_API_KEY / ANTHROPIC_API_KEY / DEEPSEEK_API_KEY
@@ -51,7 +51,7 @@ Describe what the agent should do. The assistant asks guided questions, generate
 
 ---
 
-### `abs run` — the workhorse
+### `abslang run` — the workhorse
 
 Every flag maps to an env var for CI use.
 
@@ -118,9 +118,18 @@ OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
 # Mock judge for testing without an LLM key
 ABS_MOCK_JUDGE=true abslang run session.abs.yaml --agent $URL
 
-# Route through AI Evaluator
+# Azure AI Foundry — quality dimensions + agentic evaluators
+abslang run session.abs.yaml --agent $URL --adapter azure
+
+# AWS Bedrock — llm_judge + custom metrics
+abslang run session.abs.yaml --agent $URL --adapter aws
+
+# AI Evaluator — free tier
 abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
 ```
+
+Safety dimensions (`Violence`, `HateUnfairness`, `Sexual`, `SelfHarm`) run on the
+built-in judge with a curated rubric — no criteria, no adapter.
 
 **Output formats:**
 
@@ -152,7 +161,7 @@ abslang run session.abs.yaml --agent $URL --dataset cases.jsonl --output report.
 
 ---
 
-### `abs report` — inspect results
+### `abslang report` — inspect results
 
 ```bash
 abslang report report.json                  # Table view
@@ -164,7 +173,7 @@ abslang report report.json --detail 3       # Full trace for a specific row
 
 ---
 
-### `abs generate-ci` — one command to CI
+### `abslang generate-ci` — one command to CI
 
 ```bash
 abslang generate-ci --platform github   # GitHub Actions
@@ -217,7 +226,6 @@ abslang run examples/order-status.yaml --agent http://localhost:8080/chat
 | `ABS_AGENT_FORMAT` | `--agent-format` |
 | `ABS_AGENT_AUTH` | `--agent-auth` |
 | `ABS_AGENT_TOKEN` | `--agent-token` |
-| `ABS_ADAPTER_LLM_JUDGE` | `--adapter llm_judge=...` |
 | `ABS_VAR_orderId` | `--var orderId=...` |
 | `OPENAI_API_KEY` | Auto-detected for `llm_judge` |
 | `ANTHROPIC_API_KEY` | Auto-detected for `llm_judge` |

@@ -74,22 +74,43 @@ By now the evaluator sees the **entire conversation**: clarification + resolutio
 
 **This is what makes ABS different from a single-shot eval tool:** five evaluations, across three stages, each with a growing view of the trace. The same session file, the same adapter, different slices of context.
 
-## What backs `llm_judge` and dimension evaluators
+## What backs `llm_judge` and the dimension evaluators
 
-When you use `llm_judge`, `Relevance`, `Groundedness`, `Coherence`, or `Fluency`, an LLM needs to produce the judgment. `abslang` auto-detects your provider:
+When you use `llm_judge`, `Relevance`, `Groundedness`, `Coherence`, `Fluency`, or a
+safety dimension, an LLM produces the judgment. You pick *where* — and the session
+file never changes.
 
 ```bash
 # Built-in judge — auto-detects OpenAI, Anthropic, or Gemini from env
 OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
 
-# Route through AI Evaluator adapter (dimension types too)
-abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
+# Azure AI Foundry — quality dimensions + agentic evaluators
+abslang run session.abs.yaml --agent $URL --adapter azure
 
-# Private LLM — nothing leaves your network
-abslang run session.abs.yaml --agent $URL --adapter llm_judge=local --adapter-url http://localhost:11434/v1
+# AWS Bedrock — llm_judge + custom metrics
+abslang run session.abs.yaml --agent $URL --adapter aws
+
+# AI Evaluator — free tier
+abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
 ```
 
-Your session file never changes. Only the `--adapter` flag. See the [full adapter guide](/abslang/docs/tutorial/run-it) for all options.
+### Safety dimensions — no criteria to write
+
+Some checks are so common you shouldn't have to write the rubric. Safety dimensions
+ship with a curated one:
+
+```yaml
+  - actor: assistant
+    action: informs
+    evaluations:
+      - type: Violence
+        threshold: 0.9
+      - type: HateUnfairness
+        threshold: 0.9
+```
+
+`1.0 = safe`, `0.0 = harmful`. They run on the built-in judge out of the box. Override
+with `criteria:` when you need stricter. See the [full adapter guide](/abslang/docs/tutorial/run-it).
 
 ---
 

@@ -167,6 +167,35 @@ evaluations:
     id: my-org.sentiment-positive
 ```
 
+### Quality dimensions — `Groundedness`, `Relevance`, `Coherence`, `Fluency`
+
+Standard quality checks every major platform supports. Point them at the trace and
+route through an adapter (`--adapter azure` or AI Evaluator):
+
+```yaml
+evaluations:
+  - type: Groundedness
+    query: user_asks.says
+    context: kb_result.responds
+    response: self
+    threshold: 0.8
+```
+
+### Safety dimensions — `HateUnfairness`, `Violence`, `Sexual`, `SelfHarm`
+
+Judge the output for harmful content. Each ships with a curated rubric, so they run
+on the built-in judge out of the box — no criteria required:
+
+```yaml
+evaluations:
+  - type: Violence
+    response: self
+    threshold: 0.9
+```
+
+`1.0 = safe`, `0.0 = harmful`. Override with `criteria:` for a stricter definition.
+Pick the engine per run with `--adapter`, or per rule with `adapter:`.
+
 ## Session-level (chain) evaluator types
 
 All chain evaluators use a **selector** to identify Behaviors in the trace: an object with any of `actor`, `action`, `target`. A field that's present must match exactly; a field omitted is a wildcard.

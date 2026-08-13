@@ -41,7 +41,7 @@
       {
         "heading": "Core Specification",
         "items": [
-          { "label": "Specification v0.1", "href": "/docs/specification" },
+          { "label": "Specification", "href": "/docs/specification" },
           { "label": "Core Model", "href": "/docs/core-model" },
           { "label": "Vocabulary", "href": "/docs/vocabulary" },
           { "label": "Variables", "href": "/docs/variables" },
@@ -55,7 +55,9 @@
           { "label": "Composition", "href": "/docs/composition" },
           { "label": "Tools & MCP", "href": "/docs/tools" },
           { "label": "Runner", "href": "/docs/runner" },
-          { "label": "CLI Reference", "href": "/docs/cli" }
+          { "label": "CLI Reference", "href": "/docs/cli" },
+          { "label": "Azure adapter", "href": "/docs/adapters/azure" },
+          { "label": "AWS adapter", "href": "/docs/adapters/aws" }
         ]
       },
       {

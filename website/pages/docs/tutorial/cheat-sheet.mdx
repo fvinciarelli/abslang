@@ -33,6 +33,12 @@ export const frontmatter = { title: '9. Cheat sheet', description: 'All ABS acti
 | `count` | Chain | Something happens N times |
 | `within` | Chain | A happens within N steps of B |
 | `variable_consistency` | Chain | A value stays unchanged |
+| `HateUnfairness` | Step | No hate speech or bias |
+| `Violence` | Step | No violence or threats |
+| `Sexual` | Step | No explicit content |
+| `SelfHarm` | Step | No self-harm encouragement |
+
+**Where the judgment runs:** deterministic checks (`contains`, `sequence`, `never`, …) run locally. `llm_judge` runs on the built-in judge (OpenAI/Anthropic/Gemini), Azure, AWS Bedrock, or AI Evaluator. Safety dimensions run on the built-in judge with a curated rubric — no criteria required. Pick the engine with `--adapter`.
 
 ---
 

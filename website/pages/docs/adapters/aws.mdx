@@ -1,0 +1,41 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: 'AWS Bedrock adapter', description: 'Route ABS llm_judge and custom evaluations through an Amazon Bedrock model.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+Routes ABS `llm_judge` and `custom` evaluations through an Amazon Bedrock model
+(Converse API). No spans, no AgentCore, no agent instrumentation.
+
+## Install
+
+```bash
+pip install "abslang[aws]"
+```
+
+## Configure
+
+```bash
+export AWS_REGION="us-east-1"
+export AWS_PROFILE="my-profile"   # optional
+export BEDROCK_EVALUATOR_MODEL_ID="anthropic.claude-3-5-haiku-20241022-v1:0"
+```
+
+## Run
+
+```bash
+abslang run session.abs.yaml --agent $AGENT_URL --adapter aws
+```
+
+## Supported evaluators
+
+| ABS | What it does |
+|---|---|
+| `llm_judge` | Bedrock model scores the response 0–1 against `criteria` |
+| `custom` | User-defined metric via `prompt` + `rating_scale` |
+
+`custom` supports a rating scale (`1-5`, `0-1`) and placeholders `{{response}}`,
+`{{query}}`, `{{context}}`, `{{criteria}}`, `{{trace}}`. The adapter normalizes the
+returned score to 0–1 before `threshold` is applied.
+
+</DocsLayout>
