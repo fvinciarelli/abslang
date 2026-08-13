@@ -268,9 +268,10 @@ async def _llm_judge(trace: list[ObservedStep], evaluation: dict[str, Any]) -> E
             )
         content = resp.json()["choices"][0]["message"]["content"]
         parsed = _parse_response(content, "azure")
+        threshold = evaluation.get("threshold", 0.5)
         return EvalResult(
             type="llm_judge",
-            passed=parsed["passed"],
+            passed=parsed["score"] >= threshold,
             score=parsed["score"],
             reason=parsed["reason"],
         )

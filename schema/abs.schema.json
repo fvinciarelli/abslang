@@ -164,6 +164,7 @@
             "exact_match", "contains", "regex", "schema", "tool_call",
             "llm_judge", "custom",
             "Groundedness", "Relevance", "Coherence", "Fluency",
+            "HateUnfairness", "Violence", "Sexual", "SelfHarm",
             "sequence", "eventually", "never", "count", "within", "variable_consistency",
             "all_of", "any_of", "none_of",
             "expected"

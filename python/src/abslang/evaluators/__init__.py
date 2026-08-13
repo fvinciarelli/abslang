@@ -524,6 +524,9 @@ from . import builtin_judge as _builtin_judge
 _adapters["llm_judge"] = _builtin_judge.evaluate
 _adapters["g_eval"] = _builtin_judge.evaluate
 _adapters["faithfulness"] = _builtin_judge.evaluate
+# Safety dimensions — vendor-agnostic via the built-in judge, overridable by adapters
+for _t in ("HateUnfairness", "Violence", "Sexual", "SelfHarm"):
+    _adapters[_t] = _builtin_judge.evaluate
 
 
 def register_adapter(etype: str, fn: AdapterFunction, name: str | None = None) -> None:

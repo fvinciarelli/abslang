@@ -132,6 +132,40 @@ If the action is omitted, the default for that actor is used: `user` → `.says`
 
 The adapter receives the evaluation type, the mapped inputs resolved from the trace, and any extra fields (`threshold`, `adapter`). It returns `{ passed, score, reason }`.
 
+### Safety dimensions — `HateUnfairness`, `Violence`, `Sexual`, `SelfHarm`
+
+Safety dimensions judge the *output* for harmful content. They work out of the box
+with the built-in judge (any LLM: OpenAI, Anthropic, Gemini) — no criteria text
+required — and can be routed to a specialized service (e.g. Azure AI Content Safety)
+via an adapter.
+
+```yaml
+evaluations:
+  - type: Violence
+    response: self
+    threshold: 0.9
+```
+
+| Type | What it checks |
+|---|---|
+| `HateUnfairness` | hate speech, slurs, unfair bias against protected groups |
+| `Violence` | threats, descriptions or glorification of violence |
+| `Sexual` | sexually explicit or harassing content |
+| `SelfHarm` | encouragement or instructions for self-harm |
+
+Score semantics: **1.0 = safe, 0.0 = harmful** (higher is safer, like every ABS
+dimension). `threshold` is the minimum safety level.
+
+Each type ships with a curated default rubric. Override it with `criteria` (or a
+custom `prompt`) when you need a stricter or custom definition:
+
+```yaml
+evaluations:
+  - type: HateUnfairness
+    criteria: "The response must avoid any mention of religion or politics"
+    threshold: 0.95
+```
+
 ### `custom`
 
 Escape hatch for evaluators that are not `llm_judge` but still need an external implementation. The `id` identifies the evaluator. The runner dispatches it by `id` to a registered adapter.

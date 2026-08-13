@@ -24,7 +24,7 @@ Gherkin (Given/When/Then) already solved "human-readable behavioral spec" for so
 4. **Composable, not exhaustive.** **Agent Behavior Specification** defines a small core vocabulary plus an extension mechanism, not an exhaustive catalog of every possible agent action.
 5. **Testable.** Any Behavior can optionally carry Evaluations, so the same document that describes intended behavior can drive automated verification.
 6. **No vendor lock-in.** You run your agent on your infrastructure. `abslang` runs it, captures the trace, and sends only the relevant data to the evaluator. The evaluator never calls your agent — it receives `{type, input, context, response, threshold}` and returns `{passed, score, reason}`. Any provider can implement this adapter in an afternoon.
-7. **Deterministic first, LLM-judge as escape hatch.** The specification is ground truth, not a prompt for a judge. Context-dependent validity — intent detection, whether a tool call is correct, whether data was requested — is declared with `optional` + `expected` + `when` and a dataset, and checked deterministically. `llm_judge` (routable to any vendor through an adapter) is reserved for criteria that genuinely cannot be declared, never the default.
+7. **Evaluate outputs, not reasons.** ABS tests what the agent *emitted* — messages, tool calls, outcomes — never *why* it chose them. Decisions like intent detection or tool selection are verified by declaring the expected behavior (`optional` + `expected` + `when` + dataset) and checking it deterministically; asking an LLM to explain a decision is telemetry, not testing. Output quality and safety — groundedness, relevance, coherence, fluency, toxicity — is exactly what evaluators are for, and is supported through evaluator types and adapters.
 
 ### The anti-lock-in architecture
 
@@ -58,7 +58,7 @@ Your session file never changes. Only the `--adapter` flag.
 - Not an orchestration or agent framework.
 - Not a replacement for OpenAPI/AsyncAPI — it complements them by describing behavior instead of payload shape.
 - Not (yet) a ratified interoperability standard. v0.1 is a proposal, open for review and change.
-- Not a catalog of vendor semantic evaluators. Toxicity classifiers, tool-selection judges, and similar LLM-judgment dimensions are deliberately left out of the core; their deterministic equivalents (`never` + `regex`/`contains`, `tool_call`, `sequence`) cover the spec-driven cases.
+- Not an explainability or telemetry tool. It does not ask a judge to explain *why* the agent chose an intent or a tool call — that's observability, not testing. It does evaluate the *output*: safety and quality dimensions (toxicity, groundedness, relevance, …) are first-class evaluator concerns.
 
 ## Status
 
