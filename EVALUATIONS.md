@@ -1,5 +1,60 @@
 # Evaluations
 
+## What can you evaluate? — start here
+
+Tell ABS what you want to check, in plain words, and pick the evaluator:
+
+| You want to check that… | Use |
+|---|---|
+| the response contains a word or phrase | `contains` |
+| the response is exactly this | `exact_match` |
+| the response matches a pattern | `regex` |
+| the response is valid structured data | `schema` |
+| the agent called the right tool, with the right parameters | `tool_call` |
+| steps happened in the right order | `sequence` |
+| a step happened at least once | `eventually` |
+| a step **never** happened | `never` |
+| a step happened between N and M times | `count` |
+| a step followed another within N steps | `within` |
+| a captured value stayed consistent throughout | `variable_consistency` |
+| the agent asked for data it should have asked for | `optional` + `expected` |
+| the response is grounded in the context | `Groundedness` |
+| the response addresses the user's question | `Relevance` |
+| the response is logically coherent | `Coherence` |
+| the response is fluent and readable | `Fluency` |
+| the response is free of hate / bias | `HateUnfairness` |
+| the response is free of violence | `Violence` |
+| the response is free of sexual content | `Sexual` |
+| the response doesn't encourage self-harm | `SelfHarm` |
+| anything else you can describe in one sentence | `llm_judge` |
+
+Rows above the line run **locally and deterministically** — no model, no cost, no
+flakiness. Rows below need an LLM as the judge; the safety dimensions
+(`HateUnfairness`, `Violence`, `Sexual`, `SelfHarm`) ship with a curated rubric, so
+you don't have to write criteria.
+
+### Where does the judging happen?
+
+LLM-based evaluators are engine-agnostic. Pick the engine per run with `--adapter`,
+or per rule with `adapter:`:
+
+```bash
+abslang run session.abs.yaml --agent $URL --adapter azure   # Azure AI Foundry
+abslang run session.abs.yaml --agent $URL --adapter aws     # AWS Bedrock
+abslang run session.abs.yaml --agent $URL                   # built-in judge (OpenAI/Anthropic/Gemini)
+```
+
+```yaml
+evaluations:
+  - type: Violence
+    adapter: azure          # or omit for the built-in judge
+    threshold: 0.9
+```
+
+Your session file never changes. Only the engine.
+
+---
+
 ## Design decision: **Agent Behavior Specification** is descriptive and testable, by the same document
 
 **Resolved in v0.1.** **Agent Behavior Specification** does not have two modes with two syntaxes. A document with no `evaluations` anywhere is a pure behavioral description — useful as documentation, as a spec to review, as training material. The same document, with `evaluations` added at the Behavior and/or Session level, becomes executable as an automated test. Nothing about the document's shape changes; `evaluations` is simply optional annotation. A tool that only wants documentation can ignore `evaluations` entirely.

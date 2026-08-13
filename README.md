@@ -331,7 +331,7 @@ abslang chat
 
 `abslang` calls your agent, captures the full trace, and hands it off to **evaluators** — pluggable checkers that verify specific things. An evaluator is a function that receives `{type, input, context, response, threshold}` and returns `{passed, score, reason}`.
 
-Built-in evaluators run locally: `contains`, `regex`, `sequence`, `never`. LLM-based evaluators — `llm_judge`, `Groundedness`, `Relevance` — need an **adapter**, a small bridge to an evaluation service. ABS is adapter-agnostic: anyone can build and share an adapter for their service of choice. The evaluator **never calls your agent**; it only looks at the trace that was already captured. [Want to build one? Here's how →](./docs/adapter-guide.md)
+Built-in evaluators run locally: `contains`, `regex`, `sequence`, `never`, plus safety dimensions (`Violence`, `HateUnfairness`, `Sexual`, `SelfHarm`) that ship with curated rubrics — no criteria to write. LLM-based evaluators — `llm_judge`, `Groundedness`, `Relevance` — need an **adapter**, a small bridge to an evaluation service. Azure AI Foundry and AWS Bedrock ship out of the box; anyone can add their own by implementing the adapter contract. The evaluator **never calls your agent**; it only looks at the trace that was already captured. [Want to build one? Here's how →](./docs/adapter-guide.md)
 
 Switch evaluators — or the LLM behind them — by changing one flag. Your session file never changes:
 
@@ -354,15 +354,17 @@ sequenceDiagram
 ```
 
 ```bash
-# Built-in judge (OpenAI, Anthropic, Gemini) — free, just set an env var
+# Built-in judge (OpenAI, Anthropic, Gemini) — just set an env var
 OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
 
-# Private LLM — nothing leaves your network
-abslang run session.abs.yaml --agent $URL --adapter llm_judge=local --adapter-url http://localhost:11434/v1
+# Azure AI Foundry — quality + safety evaluators
+AZURE_OPENAI_ENDPOINT=... AZURE_OPENAI_KEY=... AZURE_OPENAI_DEPLOYMENT=... \
+  abslang run session.abs.yaml --agent $URL --adapter azure
 
-# External adapters — today AI Evaluator ships out of the box;
-# Azure, LangSmith, Galileo, Promptfoo and others can be added
-# by implementing the adapter contract (an afternoon of work)
+# AWS Bedrock — LLM-as-judge with a Bedrock model
+AWS_REGION=us-east-1 abslang run session.abs.yaml --agent $URL --adapter aws
+
+# AI Evaluator — free tier, no infrastructure
 abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
 ```
 
@@ -389,12 +391,20 @@ Your session file never changes. Only the `--adapter` flag.
 | [EXAMPLES.md](./EXAMPLES.md) | Worked, narrated examples |
 | [ROADMAP.md](./ROADMAP.md) | What's next, and open design questions |
 | [schema/abs.schema.json](./schema/abs.schema.json) | Normative JSON Schema for v0.2 document validation |
+| [docs/adapters/azure.md](./docs/adapters/azure.md) | Azure AI Foundry adapter — setup and evaluators |
+| [docs/adapters/aws.md](./docs/adapters/aws.md) | AWS Bedrock adapter — setup and evaluators |
 | [examples/](./examples/) | Runnable example sessions in `.yaml` |
 | [.plans/branching-optional-behaviors.md](./.plans/branching-optional-behaviors.md) | v0.2 design: optional behaviors, branching |
 
 ## What's new in v0.2
 
 v0.2 introduces **optional behaviors** — agent-driven branching without separate sessions. New concepts: `optional`, `requires`, `matches_when` (llm_judge / contains / regex), `expected` evaluator, `when` expressions, `after`. The runner now observes the agent's real decisions and validates whether they were correct, rather than following a rigid script. See [SPECIFICATION.md §7](./SPECIFICATION.md#7-optional-behaviors-v02) and the example above.
+
+## What's new — adapters & safety dimensions
+
+- **Pick your evaluation engine.** `--adapter azure` (Azure AI Foundry), `--adapter aws` (AWS Bedrock), `--adapter aievaluator`, or the built-in judge — your session file never changes. Select an engine per rule with `adapter:`.
+- **Safety checks, no criteria needed.** `Violence`, `HateUnfairness`, `Sexual`, and `SelfHarm` ship with curated rubrics and work with any engine. Override the rubric with `criteria:` when you need a stricter definition.
+- **Deterministic first.** Declare expected behavior (`optional` + `expected` + `when` + a dataset) and ABS checks it deterministically; use `llm_judge` for what genuinely can't be declared. See the [manifesto](./MANIFESTO.md).
 
 ## Status of the standard
 

@@ -178,6 +178,8 @@ An implementation is **Agent Behavior Specification** v0.2 conformant if it:
 
 Conformance to other evaluator types, and to the not-yet-closed Tool Interaction Specification, is not required. A tool may be conformant while supporting only descriptive parsing (1–3) and no evaluation at all.
 
+The full evaluator vocabulary — deterministic checks, quality dimensions (`Groundedness`, `Relevance`, `Coherence`, `Fluency`), safety dimensions (`HateUnfairness`, `Violence`, `Sexual`, `SelfHarm`), and the vendor-agnostic `adapter` selection mechanism — is defined in EVALUATIONS.md and enforced by `schema/abs.schema.json`. Adding a new evaluator type is non-breaking per §9.
+
 ## 9. Versioning
 
 ### Version numbers
