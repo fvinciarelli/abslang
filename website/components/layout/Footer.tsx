@@ -56,7 +56,7 @@ export default function Footer() {
           <div>
             <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Status</h4>
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-              v0.1 — Public Review
+              v0.2 — Public Review
             </span>
             <p className="mt-2 text-xs text-gray-400">
               Apache 2.0 License

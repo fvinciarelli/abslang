@@ -16,7 +16,7 @@ const comparisons = [
       'Not a prompt format or LLM configuration',
       'Not an orchestration or agent framework',
       'Not a replacement for OpenAPI/AsyncAPI — it complements them',
-      'Not (yet) a ratified standard — v0.1 is open for review'
+      'Not (yet) a ratified standard — v0.2 is open for review'
     ]
   }
 ];

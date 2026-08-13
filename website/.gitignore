@@ -3,6 +3,7 @@
 node_modules/
 .next/
 out/
+serve/
 dist/
 .env
 .env.local
