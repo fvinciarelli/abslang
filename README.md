@@ -2,7 +2,7 @@
 
 > A vendor-neutral, human-readable format for describing the observable behavior of AI agents: what users say, what agents do, and how it should be evaluated.
 
-**Status:** v0.1 — draft, open for review.
+**Status:** v0.2 — draft, open for review.
 
 [![npm version](https://img.shields.io/npm/v/abslang)](https://www.npmjs.com/package/abslang)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](./LICENSE)

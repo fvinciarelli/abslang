@@ -415,19 +415,20 @@ Open any `.abs.yaml` — the editor panel opens automatically. Edit visually, ru
 
 ## What backs `llm_judge` and dimension evaluators
 
-When you add an `llm_judge`, `Groundedness`, `Relevance`, `Coherence`, or `Fluency` evaluation, someone has to call an LLM to produce the judgment. `abslang` gives you multiple paths — including keeping everything local for privacy — and you don't have to change your session file to switch between them.
+When you add an `llm_judge`, `Groundedness`, `Relevance`, `Coherence`, `Fluency`, or a safety dimension (`Violence`, `HateUnfairness`, `Sexual`, `SelfHarm`), an LLM produces the judgment. `abslang` lets you pick *where* that happens — and your session file never changes when you switch.
 
 ### Evaluator types: what runs where
 
-| Evaluator | Provider |
+| Evaluator | Where the judgment can run |
 |---|---|
-| `llm_judge` — free-form criteria | Built-in judge (OpenAI, Anthropic, Gemini) or AI Evaluator adapter |
-| `Groundedness` — factual accuracy | AI Evaluator or custom adapter |
-| `Relevance` — answers the question | AI Evaluator or custom adapter |
-| `Coherence` — logical flow | AI Evaluator or custom adapter |
-| `Fluency` — language quality | AI Evaluator or custom adapter |
+| `llm_judge` — free-form criteria | Built-in judge (OpenAI, Anthropic, Gemini), Azure, AWS Bedrock, AI Evaluator |
+| `Groundedness` — grounded in context | Azure AI Foundry, AI Evaluator |
+| `Relevance` — answers the question | Azure AI Foundry, AI Evaluator |
+| `Coherence` — logical flow | Azure AI Foundry, AI Evaluator |
+| `Fluency` — language quality | Azure AI Foundry, AI Evaluator |
+| `Violence` / `HateUnfairness` / `Sexual` / `SelfHarm` | Built-in judge (curated rubric — no criteria to write) |
 
-### Built-in judge: zero setup for `llm_judge`
+### Built-in judge: zero setup
 
 Out of the box, `abslang` auto-detects whichever LLM provider you have available:
 
@@ -460,54 +461,81 @@ No API key? Use the mock judge for testing — returns a fixed score based on re
 ABS_MOCK_JUDGE=true abslang run session.abs.yaml --agent $URL
 ```
 
-### Dimension evaluators: Groundedness, Relevance, Coherence, Fluency
+### Safety dimensions — no criteria to write
 
-These go beyond free-form criteria — they measure specific quality dimensions. They require an **evaluator adapter** (the built-in judge only handles `llm_judge`).
+You don't have to write criteria for safety checks. Each dimension ships with a
+curated rubric, so this works out of the box with the built-in judge:
 
-**With AI Evaluator (recommended):**
-
-```bash
-# 100 free evals/month with API key
-AIEVALUATOR_API_KEY=... abslang run session.abs.yaml \
-  --agent $URL \
-  --adapter llm_judge=aievaluator
-
-# 5 free evals/day without API key (playground)
-abslang run session.abs.yaml \
-  --agent $URL \
-  --adapter llm_judge=aievaluator
+```yaml
+evaluations:
+  - type: Violence
+    response: self
+    threshold: 0.9
 ```
 
-**With your own LLM (full privacy, no external API calls):**
+Override the rubric with `criteria:` when you need a stricter or custom definition:
 
-Deploy a private judge behind any OpenAI-compatible endpoint (Ollama, vLLM, LiteLLM, local GPT) and point `abslang` at it:
-
-```bash
-# Local Ollama with Llama 3
-abslang run session.abs.yaml \
-  --agent $URL \
-  --adapter llm_judge=local \
-  --adapter-url http://localhost:11434/v1
-
-# Self-hosted vLLM
-abslang run session.abs.yaml \
-  --agent $URL \
-  --adapter llm_judge=local \
-  --adapter-url https://judge.internal.company.com/v1 \
-  --adapter-key $JUDGE_API_KEY
+```yaml
+evaluations:
+  - type: HateUnfairness
+    criteria: "The response must avoid any mention of religion or politics"
+    threshold: 0.95
 ```
 
-This keeps your code, your agent responses, and your evaluations entirely on your infrastructure — nothing leaves your network.
+### Quality dimensions — Groundedness, Relevance, Coherence, Fluency
 
-**With Azure AI / Vertex AI:**
+These measure specific quality dimensions and need a dedicated evaluator. Azure AI
+Foundry ships them:
 
 ```bash
-abslang run session.abs.yaml \
-  --agent $URL \
-  --adapter llm_judge=azure \
-  --adapter-key $AZURE_KEY \
-  --adapter-url $AZURE_ENDPOINT
+pip install "abslang[azure]"
+export AZURE_OPENAI_ENDPOINT="https://<account>.services.ai.azure.com"
+export AZURE_OPENAI_KEY="..."
+export AZURE_OPENAI_DEPLOYMENT="<judge-model-deployment>"
+
+abslang run session.abs.yaml --agent $URL --adapter azure
 ```
+
+See the [Azure adapter docs](./docs/adapters/azure.md) for the full list (including
+`azure.task_adherence`, `azure.tool_call_accuracy`, and more).
+
+### AWS Bedrock — LLM-as-judge
+
+Route `llm_judge` and custom metrics through a Bedrock model:
+
+```bash
+pip install "abslang[aws]"
+export AWS_REGION=us-east-1
+export BEDROCK_EVALUATOR_MODEL_ID=anthropic.claude-3-5-haiku-20241022-v1:0
+
+abslang run session.abs.yaml --agent $URL --adapter aws
+```
+
+See the [AWS adapter docs](./docs/adapters/aws.md).
+
+### AI Evaluator — free tier, no infrastructure
+
+```bash
+AIEVALUATOR_API_KEY=... abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
+```
+
+### Select an engine per rule with `adapter:`
+
+Mix engines in one session file:
+
+```yaml
+evaluations:
+  - type: Groundedness
+    adapter: azure          # this one via Azure
+    context: kb_result.responds
+    response: self
+  - type: Violence
+    # no adapter → built-in judge
+    threshold: 0.9
+```
+
+Register the engines once on the CLI (`--adapter azure --adapter aws`) or in
+`abs.config.yaml`.
 
 ### Config file — don't retype adapter flags
 
@@ -515,13 +543,12 @@ abslang run session.abs.yaml \
 # abs.config.yaml
 adapters:
   llm_judge: aievaluator       # Route all LLM evaluations through AI Evaluator
-  Groundedness: aievaluator    # Or split by type
-  Relevance: local              # Use local judge for relevance
+  Groundedness: azure          # Or split by type
 ```
 
 ### The adapter contract
 
-Any adapter is a function that receives `(trace, evaluationRule)` and returns `{ passed, score, reason }`. Providers (Azure, LangSmith, Promptfoo, Galileo, Arize) can ship adapters implementing this interface. `abslang` doesn't care which one you use — your session file stays the same, only the `--adapter` flag or config changes.
+Any adapter is a function that receives `(trace, evaluationRule)` and returns `{ passed, score, reason }`. Azure AI Foundry and AWS Bedrock ship out of the box; other providers can implement the same interface. `abslang` doesn't care which one you use — your session file stays the same, only the `--adapter` flag or config changes.
 
 ```
 adapter.evaluate(
@@ -558,6 +585,14 @@ adapter.evaluate(
 | `count` | Something happens N times | "Exactly 2 API calls" |
 | `within` | A happens within N steps of B | "Responds within 3 steps" |
 | `variable_consistency` | A captured value stays unchanged | IDs, names |
+| `Groundedness` | Response is grounded in the provided context | RAG answers |
+| `Relevance` | Response addresses the query | Every answer |
+| `Coherence` | Response is logically consistent | Long answers |
+| `Fluency` | Response is well-written | Every answer |
+| `HateUnfairness` | No hate speech or bias | Safety gate |
+| `Violence` | No violence or threats | Safety gate |
+| `Sexual` | No explicit content | Safety gate |
+| `SelfHarm` | No self-harm encouragement | Safety gate |
 | `all_of` / `any_of` / `none_of` | Combine evaluators | Boolean logic |
 
 ---
