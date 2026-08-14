@@ -62,3 +62,4 @@ the rubric score — the adapter normalizes it to 0–1 using `rating_scale` (de
   Agent Platform SDK). This adapter pins to the stable classic surface; a live
   smoke test (set `GOOGLE_CLOUD_PROJECT` and run once) is recommended to confirm the
   response columns for your SDK version.
+ 
