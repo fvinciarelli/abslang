@@ -90,6 +90,9 @@ abslang run session.abs.yaml --agent $URL --adapter azure
 # AWS Bedrock — llm_judge + custom metrics
 abslang run session.abs.yaml --agent $URL --adapter aws
 
+# Google Vertex AI — quality + safety
+abslang run session.abs.yaml --agent $URL --adapter google
+
 # AI Evaluator — free tier
 abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
 ```

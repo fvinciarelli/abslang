@@ -41,6 +41,7 @@ or per rule with `adapter:`:
 ```bash
 abslang run session.abs.yaml --agent $URL --adapter azure   # Azure AI Foundry
 abslang run session.abs.yaml --agent $URL --adapter aws     # AWS Bedrock
+abslang run session.abs.yaml --agent $URL --adapter google  # Google Vertex AI
 abslang run session.abs.yaml --agent $URL                   # built-in judge (OpenAI/Anthropic/Gemini)
 ```
 
@@ -72,7 +73,7 @@ Every evaluator type accepts these optional fields in addition to its type-speci
 | Field | Type | Description |
 |---|---|---|
 | `threshold` | number (0–1) | Minimum score for this evaluation to pass. Default: `0.5`. Applies to evaluators that produce a score: `llm_judge`, `custom`, and composition types (`all_of`, `any_of`, `none_of`). Non-scoring evaluators (`contains`, `exact_match`, `sequence`, etc.) ignore it. |
-| `adapter` | string | Opaque identifier selecting which LLM judge implementation to use. The runner maps this string to a configured adapter at execution time (via CLI flag `--adapter`, config file, or environment variable). If omitted, the runner uses its default adapter. Examples of values a deployment might use: `aievaluator`, `builtin`. |
+| `adapter` | string | Opaque identifier selecting which LLM judge implementation to use. The runner maps this string to a configured adapter at execution time (via CLI flag `--adapter`, config file, or environment variable). If omitted, the runner uses its default adapter. Examples of values a deployment might use: `aievaluator`, `azure`, `aws`, `google`, `builtin`. |
 | `dataset` | string, array, or object | Reference data passed to the evaluator. Can be: a UUID string referencing an external dataset registry, an inline array of objects (`[{context: ..., response: ...}]`), or a JSONL string. The adapter decides how to use it. |
 | `prompt` | string | Custom prompt template for evaluators that call an LLM. Variables like `{{criteria}}`, `{{context}}`, `{{response}}` are interpolated by the adapter before sending to the judge. |
 

@@ -19,7 +19,7 @@
 - Tool interaction spec (`calls`, `responds`, `with`/`with_only`, `tool_call` evaluator) — see TOOLS.md
 - JSON Schema (`schema/abs.schema.json`) — complete and validated by the CLI at parse time; `$id` at https://github.com/fvinciarelli/abslang/blob/main/schema/abs.schema.json
 - TypeScript implementation: parser, runner, all evaluators, CLI, OpenAI/Claude/Gemini adapters, AI Evaluator adapter, table formatter, test suite
-- Python implementation: parser, runner, all evaluators, CLI, AI Evaluator adapter, table formatter
+- Python implementation: parser, runner, all evaluators, CLI, AI Evaluator + Azure + AWS + Google adapters, table formatter
 - UI authoring tool (`ui/`): React + Material UI, drag & drop, property sheets, YAML export
 - Website (`website/`): Next.js + Tailwind + MDX docs site
 - Mock agent (`tools/mock_agent.py`) for local testing
@@ -58,6 +58,7 @@
 | AI Evaluator adapter (LLM judge) | ✅ | ✅ |
 | Azure AI Foundry adapter (quality + agentic) | — | ✅ |
 | AWS Bedrock adapter (LLM-as-judge) | — | ✅ |
+| Google Vertex AI adapter (quality + safety) | — | ✅ |
 | Safety dimensions (curated rubrics) | — | ✅ |
 | CLI (`init`, `run`, `report`) | ✅ | ✅ |
 | Table formatter | ✅ | ✅ |

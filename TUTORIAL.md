@@ -421,11 +421,11 @@ When you add an `llm_judge`, `Groundedness`, `Relevance`, `Coherence`, `Fluency`
 
 | Evaluator | Where the judgment can run |
 |---|---|
-| `llm_judge` — free-form criteria | Built-in judge (OpenAI, Anthropic, Gemini), Azure, AWS Bedrock, AI Evaluator |
-| `Groundedness` — grounded in context | Azure AI Foundry, AI Evaluator |
-| `Relevance` — answers the question | Azure AI Foundry, AI Evaluator |
-| `Coherence` — logical flow | Azure AI Foundry, AI Evaluator |
-| `Fluency` — language quality | Azure AI Foundry, AI Evaluator |
+| `llm_judge` — free-form criteria | Built-in judge (OpenAI, Anthropic, Gemini), Azure, AWS Bedrock, Google Vertex AI, AI Evaluator |
+| `Groundedness` — grounded in context | Azure AI Foundry, Google Vertex AI, AI Evaluator |
+| `Relevance` — answers the question | Azure AI Foundry, Google Vertex AI, AI Evaluator |
+| `Coherence` — logical flow | Azure AI Foundry, Google Vertex AI, AI Evaluator |
+| `Fluency` — language quality | Azure AI Foundry, Google Vertex AI, AI Evaluator |
 | `Violence` / `HateUnfairness` / `Sexual` / `SelfHarm` | Built-in judge (curated rubric — no criteria to write) |
 
 ### Built-in judge: zero setup
@@ -513,6 +513,20 @@ abslang run session.abs.yaml --agent $URL --adapter aws
 
 See the [AWS adapter docs](./docs/adapters/aws.md).
 
+### Google Vertex AI — quality + safety
+
+Route quality and safety dimensions through the Vertex AI Gen AI Evaluation service:
+
+```bash
+pip install "abslang[google]"
+export GOOGLE_CLOUD_PROJECT=... GOOGLE_CLOUD_LOCATION=us-central1
+gcloud auth application-default login
+
+abslang run session.abs.yaml --agent $URL --adapter google
+```
+
+See the [Google adapter docs](./docs/adapters/google.md).
+
 ### AI Evaluator — free tier, no infrastructure
 
 ```bash
@@ -548,7 +562,7 @@ adapters:
 
 ### The adapter contract
 
-Any adapter is a function that receives `(trace, evaluationRule)` and returns `{ passed, score, reason }`. Azure AI Foundry and AWS Bedrock ship out of the box; other providers can implement the same interface. `abslang` doesn't care which one you use — your session file stays the same, only the `--adapter` flag or config changes.
+Any adapter is a function that receives `(trace, evaluationRule)` and returns `{ passed, score, reason }`. Azure AI Foundry, AWS Bedrock, and Google Vertex AI ship out of the box; other providers can implement the same interface. `abslang` doesn't care which one you use — your session file stays the same, only the `--adapter` flag or config changes.
 
 ```
 adapter.evaluate(

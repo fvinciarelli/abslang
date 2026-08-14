@@ -197,9 +197,10 @@ with the Runner. `llm_judge`, `Groundedness`, `Relevance`, `Coherence`, `Fluency
 and `custom` go through adapters.
 
 The default adapter for `llm_judge` is the **built-in judge** — it auto-detects
-OpenAI, Anthropic, or Gemini from your environment. Azure AI Foundry and AWS Bedrock
-ship as ready-to-use engines; safety dimensions (`HateUnfairness`, `Violence`,
-`Sexual`, `SelfHarm`) run on the built-in judge with a curated rubric — no criteria.
+OpenAI, Anthropic, or Gemini from your environment. Azure AI Foundry, AWS Bedrock,
+and Google Vertex AI ship as ready-to-use engines; safety dimensions
+(`HateUnfairness`, `Violence`, `Sexual`, `SelfHarm`) run on the built-in judge with
+a curated rubric — no criteria.
 
 ```bash
 # Built-in judge
@@ -210,6 +211,9 @@ abslang run session.abs.yaml --agent $URL --adapter azure
 
 # AWS Bedrock
 abslang run session.abs.yaml --agent $URL --adapter aws
+
+# Google Vertex AI
+abslang run session.abs.yaml --agent $URL --adapter google
 
 # AI Evaluator
 abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator

@@ -215,11 +215,12 @@ box — no adapter, no criteria. You can still route them to an external engine 
 
 ### Adapter registry
 
-Adapters are registered by evaluator type. The Runner ships with a built-in judge that auto-detects OpenAI, Anthropic, or Gemini from your environment. You can override it with an external adapter like AI Evaluator:
+Adapters are registered by evaluator type. The Runner ships with a built-in judge that auto-detects OpenAI, Anthropic, or Gemini from your environment. You can override it with an external adapter like Azure AI Foundry, AWS Bedrock, Google Vertex AI, or AI Evaluator:
 
 ```bash
 abslang run session.abs.yaml --agent $URL --adapter azure   # Azure AI Foundry
 abslang run session.abs.yaml --agent $URL --adapter aws     # AWS Bedrock
+abslang run session.abs.yaml --agent $URL --adapter google  # Google Vertex AI
 abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
 ```
 
@@ -236,7 +237,7 @@ adapters:
 
 ## Evaluator adapters
 
-An adapter is where the LLM judgment actually happens. The runner ships with three
+An adapter is where the LLM judgment actually happens. The runner ships with four
 ready-to-use engines, plus a built-in judge that needs nothing but an API key.
 
 **Built-in judge** — auto-detects OpenAI, Anthropic, or Gemini from your environment
@@ -263,6 +264,14 @@ abslang run session.abs.yaml --agent $AGENT_URL --adapter azure
 pip install "abslang[aws]"
 export AWS_REGION=us-east-1
 abslang run session.abs.yaml --agent $AGENT_URL --adapter aws
+```
+
+**Google Vertex AI** — quality + safety via the Gen AI Evaluation service:
+
+```bash
+pip install "abslang[google]"
+export GOOGLE_CLOUD_PROJECT=... GOOGLE_CLOUD_LOCATION=us-central1
+abslang run session.abs.yaml --agent $AGENT_URL --adapter google
 ```
 
 **AI Evaluator** — free tier, no infrastructure:

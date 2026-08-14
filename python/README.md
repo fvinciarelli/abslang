@@ -52,7 +52,7 @@ abslang run sessions/ --agent $STAGING --dataset datasets/ --format junit --ci >
 | `--agent-format` | `openai` (default), `claude`, or `gemini` |
 | `--agent-auth` | `none`, `api_key`, `bearer`, or `oauth2` |
 | `--agent-token` | Auth token or API key |
-| `--adapter llm_judge=<name>` | Route LLM evaluations through an adapter (`aievaluator`, `local`, `azure`) — see below |
+| `--adapter llm_judge=<name>` | Route LLM evaluations through an adapter (`aievaluator`, `azure`, `aws`, `google`) — see below |
 | `--format` | `table` (default), `json`, or `junit` |
 | `--ci` | CI mode (no colors) |
 | `--timeout <n>` | Timeout per session in seconds (default: 300) |
@@ -125,6 +125,14 @@ abslang run session.abs.yaml --agent $URL --adapter azure
 pip install "abslang[aws]"
 export AWS_REGION=us-east-1
 abslang run session.abs.yaml --agent $URL --adapter aws
+```
+
+**Google Vertex AI** (quality + safety):
+
+```bash
+pip install "abslang[google]"
+export GOOGLE_CLOUD_PROJECT=... GOOGLE_CLOUD_LOCATION=us-central1
+abslang run session.abs.yaml --agent $URL --adapter google
 ```
 
 **AI Evaluator** (free tier):

@@ -281,8 +281,8 @@ evaluations:
 # Built-in judge — no adapter needed
 OPENAI_API_KEY=sk-... abslang run examples/refund-request.yaml --agent $URL
 
-# Or route through AI Evaluator
-abslang run examples/refund-request.yaml --agent $URL --adapter llm_judge=aievaluator
+# Or route through a cloud adapter
+abslang run examples/refund-request.yaml --agent $URL --adapter azure   # or aws / google
 ```
 
 See [examples/refund-request.yaml](./examples/refund-request.yaml).
@@ -509,8 +509,8 @@ OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
 |---|---|---|
 | **Built-in** | `contains`, `exact_match`, `regex`, `schema`, `tool_call` | Nothing — runs locally |
 | **Chain** | `sequence`, `eventually`, `never`, `count`, `within`, `variable_consistency` | Nothing — runs locally |
-| **`llm_judge`** | Free-form criteria in natural language | Built-in judge (auto-detects OpenAI/Anthropic/Gemini), Azure, AWS Bedrock, or AI Evaluator |
-| **Quality dimensions** | `Groundedness`, `Relevance`, `Coherence`, `Fluency` | Azure AI Foundry (`--adapter azure`) or AI Evaluator |
+| **`llm_judge`** | Free-form criteria in natural language | Built-in judge (auto-detects OpenAI/Anthropic/Gemini), Azure, AWS Bedrock, Google Vertex AI, or AI Evaluator |
+| **Quality dimensions** | `Groundedness`, `Relevance`, `Coherence`, `Fluency` | Azure AI Foundry, Google Vertex AI, or AI Evaluator |
 | **Safety dimensions** | `HateUnfairness`, `Violence`, `Sexual`, `SelfHarm` | Built-in judge — curated rubric, no criteria required |
 | **Composition** | `all_of`, `any_of`, `none_of` | Nothing — wraps other evaluators |
 
