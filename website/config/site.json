@@ -57,7 +57,8 @@
           { "label": "Runner", "href": "/docs/runner" },
           { "label": "CLI Reference", "href": "/docs/cli" },
           { "label": "Azure adapter", "href": "/docs/adapters/azure" },
-          { "label": "AWS adapter", "href": "/docs/adapters/aws" }
+          { "label": "AWS adapter", "href": "/docs/adapters/aws" },
+          { "label": "Google adapter", "href": "/docs/adapters/google" }
         ]
       },
       {

@@ -27,6 +27,7 @@ ai = ["aievaluator"]
 azure = ["azure-ai-evaluation"]
 azure-cloud = ["azure-ai-projects"]
 aws = ["boto3"]
+google = ["google-cloud-aiplatform"]
 
 [project.scripts]
 abslang = "abslang.cli:main"

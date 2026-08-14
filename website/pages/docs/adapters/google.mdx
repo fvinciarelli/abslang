@@ -1,0 +1,47 @@
+import DocsLayout from '@/components/layout/DocsLayout';
+
+export const frontmatter = { title: 'Google Vertex AI adapter', description: 'Route ABS evaluations through Google Vertex AI Gen AI Evaluation service.' };
+
+<DocsLayout frontmatter={frontmatter}>
+
+Routes ABS LLM-based evaluations through the **Vertex AI Gen AI Evaluation service**
+(bring-your-own-response mode). The adapter never re-runs your agent.
+
+## Install
+
+```bash
+pip install "abslang[google]"
+```
+
+## Configure
+
+```bash
+export GOOGLE_CLOUD_PROJECT="your-project"
+export GOOGLE_CLOUD_LOCATION="us-central1"
+gcloud auth application-default login
+```
+
+The judge is Gemini internally. GCP's free trial gives $300 for 90 days.
+
+## Run
+
+```bash
+abslang run session.abs.yaml --agent $AGENT_URL --adapter google
+```
+
+## Supported evaluators
+
+| ABS | Vertex metric |
+|---|---|
+| `Groundedness` | `groundedness` |
+| `Relevance` | `question_answering_quality` |
+| `Coherence` | `coherence` |
+| `Fluency` | `fluency` |
+| `HateUnfairness` / `Violence` / `Sexual` / `SelfHarm` | `safety` |
+| `llm_judge` | custom `pointwise` metric |
+| `custom` id `google.*` | custom `pointwise` metric |
+
+The four safety dimensions map to Vertex's single `safety` metric (0 = unsafe,
+1 = safe). Rubric-based scores are normalized to 0–1 before `threshold` is applied.
+
+</DocsLayout>

@@ -110,6 +110,12 @@ ADAPTER_PROVIDERS: dict[str, tuple[str, str, tuple[str, ...]]] = {
         "aws_adapter",
         ("llm_judge", "custom"),
     ),
+    "google": (
+        "abslang.evaluators.adapters.google",
+        "google_adapter",
+        ("llm_judge", "Groundedness", "Relevance", "Coherence", "Fluency",
+         "HateUnfairness", "Violence", "Sexual", "SelfHarm", "custom"),
+    ),
 }
 
 
