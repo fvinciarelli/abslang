@@ -5,6 +5,8 @@
 **Status:** v0.2 — draft, open for review.
 
 [![npm version](https://img.shields.io/npm/v/abslang)](https://www.npmjs.com/package/abslang)
+[![PyPI version](https://img.shields.io/pypi/v/abslang)](https://pypi.org/project/abslang/)
+[![Tests](https://github.com/fvinciarelli/abslang/actions/workflows/test.yml/badge.svg)](https://github.com/fvinciarelli/abslang/actions/workflows/test.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](./LICENSE)
 
 ## What is **Agent Behavior Specification**?
