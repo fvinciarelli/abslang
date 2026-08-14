@@ -35,6 +35,19 @@ export default function Hero() {
             of AI agents — what users say, what agents do, and how it should be evaluated.
           </p>
 
+          {/* Package badges */}
+          <div className="mt-6 flex flex-wrap items-center gap-2">
+            <a href="https://www.npmjs.com/package/abslang" target="_blank" rel="noopener noreferrer">
+              <img src="https://img.shields.io/npm/v/abslang" alt="npm version" className="h-5" />
+            </a>
+            <a href="https://pypi.org/project/abslang/" target="_blank" rel="noopener noreferrer">
+              <img src="https://img.shields.io/pypi/v/abslang" alt="PyPI version" className="h-5" />
+            </a>
+            <a href="https://github.com/fvinciarelli/abslang/actions/workflows/test.yml" target="_blank" rel="noopener noreferrer">
+              <img src="https://github.com/fvinciarelli/abslang/actions/workflows/test.yml/badge.svg" alt="Tests" className="h-5" />
+            </a>
+          </div>
+
           {/* Quick example */}
           <div className="mt-8 bg-gray-800/80 backdrop-blur rounded-lg border border-gray-700 overflow-hidden max-w-lg">
             <div className="flex items-center gap-1.5 px-4 py-2 bg-gray-800 border-b border-gray-700">
