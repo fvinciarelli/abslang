@@ -10,6 +10,9 @@ export interface Behavior {
   with?: Record<string, any>;
   with_only?: Record<string, any>;
   evaluations?: Evaluation[];
+  optional?: boolean;
+  requires?: string;
+  matches_when?: { type: string; criteria?: string; value?: string; pattern?: string };
 }
 
 export interface Evaluation {
@@ -34,6 +37,9 @@ export interface Evaluation {
   target?: string;
   with?: Record<string, any>;
   evaluations?: Evaluation[];
+  adapter?: string;
+  threshold?: number;
+  rating_scale?: string;
 }
 
 export interface Selector {
@@ -125,6 +131,10 @@ export const EVAL_TYPE_OPTIONS = [
   { label: 'Relevance', desc: 'Response addresses the query' },
   { label: 'Coherence', desc: 'Logical flow and consistency' },
   { label: 'Fluency', desc: 'Natural language quality' },
+  { label: 'HateUnfairness', desc: 'No hate speech or bias' },
+  { label: 'Violence', desc: 'No violence or threats' },
+  { label: 'Sexual', desc: 'No explicit content' },
+  { label: 'SelfHarm', desc: 'No self-harm encouragement' },
   { label: 'custom', desc: 'Custom evaluator by id' },
   { label: 'sequence', desc: 'Steps in order' },
   { label: 'eventually', desc: 'Must occur at least once' },
@@ -171,6 +181,15 @@ export function newEvaluation(type = 'contains'): Evaluation {
       base.context = '';
       base.response = 'self';
       break;
+    case 'HateUnfairness':
+    case 'Violence':
+    case 'Sexual':
+    case 'SelfHarm':
+      base.response = 'self';
+      break;
+    case 'custom':
+      base.id = '';
+      break;
     case 'schema':
       base.schema = { type: 'object', required: [], properties: {} };
       break;
@@ -203,11 +222,15 @@ export function behaviorToYAML(b: Behavior): any {
     actor: b.actor,
     action: b.action,
   };
+  if (b.id && !b.id.startsWith('b')) y.id = b.id;
   if (b.target) y.target = b.target;
   if (b.content !== undefined && b.content !== '') y.content = b.content;
   if (b.capture && Object.keys(b.capture).length > 0) y.capture = b.capture;
   if (b.with && Object.keys(b.with).length > 0) y.with = b.with;
   if (b.with_only && Object.keys(b.with_only).length > 0) y.with_only = b.with_only;
+  if (b.optional) y.optional = true;
+  if (b.requires) y.requires = b.requires;
+  if (b.matches_when) y.matches_when = b.matches_when;
   if (b.evaluations && b.evaluations.length > 0) {
     y.evaluations = b.evaluations.map((e) => {
       const ey: any = { type: e.type };

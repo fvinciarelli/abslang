@@ -1,0 +1,1 @@
+async function e(){throw Error(`Runner not available in this local build. Generate it with: node scripts/bundle.mjs`)}export{e as runBrowser};
