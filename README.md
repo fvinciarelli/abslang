@@ -1,17 +1,27 @@
-# **Agent Behavior Specification** (ABS)
+<div align="center">
 
-> A vendor-neutral, human-readable format for describing the observable behavior of AI agents: what users say, what agents do, and how it should be evaluated.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg">
+  <img src="docs/images/logo.svg" alt="ABS — Agent Behavior Specification" width="260">
+</picture>
+
+<h3>Specify how your AI agents behave — then verify it.</h3>
+
+<p>
+  <a href="https://www.npmjs.com/package/abslang"><img src="https://img.shields.io/npm/v/abslang" alt="npm version"></a>
+  <a href="https://pypi.org/project/abslang/"><img src="https://img.shields.io/pypi/v/abslang" alt="PyPI version"></a>
+  <a href="https://github.com/fvinciarelli/abslang/actions/workflows/test.yml"><img src="https://github.com/fvinciarelli/abslang/actions/workflows/test.yml/badge.svg" alt="Tests"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License"></a>
+  <a href="https://github.com/sponsors/fvinciarelli"><img src="https://img.shields.io/badge/sponsor-%E2%9D%A4-ff69b4" alt="Sponsor"></a>
+</p>
 
 **Status:** v0.2 — draft, open for review.
 
-[![npm version](https://img.shields.io/npm/v/abslang)](https://www.npmjs.com/package/abslang)
-[![PyPI version](https://img.shields.io/pypi/v/abslang)](https://pypi.org/project/abslang/)
-[![Tests](https://github.com/fvinciarelli/abslang/actions/workflows/test.yml/badge.svg)](https://github.com/fvinciarelli/abslang/actions/workflows/test.yml)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](./LICENSE)
+</div>
 
-## What is **Agent Behavior Specification**?
+---
 
-**[Agent Behavior Specification](./SPECIFICATION.md)** (ABS) is a plain-text (YAML) format for describing agent behavior as an ordered sequence of observable actions — messages, tool calls, UI interactions, hand-offs — independent of the LLM provider, agent framework, orchestration engine, or tool protocol used to implement it.
+**ABS** — *Agent Behavior Specification* — is a plain-text (YAML) format for describing agent behavior as an ordered sequence of observable actions — messages, tool calls, UI interactions, hand-offs — independent of the LLM provider, agent framework, orchestration engine, or tool protocol used to implement it.
 
 It plays a role for agent behavior similar to what OpenAPI plays for HTTP APIs: a shared contract that developers, QA, product owners, and tooling can all read and act on.
 
@@ -421,6 +431,10 @@ Closed in v0.1:
 Scope · Session · Behavior · Actor · Action · Target · Content · Variables · Evaluations (step-level + chain-level) · Vocabulary · Sequencing · Fragments · Tool Interaction · JSON Schema · alternate flows as separate Sessions.
 
 Implementations: TypeScript · Python · UI authoring tool (React) · Website (Next.js). See ROADMAP.md for open design questions.
+
+## Support this project
+
+**Agent Behavior Specification** is an independent, vendor-neutral open standard (Apache 2.0) maintained by its community. If it saves your team from vendor lock-in, consider [sponsoring its development](https://github.com/sponsors/fvinciarelli) — it funds the spec, the `abslang` CLI, evaluator adapters, and documentation.
 
 ## Contributing
 
