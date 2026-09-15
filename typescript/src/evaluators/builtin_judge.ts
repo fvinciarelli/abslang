@@ -92,7 +92,7 @@ function detectProvider(): string | null {
 
 // ── OpenAI judge ──
 
-async function judgeOpenAI(trace: ObservedStep[], criteria: string): Promise<EvalResult> {
+async function judgeOpenAI(trace: ObservedStep[], criteria: string, threshold: number): Promise<EvalResult> {
   const baseUrl = (judgeBaseUrl() || "https://api.openai.com/v1").replace(/\/+$/, "");
   const apiKey = judgeApiKey();
   const model = judgeModel("gpt-4o");
@@ -127,12 +127,12 @@ async function judgeOpenAI(trace: ObservedStep[], criteria: string): Promise<Eva
 
   const data = await resp.json() as any;
   const content = data.choices[0].message.content;
-  return parseJudgeResponse(content, "openai");
+  return parseJudgeResponse(content, "openai", threshold);
 }
 
 // ── Anthropic judge ──
 
-async function judgeAnthropic(trace: ObservedStep[], criteria: string): Promise<EvalResult> {
+async function judgeAnthropic(trace: ObservedStep[], criteria: string, threshold: number): Promise<EvalResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY!;
   const model = judgeModel("claude-sonnet-4-20250514");
 
@@ -158,12 +158,12 @@ async function judgeAnthropic(trace: ObservedStep[], criteria: string): Promise<
 
   const data = await resp.json() as any;
   const content = data.content[0].text;
-  return parseJudgeResponse(content, "anthropic");
+  return parseJudgeResponse(content, "anthropic", threshold);
 }
 
 // ── Gemini judge ──
 
-async function judgeGemini(trace: ObservedStep[], criteria: string): Promise<EvalResult> {
+async function judgeGemini(trace: ObservedStep[], criteria: string, threshold: number): Promise<EvalResult> {
   const apiKey = process.env.GEMINI_API_KEY!;
   const model = judgeModel("gemini-2.0-flash");
 
@@ -188,12 +188,12 @@ async function judgeGemini(trace: ObservedStep[], criteria: string): Promise<Eva
 
   const data = await resp.json() as any;
   const content = data.candidates[0].content.parts[0].text;
-  return parseJudgeResponse(content, "gemini");
+  return parseJudgeResponse(content, "gemini", threshold);
 }
 
 // ── Response parser ──
 
-function parseJudgeResponse(content: string, provider: string): EvalResult {
+function parseJudgeResponse(content: string, provider: string, threshold = 0.5): EvalResult {
   let score = 0.5;
   let reason = content.substring(0, 200);
 
@@ -209,7 +209,7 @@ function parseJudgeResponse(content: string, provider: string): EvalResult {
 
   return {
     type: "llm_judge",
-    passed: score >= 0.7,
+    passed: score >= threshold,
     score,
     reason: `[${provider}] ${reason}`,
   };
@@ -231,12 +231,13 @@ function mockJudge(trace: ObservedStep[], evaluation: any): EvalResult {
   if (!lastContent) score = 0.3;
   else if (lastContent.length < 10) score = 0.4;
 
+  const threshold = typeof evaluation.threshold === "number" ? evaluation.threshold : 0.5;
   return {
     type: "llm_judge",
-    passed: score >= 0.7,
+    passed: score >= threshold,
     score,
     reason:
-      `[mock] Response seems ${score >= 0.7 ? "good" : "weak"} ` +
+      `[mock] Response seems ${score >= threshold ? "good" : "weak"} ` +
       `(content length: ${lastContent.length} chars). ` +
       `Criteria: ${criteria.substring(0, 80)}`,
   };
@@ -267,15 +268,16 @@ export async function builtinLlmJudge(
   }
 
   const criteria = evaluation.criteria || "Is the response helpful and accurate?";
+  const threshold = typeof evaluation.threshold === "number" ? evaluation.threshold : 0.5;
 
   try {
     switch (provider) {
       case "openai":
-        return await judgeOpenAI(trace, criteria);
+        return await judgeOpenAI(trace, criteria, threshold);
       case "anthropic":
-        return await judgeAnthropic(trace, criteria);
+        return await judgeAnthropic(trace, criteria, threshold);
       case "gemini":
-        return await judgeGemini(trace, criteria);
+        return await judgeGemini(trace, criteria, threshold);
       default:
         return { type: "llm_judge", passed: false, score: 0, reason: `Unknown provider: ${provider}` };
     }

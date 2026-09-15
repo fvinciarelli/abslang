@@ -151,4 +151,41 @@ describe("builtin judge — custom endpoint", () => {
       }
     });
   });
+
+  it("respects the evaluation threshold (default 0.5)", async () => {
+    await withCleanJudgeEnv(async () => {
+      const srv = await startServer(
+        (_req, res) =>
+          sendJson(res, {
+            choices: [
+              { message: { role: "assistant", content: "Score: 0.6\nReason: borderline" } },
+            ],
+          }),
+        "/v1"
+      );
+      try {
+        configureBuiltinJudge({ baseUrl: srv.url, model: "judge" });
+
+        const defaulted = await builtinLlmJudge(TRACE, { type: "llm_judge", criteria: "x" });
+        assert.equal(defaulted.score, 0.6);
+        assert.equal(defaulted.passed, true, "default threshold is 0.5 (EVALUATIONS.md)");
+
+        const strict = await builtinLlmJudge(TRACE, {
+          type: "llm_judge",
+          criteria: "x",
+          threshold: 0.7,
+        });
+        assert.equal(strict.passed, false);
+
+        const lenient = await builtinLlmJudge(TRACE, {
+          type: "llm_judge",
+          criteria: "x",
+          threshold: 0.5,
+        });
+        assert.equal(lenient.passed, true);
+      } finally {
+        await srv.close();
+      }
+    });
+  });
 });
