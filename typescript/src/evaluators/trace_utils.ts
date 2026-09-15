@@ -35,6 +35,25 @@ export function toText(content: any): string {
 }
 
 /**
+ * Render a trace as a readable multi-line transcript for LLM judges.
+ *
+ * A step shows its `content`; tool calls show their arguments (`with`)
+ * instead, so the judge can see what was called with what. Steps with neither
+ * render without a trailing colon.
+ */
+export function traceToText(trace: ObservedStep[]): string {
+  return trace
+    .map((s) => {
+      const head = `[${s.actor}] ${s.action}${s.target ? " → " + s.target : ""}`;
+      let payload: string | null = null;
+      if (s.content !== undefined && s.content !== null) payload = toText(s.content);
+      else if (s.with && Object.keys(s.with).length > 0) payload = toText(s.with);
+      return payload ? `${head}: ${payload}` : head;
+    })
+    .join("\n");
+}
+
+/**
  * Resolve an ABS evaluation input reference to a string.
  *
  * Supported forms:

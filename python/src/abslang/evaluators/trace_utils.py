@@ -85,11 +85,23 @@ def _to_text(content: Any) -> str:
 # ── Text rendering ──
 
 def trace_to_text(trace: list[ObservedStep]) -> str:
-    """Render a trace as a readable multi-line transcript for LLM judges."""
-    return "\n".join(
-        f"[{s.actor}] {s.action}{' → ' + s.target if s.target else ''}: {_to_text(s.content)}"
-        for s in trace
-    )
+    """Render a trace as a readable multi-line transcript for LLM judges.
+
+    A step shows its ``content``; tool calls show their arguments (``with_``)
+    instead, so the judge can see what was called with what. Steps with
+    neither render without a trailing colon.
+    """
+    lines: list[str] = []
+    for s in trace:
+        head = f"[{s.actor}] {s.action}{' → ' + s.target if s.target else ''}"
+        if s.content is not None:
+            payload: str | None = _to_text(s.content)
+        elif s.with_:
+            payload = _to_text(s.with_)
+        else:
+            payload = None
+        lines.append(f"{head}: {payload}" if payload else head)
+    return "\n".join(lines)
 
 
 # ── OpenAI message mapping ──

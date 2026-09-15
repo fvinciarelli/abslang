@@ -110,6 +110,24 @@ class TestBuiltinJudgeCustomEndpoint:
         defaulted = _run(evaluate(TRACE, {"type": "llm_judge", "criteria": "x"}))
         assert defaulted.passed is True  # default threshold is 0.5
 
+    def test_prompt_renders_tool_call_arguments(self, server_factory):
+        trace = [
+            ObservedStep(actor="assistant", action="calls", target="Order MCP",
+                         with_={"orderId": "8291"}),
+            ObservedStep(actor="tool", action="responds", target="Order MCP",
+                         content={"status": "shipped"}),
+        ]
+        httpd, url = server_factory(_judge_responder, "/v1")
+        configure_builtin_judge(base_url=url)
+
+        _run(evaluate(trace, {"type": "llm_judge", "criteria": "x"}))
+
+        prompt = httpd.requests[0]["body"]["messages"][1]["content"]
+        assert '[assistant] calls → Order MCP: {"orderId": "8291"}' in prompt
+        assert '[tool] responds → Order MCP: {"status": "shipped"}' in prompt
+        assert "null" not in prompt
+        assert "None" not in prompt
+
     def test_env_fallback_when_no_cli(self, server_factory, monkeypatch):
         httpd, url = server_factory(_judge_responder, "/v1")
         monkeypatch.setenv("ABS_JUDGE_BASE_URL", url)

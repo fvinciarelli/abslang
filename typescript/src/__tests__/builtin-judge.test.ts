@@ -188,4 +188,26 @@ describe("builtin judge — custom endpoint", () => {
       }
     });
   });
+
+  it("renders tool-call arguments in the judge prompt", async () => {
+    await withCleanJudgeEnv(async () => {
+      const srv = await startServer((_req, res) => sendJson(res, JUDGE_RESPONSE), "/v1");
+      try {
+        configureBuiltinJudge({ baseUrl: srv.url, model: "judge" });
+        const trace: ObservedStep[] = [
+          { actor: "assistant", action: "calls", target: "Order MCP", with: { orderId: "8291" } },
+          { actor: "tool", action: "responds", target: "Order MCP", content: { status: "shipped" } },
+        ];
+
+        await builtinLlmJudge(trace, { type: "llm_judge", criteria: "x" });
+
+        const prompt = srv.requests[0].body.messages[1].content as string;
+        assert.match(prompt, /\[assistant\] calls → Order MCP: \{"orderId":"8291"\}/);
+        assert.match(prompt, /\[tool\] responds → Order MCP: \{"status":"shipped"\}/);
+        assert.doesNotMatch(prompt, /undefined/);
+      } finally {
+        await srv.close();
+      }
+    });
+  });
 });

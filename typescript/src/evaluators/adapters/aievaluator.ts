@@ -13,7 +13,7 @@
  */
 
 import { ObservedStep, EvalResult, registerAdapter } from "../builtin";
-import { resolveRef } from "../trace_utils";
+import { resolveRef, traceToText } from "../trace_utils";
 
 // ── Metric mapping ──
 
@@ -97,14 +97,7 @@ async function aievaluatorAdapter(
 
   if (evalType === "llm_judge") {
     const criteria = evaluation.criteria || "Is the response helpful and accurate?";
-    const traceText = trace
-      .map(
-        (s) =>
-          `[${s.actor}] ${s.action}${s.target ? " → " + s.target : ""}: ${
-            typeof s.content === "string" ? s.content : JSON.stringify(s.content)
-          }`
-      )
-      .join("\n");
+    const traceText = traceToText(trace);
     input = `Given this conversation:\n\n${traceText}\n\nEvaluate: ${criteria}`;
 
     const lastAssistant = [...trace].reverse().find((s) => s.actor === "assistant");

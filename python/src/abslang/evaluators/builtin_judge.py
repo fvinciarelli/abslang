@@ -8,7 +8,6 @@ Detects available providers from environment variables:
 Set ABS_JUDGE_PROVIDER to pick one explicitly.
 """
 
-import json
 import os
 import re
 from typing import Any
@@ -114,12 +113,11 @@ def _judge_model(fallback: str) -> str:
 
 
 def _build_prompt(trace: list[Any], criteria: str) -> str:
-    trace_text = "\n".join(
-        f"[{s.actor}] {s.action}{' → ' + s.target if s.target else ''}: "
-        f"{s.content if isinstance(s.content, str) else json.dumps(s.content)}"
-        for s in trace
-    )
-    return f"Given this conversation:\n\n{trace_text}\n\nEvaluate: {criteria}"
+    # Lazy import: the built-in judge is imported by evaluators/__init__, so keep
+    # module import order flexible.
+    from .trace_utils import trace_to_text
+
+    return f"Given this conversation:\n\n{trace_to_text(trace)}\n\nEvaluate: {criteria}"
 
 
 # ── Provider detection ──

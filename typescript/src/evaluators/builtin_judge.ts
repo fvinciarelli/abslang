@@ -1,4 +1,5 @@
 import { ObservedStep, EvalResult, registerAdapter } from "./builtin";
+import { traceToText } from "./trace_utils";
 
 // ── Built-in LLM Judge ──
 //
@@ -61,15 +62,7 @@ function judgeModel(fallback: string): string {
 }
 
 function buildPrompt(trace: ObservedStep[], criteria: string): string {
-  const traceText = trace
-    .map(
-      (s) =>
-        `[${s.actor}] ${s.action}${s.target ? " → " + s.target : ""}: ${
-          typeof s.content === "string" ? s.content : JSON.stringify(s.content)
-        }`
-    )
-    .join("\n");
-  return `Given this conversation:\n\n${traceText}\n\nEvaluate: ${criteria}`;
+  return `Given this conversation:\n\n${traceToText(trace)}\n\nEvaluate: ${criteria}`;
 }
 
 // ── Provider detection ──

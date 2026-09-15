@@ -151,6 +151,21 @@ class TestResolveRefByBehaviorId:
         assert resolve_ref(ANNOTATED_TRACE, "user.says") == "Where is order 123?"
 
 
+class TestTraceToText:
+    def test_renders_content_and_tool_arguments(self):
+        text = trace_to_text(TRACE)
+        assert "[user] says: Where is order 123?" in text
+        assert '[assistant] calls → Order MCP: {"orderId": "123"}' in text
+        assert '[tool] responds → Order MCP: {"status": "shipped"}' in text
+        assert "[assistant] informs: It is on the way" in text
+        assert "None" not in text
+        assert "null" not in text
+
+    def test_no_payload_renders_without_colon(self):
+        text = trace_to_text([ObservedStep(actor="assistant", action="responds")])
+        assert text == "[assistant] responds"
+
+
 class TestTraceToMessages:
     def test_full_mapping(self):
         msgs = trace_to_messages(TRACE)
