@@ -56,6 +56,8 @@ class StepResult:
     behavior: Behavior
     observed: ObservedStep | None = None
     matched: bool = False
+    # v0.2: the behavior was optional/requires-gated and intentionally skipped.
+    skipped: bool = False
     evaluations: list[EvalResult] = field(default_factory=list)
     sent: bool = False
 
@@ -531,6 +533,11 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
     messages: list[AgentMessage] = []
     skipped_ids: set[str] = set()  # v0.2: track skipped optional behaviors
     step_num = 0
+    # v0.2 matching cursor: expectations match against the observed steps produced by
+    # the current user turn. Required expectations consume one step (matched or not);
+    # optionals never consume, so several can match the same response (§7.7).
+    turn_start = 0
+    turn_consumed = 0
 
     for behavior in session.behaviors:
         step_num += 1
@@ -541,7 +548,7 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
                 skipped_ids.add(behavior.id)
             step_results.append(StepResult(
                 step=step_num, behavior=behavior,
-                observed=None, matched=False, evaluations=[],
+                observed=None, matched=False, skipped=True, evaluations=[],
             ))
             continue
 
@@ -551,6 +558,21 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
                 content=str(behavior.content) if isinstance(behavior.content, str)
                 else json.dumps(behavior.content),
             ))
+
+            # The user turn is part of the observed trace, so chain selectors can
+            # reference it (sequence/within/count with ``actor: user``).
+            trace.append(ObservedStep(
+                actor="user",
+                action=behavior.action,
+                id=behavior.id,
+                target=behavior.target,
+                content=behavior.content,
+                with_=behavior.with_,
+            ))
+
+            # The agent reply starts after the user step: matching restarts here.
+            turn_start = len(trace)
+            turn_consumed = 0
 
             try:
                 new_msgs = await adapter(list(messages), agent_config)
@@ -615,6 +637,16 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
                         else behavior.content,
                     ))
 
+            # Record the tool response in the observed trace (full conversation),
+            # and consume its cursor slot so the next expectation reads the
+            # agent's continuation instead of this entry.
+            trace.append(ObservedStep(
+                actor="tool", action="responds",
+                id=behavior.id, target=behavior.target,
+                content=behavior.content, tool_call_id=tool_call_id,
+            ))
+            turn_consumed += 1
+
             try:
                 new_msgs = await adapter(list(messages), agent_config)
                 for msg in new_msgs:
@@ -638,12 +670,10 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
             ))
 
         else:
-            # Match against trace — skip tool/responds steps in the index
-            matched_idx = sum(
-                1 for s in step_results
-                if not s.sent and not (s.behavior.actor == "tool" and s.behavior.action == "responds")
-            )
-            observed = trace[matched_idx] if matched_idx < len(trace) else None
+            # Match against the current turn's observed steps. The cursor advances only
+            # for required expectations; optionals share the same response (§7.7).
+            cursor = turn_start + turn_consumed
+            observed = trace[cursor] if cursor < len(trace) else None
 
             # ── v0.2: matches_when overrides default matching ──
             mw = behavior.matches_when
@@ -675,15 +705,32 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
                     and _match_with_params(behavior, observed)
                 )
 
+            # Semantic annotation: a matched text response takes the action of the
+            # communication behavior that classified it, so chain selectors
+            # (never/sequence/count/within) can match exact actions like ``asks``.
+            # The behavior id rides along so adapters can resolve refs like
+            # ``kb_result.responds``. First match wins; an unmatched response
+            # stays ``responds`` with no id.
+            if matched and observed:
+                if behavior.id:
+                    observed.id = behavior.id
+                if observed.action == "responds" and behavior.action in COMM_ACTIONS:
+                    observed.action = behavior.action
+
             # ── v0.2: optional — skip if no match ──
             if behavior.optional and not matched:
                 if behavior.id:
                     skipped_ids.add(behavior.id)
                 step_results.append(StepResult(
                     step=step_num, behavior=behavior,
-                    observed=observed, matched=False, evaluations=[],
+                    observed=observed, matched=False, skipped=True, evaluations=[],
                 ))
                 continue
+
+            # Required expectations consume one observed step (matched or not);
+            # optionals never consume so multiple can match the same response.
+            if not behavior.optional:
+                turn_consumed += 1
 
             match_observed = observed if matched else None
 

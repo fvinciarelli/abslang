@@ -305,7 +305,7 @@ program
           vars
         ),
       };
-      const result = await run(resolved, agentConfig);
+      const result = await run(resolved, agentConfig, vars);
       (result as any).rowVars = rowVars || vars;
       return result;
     };
@@ -335,7 +335,7 @@ program
             runtimeVars
           ),
         };
-        const result = await run(resolved, agentConfig);
+        const result = await run(resolved, agentConfig, runtimeVars);
         allResults.push(result);
       }
     } else {
@@ -445,7 +445,9 @@ program
                 .substring(0, 28)
                 .padEnd(28)
             : "(none)".padEnd(28);
-          const steps = `${r.stepsMatched}/${r.stepsTotal} ${r.stepsMatched === r.stepsTotal ? "✅" : "❌"}`.padEnd(8);
+          const skipped = r.steps.filter((s) => s.skipped).length;
+          const applicable = r.stepsTotal - skipped;
+          const steps = `${r.stepsMatched}/${applicable} ${r.stepsMatched === applicable ? "✅" : "❌"}`.padEnd(8);
           const evals = `${r.evaluationsPassed}/${r.evaluationsTotal} ${r.evaluationsPassed === r.evaluationsTotal ? "✅" : "❌"}`.padEnd(11);
           lines.push(`│ ${String(rowNum).padStart(4)} │ ${vars} │ ${steps} │ ${evals} │`);
         }
@@ -589,7 +591,9 @@ program
           rowNum++;
           const actualNum = results.indexOf(r) + 1;
           const sessionName = (r.session || "").substring(0, 28).padEnd(28);
-          const steps = `${r.steps_matched ?? 0}/${r.steps_total ?? 0} ${(r.steps_matched ?? 0) === (r.steps_total ?? 0) ? "✅" : "❌"}`.padEnd(8);
+          const skipped = (r.trace ?? []).filter((s: any) => s.skipped).length;
+          const applicable = (r.steps_total ?? 0) - skipped;
+          const steps = `${r.steps_matched ?? 0}/${applicable} ${(r.steps_matched ?? 0) === applicable ? "✅" : "❌"}`.padEnd(8);
           const evals = `${r.evaluations_passed ?? 0}/${r.evaluations_total ?? 0} ${(r.evaluations_passed ?? 0) === (r.evaluations_total ?? 0) ? "✅" : "❌"}`.padEnd(11);
           lines.push(`│ ${String(actualNum).padStart(4)} │ ${sessionName} │ ${steps} │ ${evals} │`);
         }

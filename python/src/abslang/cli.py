@@ -415,7 +415,7 @@ def run_cmd(
             import copy
             sess_copy = copy.deepcopy(sess)
             sess_copy.behaviors = resolve_variables(sess_copy.behaviors, vars_dict)
-            result = await run(sess_copy, agent_config)
+            result = await run(sess_copy, agent_config, vars_dict)
             return {"result": result, "row_vars": vars_dict}
 
         if dataset:
@@ -538,7 +538,9 @@ def run_cmd(
                 rr = r["result"]
                 vars_str = " ".join(f"{k}={v}" for k, v in r["row_vars"].items()) if r["row_vars"] else "(none)"
                 vars_str = vars_str[:28].ljust(28)
-                steps_str = f'{rr.steps_matched}/{rr.steps_total} {"✅" if rr.steps_matched == rr.steps_total else "❌"}'
+                skipped = sum(1 for s in rr.steps if s.skipped)
+                applicable = rr.steps_total - skipped
+                steps_str = f'{rr.steps_matched}/{applicable} {"✅" if rr.steps_matched == applicable else "❌"}'
                 steps_str = steps_str.ljust(8)
                 evals_str = f'{rr.evaluations_passed}/{rr.evaluations_total} {"✅" if rr.evaluations_passed == rr.evaluations_total else "❌"}'
                 evals_str = evals_str.ljust(11)
@@ -604,10 +606,17 @@ def report(file: str, output_format: str, failed: bool, detail: Optional[int]):
         else:
             trace = result.get("trace", [])
             chain = result.get("chain_evaluations", [])
-            click.echo(f"{'✅' if result.get('passed') else '❌'} Steps: {result.get('steps_matched', 0)}/{result.get('steps_total', 0)}")
+            skipped = sum(1 for s in trace if s.get("skipped"))
+            applicable = result.get("steps_total", 0) - skipped
+            click.echo(f"{'✅' if result.get('passed') else '❌'} Steps: {result.get('steps_matched', 0)}/{applicable}")
             click.echo(f"   Evaluations: {result.get('evaluations_passed', 0)}/{result.get('evaluations_total', 0)}")
             for s in trace:
-                match_status = "→" if s.get("sent") else ("✅" if s.get("matched") else "❌")
+                if s.get("sent"):
+                    match_status = "→"
+                elif s.get("skipped"):
+                    match_status = "⏭"
+                else:
+                    match_status = "✅" if s.get("matched") else "❌"
                 b = s.get("behavior", {})
                 click.echo(f"  Step {s.get('step')}: {b.get('actor')} {b.get('action')} {match_status}")
                 for e in s.get("evaluations", []):
@@ -635,11 +644,19 @@ def report(file: str, output_format: str, failed: bool, detail: Optional[int]):
             click.echo(f"Passed: {'✅' if r.get('passed') else '❌'}")
             if r.get("row_vars"):
                 click.echo(f"Variables: {r['row_vars']}")
-            click.echo(f"Steps: {r.get('steps_matched', 0)}/{r.get('steps_total', 0)}")
+            trace = r.get("trace", [])
+            skipped = sum(1 for s in trace if s.get("skipped"))
+            applicable = r.get("steps_total", 0) - skipped
+            click.echo(f"Steps: {r.get('steps_matched', 0)}/{applicable}")
             click.echo(f"Evaluations: {r.get('evaluations_passed', 0)}/{r.get('evaluations_total', 0)}")
-            for s in r.get("trace", []):
+            for s in trace:
                 b = s.get("behavior", {})
-                match_status = "→" if s.get("sent") else ("✅" if s.get("matched") else "❌")
+                if s.get("sent"):
+                    match_status = "→"
+                elif s.get("skipped"):
+                    match_status = "⏭"
+                else:
+                    match_status = "✅" if s.get("matched") else "❌"
                 click.echo(f"  Step {s.get('step')}: {b.get('actor')} {b.get('action')} {match_status}")
                 for e in s.get("evaluations", []):
                     estatus = "⚠️" if e.get("inconclusive") else ("✅" if e.get("passed") else "❌")

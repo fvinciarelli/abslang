@@ -118,6 +118,39 @@ class TestResolveRef:
         assert resolve_ref(TRACE, "nope.says") == "nope.says"
 
 
+ANNOTATED_TRACE = [
+    ObservedStep(actor="user", action="says", id="user_asks", content="Where is order 123?"),
+    ObservedStep(actor="assistant", action="calls", id="lookup", target="Order MCP",
+                 with_={"orderId": "123"}, tool_call_id="c1"),
+    ObservedStep(actor="tool", action="responds", id="kb_result", target="Order MCP",
+                 content={"status": "shipped"}, tool_call_id="c1"),
+    ObservedStep(actor="assistant", action="informs", id="answer", content="It is on the way"),
+]
+
+
+class TestResolveRefByBehaviorId:
+    def test_user_behavior_with_action(self):
+        assert resolve_ref(ANNOTATED_TRACE, "user_asks.says") == "Where is order 123?"
+
+    def test_tool_behavior_with_action(self):
+        assert resolve_ref(ANNOTATED_TRACE, "kb_result.responds") == '{"status": "shipped"}'
+
+    def test_bare_id_uses_actor_default(self):
+        # tool → responds
+        assert resolve_ref(ANNOTATED_TRACE, "kb_result") == '{"status": "shipped"}'
+
+    def test_session_level_reference(self):
+        assert resolve_ref(ANNOTATED_TRACE, "answer.informs") == "It is on the way"
+
+    def test_wrong_action_falls_through_to_raw(self):
+        # `answer` is an assistant behavior; its default action is informs,
+        # so `answer.says` does not resolve by id.
+        assert resolve_ref(ANNOTATED_TRACE, "answer.says") == "answer.says"
+
+    def test_actor_refs_still_work_on_annotated_trace(self):
+        assert resolve_ref(ANNOTATED_TRACE, "user.says") == "Where is order 123?"
+
+
 class TestTraceToMessages:
     def test_full_mapping(self):
         msgs = trace_to_messages(TRACE)

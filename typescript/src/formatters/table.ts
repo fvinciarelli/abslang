@@ -30,8 +30,11 @@ export function formatTable(
     );
   }
 
+  const skippedSteps = result.steps.filter((s) => s.skipped).length;
+  const applicableSteps = result.stepsTotal - skippedSteps;
+  const skippedLabel = skippedSteps > 0 ? ` · ${skippedSteps} skipped` : "";
   lines.push(
-    `│  Steps:    ${result.stepsMatched}/${result.stepsTotal} matched · ${result.evaluationsPassed}/${result.evaluationsTotal} evaluations passed`.padEnd(64) + "│"
+    `│  Steps:    ${result.stepsMatched}/${applicableSteps} matched${skippedLabel} · ${result.evaluationsPassed}/${result.evaluationsTotal} evaluations passed`.padEnd(64) + "│"
   );
 
   lines.push("├────┬────────────────────────────────────┬──────────┬─────────┤");
@@ -44,6 +47,8 @@ export function formatTable(
 
     if (step.sent) {
       lines.push(`│ ${num} │ ${desc} │    →     │   sent  │`);
+    } else if (step.skipped) {
+      lines.push(`│ ${num} │ ${desc} │    ⏭    │  skip   │`);
     } else if (step.matched) {
       lines.push(`│ ${num} │ ${desc} │    ✅    │  match  │`);
     } else {
@@ -130,6 +135,7 @@ export function formatJson(result: RunResult): string {
         },
         matched: s.matched,
         sent: s.sent,
+        skipped: s.skipped ?? false,
         observed: s.observed,
         evaluations: s.evaluations,
       })),

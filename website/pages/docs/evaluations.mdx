@@ -181,6 +181,8 @@ evaluations:
     threshold: 0.8
 ```
 
+Inputs are behavior-id references (`user_asks.says`, `kb_result.responds`); `self` is the behavior carrying the evaluation. The Runner records the matched behavior's id on the trace step, so these refs resolve against the observed trace.
+
 ### Safety dimensions — `HateUnfairness`, `Violence`, `Sexual`, `SelfHarm`
 
 Judge the output for harmful content. Each ships with a curated rubric, so they run
@@ -198,7 +200,9 @@ Pick the engine per run with `--adapter`, or per rule with `adapter:`.
 
 ## Session-level (chain) evaluator types
 
-All chain evaluators use a **selector** to identify Behaviors in the trace: an object with any of `actor`, `action`, `target`. A field that's present must match exactly; a field omitted is a wildcard.
+All chain evaluators use a **selector** to identify Behaviors in the trace: an object with any of `actor`, `action`, `target`. A field that's present must match exactly; a field omitted is a wildcard. The observed trace includes the user turns the Runner sent, so selectors like `{ actor: user, action: says }` work as expected.
+
+Text responses are recorded as `responds` unless a declared communication behavior (`asks`, `informs`, `greets`, …) matched them: the runner annotates the observed step with the action of the first behavior that matched it. So `{ actor: assistant, action: asks }` only matches responses your session classified as asks. Give the behavior a `matches_when` criterion when the distinction must be precise.
 
 ```yaml
 match: { actor: assistant, action: calls, target: "Order MCP" }

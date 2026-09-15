@@ -63,6 +63,8 @@ export interface StepResult {
   behavior: Behavior;
   observed: ObservedStep | null;
   matched: boolean;
+  /** v0.2: the behavior was optional/requires-gated and intentionally skipped. */
+  skipped?: boolean;
   evaluations: EvalResult[];
   sent?: boolean;
 }
@@ -619,6 +621,11 @@ export async function run(
   const messages: AgentMessage[] = [];
   const skippedIds = new Set<string>(); // v0.2: track skipped optional behaviors
   let stepNum = 0;
+  // v0.2 matching cursor: expectations match against the observed steps produced by
+  // the current user turn. Required expectations consume one step (matched or not);
+  // optionals never consume, so several can match the same response (§7.7).
+  let turnStart = 0;
+  let turnConsumed = 0;
 
   for (const behavior of session.behaviors) {
     stepNum++;
@@ -631,6 +638,7 @@ export async function run(
         behavior,
         observed: null,
         matched: false,
+        skipped: true,
         evaluations: [],
       });
       continue;
@@ -642,6 +650,21 @@ export async function run(
         role: "user",
         content: typeof behavior.content === "string" ? behavior.content : JSON.stringify(behavior.content),
       });
+
+      // The user turn is part of the observed trace, so chain selectors can
+      // reference it (sequence/within/count with `actor: user`).
+      trace.push({
+        actor: "user",
+        action: behavior.action,
+        ...(behavior.id ? { id: behavior.id } : {}),
+        ...(behavior.target ? { target: behavior.target } : {}),
+        ...(behavior.content !== undefined ? { content: behavior.content } : {}),
+        ...(behavior.with ? { with: behavior.with } : {}),
+      });
+
+      // The agent reply starts after the user step: matching restarts here.
+      turnStart = trace.length;
+      turnConsumed = 0;
 
       let response: AgentResponse;
       try {
@@ -725,6 +748,18 @@ export async function run(
         }
       }
 
+      // Record the tool response in the observed trace (full conversation),
+      // and consume its cursor slot so the next expectation reads the agent's
+      // continuation instead of this entry.
+      trace.push({
+        actor: "tool",
+        action: "responds",
+        ...(behavior.id ? { id: behavior.id } : {}),
+        ...(behavior.target ? { target: behavior.target } : {}),
+        ...(behavior.content !== undefined ? { content: behavior.content } : {}),
+      });
+      turnConsumed++;
+
       // Let agent continue with tool results
       let response: AgentResponse;
       try {
@@ -759,10 +794,9 @@ export async function run(
         evaluations: [],
       });
     } else {
-      // Match against trace — skip tool/responds steps in the index
-      // because they bridge the conversation but don't consume trace entries
-      const matchedIdx = stepResults.filter(s => !s.sent && !(s.behavior.actor === "tool" && s.behavior.action === "responds")).length;
-      const observed = trace[matchedIdx] ?? null;
+      // Match against the current turn's observed steps. The cursor advances only
+      // for required expectations; optionals share the same response (§7.7).
+      const observed = trace[turnStart + turnConsumed] ?? null;
 
       // Communication actions are equivalent for matching purposes
       const commActions = ["says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests", "shows", "hands_off"];
@@ -805,6 +839,19 @@ export async function run(
           : false;
       }
 
+      // Semantic annotation: a matched text response takes the action of the
+      // communication behavior that classified it, so chain selectors
+      // (never/sequence/count/within) can match exact actions like `asks`.
+      // The behavior id rides along so adapters can resolve refs like
+      // `kb_result.responds`. First match wins; an unmatched response stays
+      // `responds` with no id.
+      if (matched && observed) {
+        if (behavior.id) observed.id = behavior.id;
+        if (observed.action === "responds" && commActions.includes(behavior.action)) {
+          observed.action = behavior.action;
+        }
+      }
+
       // ── v0.2: optional — skip if no match ──
       if (behavior.optional && !matched) {
         if (behavior.id) skippedIds.add(behavior.id);
@@ -813,10 +860,15 @@ export async function run(
           behavior,
           observed,
           matched: false,
+          skipped: true,
           evaluations: [],
         });
         continue;
       }
+
+      // Required expectations consume one observed step (matched or not);
+      // optionals never consume so multiple can match the same response.
+      if (!behavior.optional) turnConsumed++;
 
       const matchObserved: ObservedStep | null = matched ? observed : null;
 

@@ -186,6 +186,8 @@ Inputs are references to behavior ids, optionally qualified with `.action`:
 
 If the action is omitted, the default for that actor is used: `user` → `.says`, `tool` → `.responds`, `assistant` → `.informs`. So `context: kb_result` is equivalent to `context: kb_result.responds`.
 
+The Runner records the matched behavior's id on the observed trace step (user turns and tool responses included), which is what makes these references resolvable.
+
 The adapter receives the evaluation type, the mapped inputs resolved from the trace, and any extra fields (`threshold`, `adapter`). It returns `{ passed, score, reason }`.
 
 ### Safety dimensions — `HateUnfairness`, `Violence`, `Sexual`, `SelfHarm`
@@ -297,7 +299,9 @@ All of these are declared in a top-level `evaluations:` block, a sibling of `beh
 
 ### Behavior selector
 
-Every chain evaluator below identifies Behaviors using a **selector**: an object with any of `actor`, `action`, `target`. A field that's present must match exactly; a field that's omitted is a wildcard. Matching against `content` is not supported by the selector in v0.1 — use step-level evaluations for content assertions.
+Every chain evaluator below identifies Behaviors using a **selector**: an object with any of `actor`, `action`, `target`. A field that's present must match exactly; a field that's omitted is a wildcard. Matching against `content` is not supported by the selector in v0.1 — use step-level evaluations for content assertions. The observed trace includes the user turns the Runner sent, so selectors like `{ actor: user, action: says }` work as expected.
+
+Text responses are recorded as `responds` unless a declared communication behavior (`asks`, `informs`, `greets`, …) matched them: the runner annotates the observed step with the action of the first behavior that matched it. So `{ actor: assistant, action: asks }` only matches responses your session classified as asks, and a response no behavior matched stays `responds`. Give the behavior a `matches_when` criterion when you need this distinction to be precise.
 
 ```yaml
 match: { actor: assistant, action: calls, target: "Order MCP" }

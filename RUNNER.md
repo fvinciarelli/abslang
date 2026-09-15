@@ -476,12 +476,11 @@ The spec says nothing about auth — it's an operational detail, not a behaviora
    b. If actor is "assistant" and action is "calls":
       - Look at the agent's last response for a tool_call
       - Match the tool name against target, arguments against with
-      - If the tool needs a response to continue (the agent is waiting),
-        send back the next actor:tool / action:responds Behavior's content
-      - Append the tool call and tool response to the trace
+      - Append the tool call to the trace
    c. If actor is "tool":
-      - Skip — this was already handled in (b) as the tool response payload.
-        Its evaluations still run against the observed tool response.
+      - Send the content back to the agent as the tool response
+      - Append the tool response and the agent's continuation to the trace
+      - Its evaluations still run against the observed tool response
    d. If actor is anything else (assistant says/informs/asks/etc):
       - Peek at the next agent response in the trace
       - Match it against this Behavior (actor, action, target, content shape)
@@ -544,10 +543,12 @@ This means the Runner sees the full round-trip: the assistant asking for the too
 
 ### Matching rules
 
-- `actor` and `action` must match exactly
+- `actor` must match; `action` matches exactly or through action equivalence (communication actions are equivalent to each other, as are execution actions)
 - `target` (if present) must match the observed tool name, recipient, or UI element
 - `with` (if present) must match the observed tool arguments (deep equality)
 - `content` (if present) is checked for structural compatibility — a string doesn't need to match exactly (that's what `exact_match` evaluation is for), but if ABS says `content: { status: "shipped" }` and the agent says `"Your order shipped"`, that's a structural mismatch recorded in the report
+
+Chain-evaluation selectors (`never`, `sequence`, `count`, `within`, `eventually`) are different: they compare **exactly**. When a behavior matches a text response, the observed step is annotated with that behavior's action and id (first match wins), so `never: { action: asks }` only fires when an `asks` behavior classified the response and refs like `kb_result.responds` resolve. Unmatched text responses stay `responds`.
 
 ---
 

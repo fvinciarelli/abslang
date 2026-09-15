@@ -207,6 +207,13 @@ check("selector with target",
          assert_true(not matches_selector(trace[2], {"actor": "assistant", "action": "calls", "target": "Other"})),
      ))
 
+check("selector — action must match exactly",
+     lambda: (
+         assert_true(not matches_selector(ObservedStep(actor="assistant", action="responds"), {"action": "asks"})),
+         assert_true(not matches_selector(ObservedStep(actor="assistant", action="calls"), {"action": "submits"})),
+         assert_true(matches_selector(ObservedStep(actor="assistant", action="asks"), {"action": "asks"})),
+     ))
+
 print(f"\n{passed} passed, {failed} failed")
 if failed > 0:
     sys.exit(1)

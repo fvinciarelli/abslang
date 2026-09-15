@@ -5,6 +5,7 @@ import { Behavior, Selector } from "../parser";
 export interface ObservedStep {
   actor: string;
   action: string;
+  id?: string;
   target?: string;
   content?: any;
   with?: Record<string, any>;
@@ -151,15 +152,11 @@ export function matchesSelector(
   step: ObservedStep,
   selector: Selector
 ): boolean {
-  const commActions = ["says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests", "shows"];
-  const execActions = ["calls", "submits", "retrieves", "stores", "updates"];
+  // EVALUATIONS.md: "A field that's present must match exactly".
+  // Communication actions are annotated on the observed step by the runner with
+  // the action of the behavior that matched it, so exact comparison stays useful.
   if (selector.actor && step.actor !== selector.actor) return false;
-  if (selector.action) {
-    if (step.action === selector.action) { /* exact match */ }
-    else if (commActions.includes(step.action) && commActions.includes(selector.action)) { /* comm equivalence */ }
-    else if (execActions.includes(step.action) && execActions.includes(selector.action)) { /* exec equivalence */ }
-    else return false;
-  }
+  if (selector.action && step.action !== selector.action) return false;
   if (selector.target && step.target !== selector.target) return false;
   return true;
 }

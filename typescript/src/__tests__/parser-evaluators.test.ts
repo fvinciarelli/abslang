@@ -294,5 +294,11 @@ test("selector with target", () => {
   assert(!matchesSelector(trace[2], { actor: "assistant", action: "calls", target: "Other" }));
 });
 
+test("selector — action must match exactly (no comm equivalence)", () => {
+  assert(!matchesSelector({ actor: "assistant", action: "responds" }, { action: "asks" }));
+  assert(!matchesSelector({ actor: "assistant", action: "calls" }, { action: "submits" }));
+  assert(matchesSelector({ actor: "assistant", action: "asks" }, { action: "asks" }));
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

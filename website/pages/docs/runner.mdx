@@ -172,9 +172,10 @@ assistant informs        ←──────   { "role": "assistant", "content
       - Append both to the trace
    b. If actor is "assistant" and action is "calls":
       - Match the agent's tool_calls against target and with
-      - If a tool response follows, send it back to continue
+      - Append the tool call to the trace
    c. If actor is "tool":
-      - Skip — handled as the tool response payload in (b)
+      - Send the content back as the tool response
+      - Append the tool response and the agent's continuation to the trace
       - Its evaluations still run against the observed response
    d. If actor is anything else (assistant says/informs/asks/etc):
       - Match the agent's response against this Behavior
@@ -187,6 +188,7 @@ assistant informs        ←──────   { "role": "assistant", "content
 ### Matching rules
 
 - `actor` and `action` must match exactly (communication actions are equivalent: `says`/`asks`/`informs`/etc. all match each other)
+- When a behavior matches a text response, the observed step is annotated with that behavior's action (first match wins). Chain-evaluation selectors (`never`, `sequence`, `count`, `within`, `eventually`) compare **exactly**, so `never: { action: asks }` only fires when an `asks` behavior matched the response
 - `target` (if present) must match the observed tool name, recipient, or UI element
 - `with` (if present) must match the observed tool arguments — partial by default, strict with `with_only`
 - `content` is checked for structural compatibility

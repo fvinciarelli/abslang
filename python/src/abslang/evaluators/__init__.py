@@ -18,6 +18,7 @@ class ObservedStep:
     content: Any = None
     with_: dict[str, Any] | None = None
     tool_call_id: str | None = None
+    id: str | None = None
 
 
 @dataclass
@@ -43,20 +44,16 @@ AdapterFunction = Callable[[list[ObservedStep], dict[str, Any]], Awaitable[EvalR
 # ── Selector matching ──
 
 def matches_selector(step: ObservedStep, selector: dict[str, Any]) -> bool:
-    """Check if an ObservedStep matches a Selector, with communication and execution action equivalence."""
-    COMM_ACTIONS = {"says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests", "shows"}
-    EXEC_ACTIONS = {"calls", "submits", "retrieves", "stores", "updates"}
+    """Check if an ObservedStep matches a Selector.
+
+    EVALUATIONS.md: "A field that's present must match exactly". Communication
+    actions are annotated on the observed step by the runner with the action of
+    the behavior that matched it, so exact comparison stays useful.
+    """
     if "actor" in selector and step.actor != selector["actor"]:
         return False
-    if "action" in selector:
-        if step.action == selector["action"]:
-            pass  # exact match
-        elif step.action in COMM_ACTIONS and selector["action"] in COMM_ACTIONS:
-            pass  # communication equivalence
-        elif step.action in EXEC_ACTIONS and selector["action"] in EXEC_ACTIONS:
-            pass  # execution equivalence
-        else:
-            return False
+    if "action" in selector and step.action != selector["action"]:
+        return False
     if "target" in selector and step.target != selector["target"]:
         return False
     return True

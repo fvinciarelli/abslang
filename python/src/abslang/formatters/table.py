@@ -35,20 +35,29 @@ def format_table(result: RunResult) -> str:
 
         if step.sent:
             table.add_row(str(step.step), desc[:34], "→", "sent")
+        elif step.skipped:
+            table.add_row(str(step.step), desc[:34], "⏭", "skip")
         elif step.matched:
             table.add_row(str(step.step), desc[:34], "✅", "match")
-            for ev in step.evaluations:
-                ev_desc = ev.type[:28]
-                ev_result = "✅" if ev.passed else "❌"
-                ev_label = "pass" if ev.passed else "FAIL"
-                table.add_row("", f"  └─ {ev_desc}", ev_result, ev_label)
         else:
             table.add_row(str(step.step), desc[:34], "❌", "no match")
 
+        for ev in step.evaluations:
+            ev_desc = ev.type[:28]
+            if getattr(ev, "inconclusive", False):
+                ev_result, ev_label = "⚠️", "incon"
+            else:
+                ev_result = "✅" if ev.passed else "❌"
+                ev_label = "pass" if ev.passed else "FAIL"
+            table.add_row("", f"  └─ {ev_desc}", ev_result, ev_label)
+
     for ev in result.chain_evaluations:
         ev_desc = f"chain: {ev.type}"[:34]
-        ev_result = "✅" if ev.passed else "❌"
-        ev_label = "pass" if ev.passed else "FAIL"
+        if getattr(ev, "inconclusive", False):
+            ev_result, ev_label = "⚠️", "incon"
+        else:
+            ev_result = "✅" if ev.passed else "❌"
+            ev_label = "pass" if ev.passed else "FAIL"
         table.add_row("C", ev_desc, ev_result, ev_label)
 
     # Capture table as string
@@ -59,8 +68,11 @@ def format_table(result: RunResult) -> str:
         status = "✅ PASSED" if result.passed else "❌ FAILED"
         style = "green" if result.passed else "red"
         console.print(f"Result: [{style}]{status}[/{style}]")
+        skipped_steps = sum(1 for s in result.steps if s.skipped)
+        applicable_steps = result.steps_total - skipped_steps
+        skipped_label = f" · {skipped_steps} skipped" if skipped_steps else ""
         console.print(
-            f"Steps: {result.steps_matched}/{result.steps_total} matched · "
+            f"Steps: {result.steps_matched}/{applicable_steps} matched{skipped_label} · "
             f"{result.evaluations_passed}/{result.evaluations_total} evaluations passed"
         )
 
@@ -69,11 +81,21 @@ def format_table(result: RunResult) -> str:
             console.print("[red]❌ Some evaluations failed:[/red]")
             for step in result.steps:
                 for ev in step.evaluations:
-                    if not ev.passed:
+                    if not ev.passed and not getattr(ev, "inconclusive", False):
                         console.print(f"[red]  Step {step.step} — {ev.type}: {ev.reason}[/red]")
             for ev in result.chain_evaluations:
-                if not ev.passed:
+                if not ev.passed and not getattr(ev, "inconclusive", False):
                     console.print(f"[red]  Chain — {ev.type}: {ev.reason}[/red]")
+
+        inconclusive = sum(
+            1 for s in result.steps for e in s.evaluations if getattr(e, "inconclusive", False)
+        ) + sum(1 for e in result.chain_evaluations if getattr(e, "inconclusive", False))
+        if inconclusive:
+            console.print()
+            console.print(
+                f"[yellow]⚠️  {inconclusive} evaluation(s) marked inconclusive "
+                "(downstream of a blocking failure).[/yellow]"
+            )
 
     return capture.get()
 
@@ -99,6 +121,7 @@ def format_json_output(result: RunResult) -> str:
                 },
                 "matched": s.matched,
                 "sent": s.sent,
+                "skipped": getattr(s, "skipped", False),
                 "observed": {
                     "actor": s.observed.actor,
                     "action": s.observed.action,

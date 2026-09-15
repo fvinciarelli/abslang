@@ -13,6 +13,7 @@
  */
 
 import { ObservedStep, EvalResult, registerAdapter } from "../builtin";
+import { resolveRef } from "../trace_utils";
 
 // ── Metric mapping ──
 
@@ -118,26 +119,9 @@ async function aievaluatorAdapter(
       ? typeof lastAssistant.content === "string" ? lastAssistant.content : JSON.stringify(lastAssistant.content)
       : "";
 
-    const resolveContent = (ref: string | undefined): string => {
-      if (!ref) return "";
-      if (ref === "self") return selfContent;
-      const [id, action] = ref.includes(".") ? ref.split(".") : [ref, undefined];
-      const resolvedAction = action ?? (id === "user" ? "says" : id === "assistant" ? "informs" : id === "tool" ? "responds" : "says");
-      for (const step of trace) {
-        const stepMatchesId = step.actor === id || (id.includes("_") && step.actor === id.split("_")[0]);
-        const commActions = ["says", "asks", "informs", "greets", "responds", "clarifies", "confirms", "rejects", "suggests", "shows"];
-        const actionMatches = step.action === resolvedAction ||
-          (commActions.includes(step.action) && commActions.includes(resolvedAction));
-        if (stepMatchesId && actionMatches) {
-          return typeof step.content === "string" ? step.content : JSON.stringify(step.content ?? "");
-        }
-      }
-      return ref;
-    };
-
-    input = resolveContent(evaluation.query);
-    context = resolveContent(evaluation.context);
-    response = resolveContent(evaluation.response);
+    input = resolveRef(trace, evaluation.query, selfContent);
+    context = resolveRef(trace, evaluation.context, selfContent);
+    response = resolveRef(trace, evaluation.response, selfContent);
   }
 
   // ── Call aievaluator.evaluateDirect (package-native) ──

@@ -32,28 +32,41 @@ def resolve_ref(
     """Resolve an ABS evaluation input reference to a string.
 
     Supported forms:
-      - ``"self"``            → the content of the behavior carrying the evaluation
-      - ``"user_asks"``       → default action for that actor
-      - ``"user_asks.says"``  → explicit actor.action
-    Communication actions are treated as equivalent (``says`` matches ``asks``, etc.).
-    Returns the raw ``ref`` unchanged if nothing matches.
+      - ``"self"``               → the content of the behavior carrying the evaluation
+      - ``"kb_result"``          → the step matched by that behavior id (default action)
+      - ``"kb_result.responds"`` → the same, with an explicit action
+      - ``"user.says"``          → legacy actor reference (first step of that actor)
+
+    Behavior-id references take precedence; actor references remain for
+    compatibility. Returns the raw ``ref`` unchanged if nothing matches.
     """
     if not ref:
         return ""
     if ref == "self":
         return self_content or ""
 
-    parts = ref.split(".", 1)
-    ref_id = parts[0]
-    action = parts[1] if len(parts) > 1 else None
-    resolved_action = action or _DEFAULT_ACTIONS.get(ref_id, "says")
+    ref_id, _, action = ref.partition(".")
+    action = action or None
 
+    # 1) Behavior-id reference. The action is qualified explicitly, or defaults
+    #    to the one for the step's actor (user → says, tool → responds, ...).
+    for step in trace:
+        if step.id != ref_id:
+            continue
+        wanted = action or _DEFAULT_ACTIONS.get(step.actor, "says")
+        if step.action != wanted:
+            continue
+        return _to_text(step.content)
+
+    # 2) Legacy actor reference (``user.says``). Communication actions stay
+    #    equivalent here so existing sessions keep resolving.
+    wanted = action or _DEFAULT_ACTIONS.get(ref_id, "says")
     for step in trace:
         if step.actor != ref_id:
             continue
         action_matches = (
-            step.action == resolved_action
-            or (step.action in COMM_ACTIONS and resolved_action in COMM_ACTIONS)
+            step.action == wanted
+            or (step.action in COMM_ACTIONS and wanted in COMM_ACTIONS)
         )
         if action_matches:
             return _to_text(step.content)
