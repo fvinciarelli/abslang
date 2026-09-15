@@ -4,6 +4,7 @@ import {
   EvalResult,
   evaluateStep,
   evaluateWithAdapter,
+  applyThreshold,
   expected,
   evalWhen,
 } from "./evaluators";
@@ -883,7 +884,7 @@ export async function run(
             evalRule
           );
           if (adapterResult) {
-            evalResults.push(adapterResult);
+            evalResults.push(applyThreshold(adapterResult, evalRule));
           } else {
             evalResults.push(
               evaluateStep(matchObserved, evalRule, session.behaviors, trace)
@@ -929,7 +930,7 @@ export async function run(
         evalRule
       );
       if (adapterResult) {
-        chainEvaluations.push(adapterResult);
+        chainEvaluations.push(applyThreshold(adapterResult, evalRule));
       } else {
         chainEvaluations.push(
           evaluateStep(null, evalRule, session.behaviors, trace)

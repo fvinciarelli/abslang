@@ -1,6 +1,7 @@
 export {
   evaluateStep,
   evaluateWithAdapter,
+  applyThreshold,
   registerAdapter,
   matchesSelector,
   expected,

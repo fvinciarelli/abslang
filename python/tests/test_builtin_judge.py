@@ -96,6 +96,20 @@ class TestBuiltinJudgeCustomEndpoint:
         assert "api-key" not in httpd.requests[0]["headers"]
         assert httpd.requests[0]["body"]["model"] == "cli-model"
 
+    def test_respects_evaluation_threshold(self, server_factory):
+        httpd, url = server_factory(_judge_responder, "/v1")  # returns 0.9
+        configure_builtin_judge(base_url=url)
+
+        strict = _run(evaluate(TRACE, {"type": "llm_judge", "criteria": "x", "threshold": 0.95}))
+        assert strict.passed is False
+        assert abs(strict.score - 0.9) < 1e-9
+
+        lenient = _run(evaluate(TRACE, {"type": "llm_judge", "criteria": "x", "threshold": 0.5}))
+        assert lenient.passed is True
+
+        defaulted = _run(evaluate(TRACE, {"type": "llm_judge", "criteria": "x"}))
+        assert defaulted.passed is True  # default threshold is 0.5
+
     def test_env_fallback_when_no_cli(self, server_factory, monkeypatch):
         httpd, url = server_factory(_judge_responder, "/v1")
         monkeypatch.setenv("ABS_JUDGE_BASE_URL", url)

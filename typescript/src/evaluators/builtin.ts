@@ -448,7 +448,7 @@ export function toolCall(
 
 // ── Apply threshold ──
 
-function applyThreshold(result: EvalResult, evaluation: any): EvalResult {
+export function applyThreshold(result: EvalResult, evaluation: any): EvalResult {
   const threshold = evaluation.threshold;
   if (threshold !== undefined && result.score < threshold) {
     return {
