@@ -117,12 +117,19 @@ Runs every `.abs.yaml` in the directory against every `.jsonl` whose filename st
 | `--dataset` | No | — | Path to a `.json` or `.jsonl` dataset file or directory |
 | `--var` | No | — | Single variable binding (repeatable) |
 | `--filter` | No | — | Filter rows by key:value |
-| `--agent-format` | No | `openai` | `openai`, `claude`, `gemini`, or `custom` |
+| `--agent-format` | No | `openai` | `openai`, `responses`, `claude`, `gemini`, or `custom` |
 | `--agent-auth` | No | `none` | `none`, `api_key`, `bearer`, `oauth2` |
 | `--agent-token` | No | — | Token or API key value |
+| `--agent-model` | No | — | Model/deployment for model endpoints (e.g. Azure OpenAI Responses). Omit for agent endpoints that own their model |
+| `--agent-forward-auth` | No | `false` | Forward the caller's `Authorization` header to the agent |
+| `--agent-authorization` | No | — | Raw `Authorization` header value to forward (e.g. `Bearer eyJ...`) |
 | `--agent-refresh-url` | No | — | OAuth2 token refresh URL |
 | `--agent-refresh-token` | No | — | OAuth2 refresh token |
 | `--adapter` | No | — | Evaluator adapter binding (repeatable: `--adapter llm_judge=azure`) |
+| `--judge-base-url` | No | — | Built-in judge: OpenAI-compatible base URL (Azure/Foundry, Ollama, vLLM, gateway) |
+| `--judge-api-key` | No | — | Built-in judge: API key (overrides `ABS_JUDGE_API_KEY` / `OPENAI_API_KEY`) |
+| `--judge-api-key-header` | No | `Authorization` | Built-in judge: header for the API key (use `api-key` for Azure) |
+| `--judge-model` | No | `gpt-4o` | Built-in judge: model or Azure deployment name |
 | `--format` | No | `table` | `table`, `json`, `junit` |
 | `--ci` | No | `false` | CI mode (no colors, no prompts) |
 | `--timeout` | No | `300` | Timeout per session run in seconds |
@@ -139,6 +146,14 @@ Every flag can also be set via environment variable:
 | `ABS_AGENT_FORMAT` | `--agent-format` |
 | `ABS_AGENT_AUTH` | `--agent-auth` |
 | `ABS_AGENT_TOKEN` | `--agent-token` |
+| `ABS_AGENT_MODEL` | `--agent-model` |
+| `ABS_AGENT_FORWARD_AUTH` | `--agent-forward-auth` |
+| `ABS_AGENT_AUTHORIZATION` | `--agent-authorization` |
+| `ABS_JUDGE_PROVIDER` | — (forces `openai`, `anthropic`, or `gemini`) |
+| `ABS_JUDGE_MODEL` | `--judge-model` |
+| `ABS_JUDGE_BASE_URL` | `--judge-base-url` |
+| `ABS_JUDGE_API_KEY` | `--judge-api-key` |
+| `ABS_JUDGE_API_KEY_HEADER` | `--judge-api-key-header` |
 | `ABS_VAR_orderId` | `--var orderId=...` |
 
 ---
@@ -150,6 +165,13 @@ Pick where LLM-based evaluations are judged — without touching the session fil
 ```bash
 # Built-in judge — auto-detects OpenAI / Anthropic / Gemini
 OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
+
+# Built-in judge on any OpenAI-compatible endpoint (Azure/Foundry, Ollama, vLLM, gateway)
+abslang run session.abs.yaml --agent $URL \
+  --judge-base-url "https://<resource>.openai.azure.com/openai/v1" \
+  --judge-api-key "$AZURE_OPENAI_API_KEY" \
+  --judge-api-key-header api-key \
+  --judge-model gpt-4o-mini
 
 # Azure AI Foundry — quality dimensions (Groundedness, Relevance, …)
 abslang run session.abs.yaml --agent $URL --adapter azure

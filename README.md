@@ -369,6 +369,12 @@ sequenceDiagram
 # Built-in judge (OpenAI, Anthropic, Gemini) — just set an env var
 OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
 
+# Built-in judge on any OpenAI-compatible endpoint (Azure/Foundry, Ollama, vLLM)
+abslang run session.abs.yaml --agent $URL \
+  --judge-base-url "https://<resource>.openai.azure.com/openai/v1" \
+  --judge-api-key "$AZURE_OPENAI_API_KEY" --judge-api-key-header api-key \
+  --judge-model gpt-4o-mini
+
 # Azure AI Foundry — quality + safety evaluators
 AZURE_OPENAI_ENDPOINT=... AZURE_OPENAI_KEY=... AZURE_OPENAI_DEPLOYMENT=... \
   abslang run session.abs.yaml --agent $URL --adapter azure

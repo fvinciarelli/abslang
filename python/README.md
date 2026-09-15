@@ -49,10 +49,17 @@ abslang run sessions/ --agent $STAGING --dataset datasets/ --format junit --ci >
 | `--dataset <path>` | JSON/JSONL dataset file |
 | `--var key=value` | Single variable binding (repeatable) |
 | `--filter key:value` | Filter dataset rows |
-| `--agent-format` | `openai` (default), `claude`, or `gemini` |
+| `--agent-format` | `openai` (default), `responses`, `claude`, or `gemini` |
 | `--agent-auth` | `none`, `api_key`, `bearer`, or `oauth2` |
 | `--agent-token` | Auth token or API key |
+| `--agent-model` | Model/deployment for model endpoints (e.g. Azure OpenAI Responses) — omit when the agent owns its model |
+| `--agent-forward-auth` | Forward the caller's `Authorization` header to the agent |
+| `--agent-authorization` | Raw `Authorization` header value to forward |
 | `--adapter llm_judge=<name>` | Route LLM evaluations through an adapter (`aievaluator`, `azure`, `aws`, `google`) — see below |
+| `--judge-base-url` | Built-in judge on a custom OpenAI-compatible endpoint (Azure/Foundry, Ollama, vLLM) |
+| `--judge-api-key` | Built-in judge API key (overrides `ABS_JUDGE_API_KEY` / `OPENAI_API_KEY`) |
+| `--judge-api-key-header` | Header for the judge key (default `Authorization`; use `api-key` for Azure) |
+| `--judge-model` | Built-in judge model or Azure deployment name |
 | `--format` | `table` (default), `json`, or `junit` |
 | `--ci` | CI mode (no colors) |
 | `--timeout <n>` | Timeout per session in seconds (default: 300) |
@@ -109,6 +116,18 @@ Evaluations like `llm_judge`, `Groundedness`, and `Relevance` need an LLM to pro
 # Auto-detects OpenAI, Anthropic, or Gemini from env
 OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
 ANTHROPIC_API_KEY=sk-ant-... abslang run session.abs.yaml --agent $URL
+```
+
+Point the same judge at any OpenAI-compatible endpoint — CLI flags override the
+`ABS_JUDGE_BASE_URL`, `ABS_JUDGE_API_KEY`, `ABS_JUDGE_API_KEY_HEADER`, and
+`ABS_JUDGE_MODEL` environment variables:
+
+```bash
+abslang run session.abs.yaml --agent $URL \
+  --judge-base-url "https://<resource>.openai.azure.com/openai/v1" \
+  --judge-api-key "$AZURE_OPENAI_API_KEY" \
+  --judge-api-key-header api-key \
+  --judge-model gpt-4o-mini
 ```
 
 **Azure AI Foundry** (quality dimensions + agentic evaluators):

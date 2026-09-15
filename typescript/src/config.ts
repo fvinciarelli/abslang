@@ -8,6 +8,9 @@ export interface ABSConfig {
     format?: string;
     auth?: string;
     token?: string;
+    model?: string;
+    forward_auth?: boolean;
+    authorization?: string;
   };
   adapters?: Record<string, string>;
   defaults?: {
@@ -47,8 +50,26 @@ export function mergeConfig(cliOptions: Record<string, any>): Record<string, any
       cliOptions.agent_token ||
       process.env.ABS_AGENT_TOKEN ||
       agentCfg.token,
+    agent_model:
+      cliOptions.agent_model ||
+      process.env.ABS_AGENT_MODEL ||
+      agentCfg.model,
+    agent_forward_auth:
+      cliOptions.agent_forward_auth ||
+      isTruthy(process.env.ABS_AGENT_FORWARD_AUTH) ||
+      agentCfg.forward_auth ||
+      false,
+    agent_authorization:
+      cliOptions.agent_authorization ||
+      process.env.ABS_AGENT_AUTHORIZATION ||
+      agentCfg.authorization,
     adapters: cliOptions.adapters || config.adapters || {},
     timeout: cliOptions.timeout || defaultsCfg.timeout || 300,
     dataset: cliOptions.dataset || defaultsCfg.dataset,
   };
+}
+
+function isTruthy(value: string | undefined): boolean {
+  if (!value) return false;
+  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }

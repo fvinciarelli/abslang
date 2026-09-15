@@ -103,14 +103,18 @@ Agents speak different protocols. The Runner ships with built-in adapters:
 | Adapter | Protocol |
 |---------|----------|
 | `openai` (default) | OpenAI Chat Completions API |
+| `responses` | OpenAI Responses API (`POST /v1/responses`, SSE events) |
 | `claude` | Anthropic Messages API |
 | `gemini` | Google Gemini API |
 
 ```bash
 abslang run session.abs.yaml --agent $URL --agent-format openai
+abslang run session.abs.yaml --agent $URL --agent-format responses  # Responses API + SSE
 abslang run session.abs.yaml --agent $URL --agent-format claude
 abslang run session.abs.yaml --agent $URL --agent-format gemini
 ```
+
+With `responses`, the Runner sends `model` (`--agent-model`, default `gpt-4o`), translates the conversation to the Responses `input` format, and streams by default, folding `response.output_text.delta`, `response.function_call_arguments.*` and `response.completed` events into the trace.
 
 If your agent speaks a different protocol, write a thin adapter implementing `send(messages) → response`.
 
@@ -122,6 +126,7 @@ If your agent speaks a different protocol, write a thin adapter implementing `se
 | `api_key` | `--agent-auth api_key --agent-token $KEY` |
 | `bearer` | `--agent-auth bearer --agent-token $TOKEN` |
 | `oauth2` | `--agent-auth oauth2 --agent-token $TOKEN` |
+| forward | `--agent-forward-auth` (+ `--agent-authorization "Bearer ..."`, or `ABS_AGENT_AUTHORIZATION` / `HTTP_AUTHORIZATION` in the environment) |
 
 ---
 
@@ -205,6 +210,13 @@ a curated rubric — no criteria.
 ```bash
 # Built-in judge
 OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
+
+# Built-in judge on any OpenAI-compatible endpoint (Azure/Foundry, Ollama, vLLM, gateway)
+abslang run session.abs.yaml --agent $URL \
+  --judge-base-url "https://<resource>.openai.azure.com/openai/v1" \
+  --judge-api-key "$AZURE_OPENAI_API_KEY" \
+  --judge-api-key-header api-key \
+  --judge-model gpt-4o-mini
 
 # Azure AI Foundry
 abslang run session.abs.yaml --agent $URL --adapter azure

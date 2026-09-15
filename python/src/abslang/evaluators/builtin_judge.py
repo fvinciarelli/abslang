@@ -62,6 +62,57 @@ def _resolve_criteria(evaluation: dict[str, Any]) -> str:
     )
 
 
+# ── Configuration (CLI flags override env vars) ──
+
+_JUDGE_CONFIG: dict[str, str] = {}
+
+
+def configure_builtin_judge(
+    base_url: str | None = None,
+    api_key: str | None = None,
+    api_key_header: str | None = None,
+    model: str | None = None,
+) -> None:
+    """Configure the built-in judge.
+
+    Replaces previous values; anything not provided falls back to environment
+    variables. CLI flags take precedence over env vars.
+    """
+    _JUDGE_CONFIG.clear()
+    for key, value in (
+        ("base_url", base_url),
+        ("api_key", api_key),
+        ("api_key_header", api_key_header),
+        ("model", model),
+    ):
+        if value:
+            _JUDGE_CONFIG[key] = value
+
+
+def _resolve_setting(cli_key: str, env_name: str) -> str | None:
+    return _JUDGE_CONFIG.get(cli_key) or os.environ.get(env_name)
+
+
+def _judge_base_url() -> str | None:
+    return _resolve_setting("base_url", "ABS_JUDGE_BASE_URL")
+
+
+def _judge_api_key() -> str | None:
+    return (
+        _JUDGE_CONFIG.get("api_key")
+        or os.environ.get("ABS_JUDGE_API_KEY")
+        or os.environ.get("OPENAI_API_KEY")
+    )
+
+
+def _judge_api_key_header() -> str:
+    return _resolve_setting("api_key_header", "ABS_JUDGE_API_KEY_HEADER") or "Authorization"
+
+
+def _judge_model(fallback: str) -> str:
+    return _resolve_setting("model", "ABS_JUDGE_MODEL") or fallback
+
+
 def _build_prompt(trace: list[Any], criteria: str) -> str:
     trace_text = "\n".join(
         f"[{s.actor}] {s.action}{' → ' + s.target if s.target else ''}: "
@@ -74,6 +125,11 @@ def _build_prompt(trace: list[Any], criteria: str) -> str:
 # ── Provider detection ──
 
 def _detect_provider() -> str | None:
+    # A custom base URL implies an OpenAI-compatible judge endpoint
+    # (Azure OpenAI/Foundry, Ollama, vLLM, a gateway, ...).
+    if _judge_base_url():
+        return "openai"
+
     explicit = os.environ.get("ABS_JUDGE_PROVIDER", "").lower()
     if explicit == "openai" and os.environ.get("OPENAI_API_KEY"):
         return "openai"
@@ -93,16 +149,22 @@ def _detect_provider() -> str | None:
 # ── OpenAI judge ──
 
 async def _judge_openai(trace: list[Any], criteria: str) -> dict:
-    api_key = os.environ["OPENAI_API_KEY"]
-    model = os.environ.get("ABS_JUDGE_MODEL", "gpt-4o")
+    base_url = (_judge_base_url() or "https://api.openai.com/v1").rstrip("/")
+    api_key = _judge_api_key()
+    model = _judge_model("gpt-4o")
+    header_name = _judge_api_key_header()
+
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    if api_key:
+        if header_name.lower() == "authorization" and not api_key.lower().startswith("bearer "):
+            headers[header_name] = f"Bearer {api_key}"
+        else:
+            headers[header_name] = api_key
 
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
+            f"{base_url}/chat/completions",
+            headers=headers,
             json={
                 "model": model,
                 "messages": [
@@ -123,7 +185,7 @@ async def _judge_openai(trace: list[Any], criteria: str) -> dict:
 
 async def _judge_anthropic(trace: list[Any], criteria: str) -> dict:
     api_key = os.environ["ANTHROPIC_API_KEY"]
-    model = os.environ.get("ABS_JUDGE_MODEL", "claude-sonnet-4-20250514")
+    model = _judge_model("claude-sonnet-4-20250514")
 
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
@@ -150,7 +212,7 @@ async def _judge_anthropic(trace: list[Any], criteria: str) -> dict:
 
 async def _judge_gemini(trace: list[Any], criteria: str) -> dict:
     api_key = os.environ["GEMINI_API_KEY"]
-    model = os.environ.get("ABS_JUDGE_MODEL", "gemini-2.0-flash")
+    model = _judge_model("gemini-2.0-flash")
 
     full_prompt = f"{JUDGE_SYSTEM}\n\n{_build_prompt(trace, criteria)}"
 

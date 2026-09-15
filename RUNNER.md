@@ -249,6 +249,18 @@ ANTHROPIC_API_KEY=sk-ant-... abslang run session.abs.yaml --agent $AGENT_URL
 GEMINI_API_KEY=... abslang run session.abs.yaml --agent $AGENT_URL
 ```
 
+Point the same judge at any OpenAI-compatible endpoint (Azure OpenAI/Foundry, Ollama,
+vLLM, a gateway) with base URL, key, header, and model. CLI flags override the
+equivalent `ABS_JUDGE_*` environment variables:
+
+```bash
+abslang run session.abs.yaml --agent $AGENT_URL \
+  --judge-base-url "https://<resource>.openai.azure.com/openai/v1" \
+  --judge-api-key "$AZURE_OPENAI_API_KEY" \
+  --judge-api-key-header api-key \
+  --judge-model gpt-4o-mini
+```
+
 **Azure AI Foundry** — `Groundedness`, `Relevance`, `Coherence`, `Fluency`, plus
 agentic evaluators (`azure.task_adherence`, `azure.tool_call_accuracy`, …):
 
@@ -381,11 +393,12 @@ It only plays the user's part, watches the agent, and reports what happened. The
 
 ## Agent adapters
 
-Agents speak different protocols. The Runner ships with built-in adapters for the three most common ones:
+Agents speak different protocols. The Runner ships with built-in adapters for the four most common ones:
 
 | Adapter | Protocol |
 |---------|----------|
 | `openai` (default) | OpenAI Chat Completions API |
+| `responses` | OpenAI Responses API (`POST /v1/responses`, SSE events) |
 | `claude` | Anthropic Messages API |
 | `gemini` | Google Gemini API |
 
@@ -396,6 +409,10 @@ agent_adapter.send(messages) → response
 ```
 
 The adapter translates between the Runner's internal message format and whatever your agent expects. A custom adapter is a function or HTTP middleware — the Runner calls it for every turn.
+
+With `responses`, the Runner translates the conversation to the Responses `input` format and streams by default, folding `response.output_text.delta`, `response.function_call_arguments.*`, `response.output_item.*` and `response.completed` events into the trace. `model` is only sent when you pass `--agent-model` — agent endpoints own their model, while raw model endpoints (Azure OpenAI, OpenAI) require it. If the endpoint ignores `stream` and answers with JSON, the same `output` array is parsed without streaming.
+
+ABS evaluates observable behavior and is agnostic about what sits behind the endpoint — agent framework, proxy, or a bare model. The only practical difference for `responses` is protocol-level: some endpoints require `model` in the request body (raw Azure OpenAI/OpenAI Responses API), while agent servers already own their model and ignore it. Pass `--agent-model` only for the former.
 
 ### Authentication
 
@@ -428,6 +445,18 @@ abslang run session.abs.yaml \
   --agent-auth bearer \
   --agent-token $AGENT_API_KEY
 ```
+
+#### Forwarding the caller's token
+
+When ABS runs behind another service that already authenticated the user, the Runner can pass the incoming `Authorization: Bearer` header straight through to the agent — no need to unpack the token:
+
+```bash
+abslang run session.abs.yaml --agent $AGENT_URL \
+  --agent-forward-auth \
+  --agent-authorization "Bearer $INCOMING_TOKEN"
+```
+
+`--agent-forward-auth` resolves the value from `ABS_AGENT_AUTHORIZATION`, `HTTP_AUTHORIZATION`, or `Authorization` in the environment (falling back to `Bearer $ABS_AGENT_TOKEN`); `--agent-authorization` sets it explicitly. If forwarding is enabled and no value is found, the run fails with a clear error instead of calling the agent unauthenticated. An explicit `--agent-auth`/`--agent-token` always wins over forwarding. Forwarding works with every adapter, not just `responses`.
 
 The spec says nothing about auth — it's an operational detail, not a behavioral one. The same session file runs against a local agent with no auth and a production agent behind OAuth2 without changing a single line.
 

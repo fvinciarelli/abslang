@@ -1,6 +1,8 @@
 """Runner — executes ABS sessions against a real agent."""
 
 import json
+import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -36,10 +38,15 @@ class AgentConfig:
     format: str = "openai"
     auth: str = "none"
     token: str | None = None
+    # Model/deployment to send when the endpoint is a raw model (e.g. Azure OpenAI
+    # Responses API). Omit it for agent endpoints that own their model.
+    model: str | None = None
+    forward_auth: bool = False
+    authorization: str | None = None
     refresh_url: str | None = None
     refresh_token: str | None = None
     client_id: str | None = None
-    stream: bool = False
+    stream: bool | None = None
     timeout: int = 300
 
 
@@ -68,13 +75,67 @@ class RunResult:
 
 # ── Agent adapters ──
 
-async def _openai_adapter(messages: list[AgentMessage], config: AgentConfig) -> list[AgentMessage]:
-    headers: dict[str, str] = {"Content-Type": "application/json"}
 
+def _resolve_forwarded_authorization(
+    config: AgentConfig,
+    env: Mapping[str, str] | None = None,
+) -> str | None:
+    """Resolve the raw ``Authorization`` value to forward upstream.
+
+    Order: explicit ``config.authorization`` → ``ABS_AGENT_AUTHORIZATION`` →
+    ``HTTP_AUTHORIZATION`` → ``Authorization`` → ``Bearer(ABS_AGENT_TOKEN)``.
+    A bare token (no scheme) is normalized to ``Bearer <token>``.
+    """
+    if not config.forward_auth and not config.authorization:
+        return None
+
+    environ = os.environ if env is None else env
+    raw = (
+        config.authorization
+        or environ.get("ABS_AGENT_AUTHORIZATION")
+        or environ.get("HTTP_AUTHORIZATION")
+        or environ.get("Authorization")
+    )
+
+    if raw:
+        trimmed = raw.strip()
+        if not trimmed:
+            return None
+        # Already carries a scheme (Bearer, Basic, ...): forward verbatim.
+        if " " in trimmed:
+            return trimmed
+        return f"Bearer {trimmed}"
+
+    token = environ.get("ABS_AGENT_TOKEN")
+    if token:
+        return f"Bearer {token}"
+
+    raise RuntimeError(
+        "Authorization forwarding is enabled but no value was found. "
+        "Pass --agent-authorization, or set ABS_AGENT_AUTHORIZATION / HTTP_AUTHORIZATION / ABS_AGENT_TOKEN."
+    )
+
+
+def _build_auth_headers(
+    config: AgentConfig,
+    env: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Build the auth headers for an agent request (explicit token or forwarded)."""
     if config.auth == "api_key" and config.token:
-        headers["X-API-Key"] = config.token
-    elif (config.auth == "bearer" or config.auth == "oauth2") and config.token:
-        headers["Authorization"] = f"Bearer {config.token}"
+        return {"X-API-Key": config.token}
+
+    if config.auth in ("bearer", "oauth2") and config.token:
+        return {"Authorization": f"Bearer {config.token}"}
+
+    forwarded = _resolve_forwarded_authorization(config, env)
+    return {"Authorization": forwarded} if forwarded else {}
+
+
+async def _openai_adapter(messages: list[AgentMessage], config: AgentConfig) -> list[AgentMessage]:
+    headers: dict[str, str] = {
+        "Content-Type": "application/json",
+        **_build_auth_headers(config),
+    }
 
     body: dict[str, Any] = {
         "messages": [
@@ -149,11 +210,237 @@ async def _openai_adapter(messages: list[AgentMessage], config: AgentConfig) -> 
     return [result]
 
 
+# ── OpenAI Responses API adapter ──
+
+
+@dataclass
+class _ResponsesState:
+    text: str = ""
+    calls: dict[Any, dict[str, str]] = field(default_factory=dict)
+    order: list[Any] = field(default_factory=list)
+    completed: dict[str, Any] | None = None
+
+
+def _to_responses_input(messages: list[AgentMessage]) -> tuple[list[dict[str, Any]], str | None]:
+    """Translate the runner's internal messages into a Responses API ``input`` array."""
+    instructions: list[str] = []
+    items: list[dict[str, Any]] = []
+
+    for m in messages:
+        if m.role == "system":
+            if m.content:
+                instructions.append(m.content)
+            continue
+
+        if m.role == "tool":
+            items.append({
+                "type": "function_call_output",
+                "call_id": m.tool_call_id or "",
+                "output": m.content or "",
+            })
+            continue
+
+        if m.role == "assistant" and m.tool_calls:
+            if m.content:
+                items.append({"role": "assistant", "content": m.content})
+            for tc in m.tool_calls:
+                fn = tc.get("function", {})
+                items.append({
+                    "type": "function_call",
+                    "call_id": tc.get("id", ""),
+                    "name": fn.get("name", ""),
+                    "arguments": fn.get("arguments", ""),
+                })
+            continue
+
+        items.append({"role": m.role, "content": m.content or ""})
+
+    return items, "\n\n".join(instructions) if instructions else None
+
+
+def _parse_responses_output(output: list[dict[str, Any]] | None) -> tuple[str, list[dict[str, Any]]]:
+    """Extract text and tool calls from a Responses API ``output`` array."""
+    texts: list[str] = []
+    tool_calls: list[dict[str, Any]] = []
+
+    for item in output or []:
+        if item.get("type") == "message":
+            for part in item.get("content") or []:
+                if part.get("type") == "output_text" and part.get("text"):
+                    texts.append(part["text"])
+                elif part.get("type") == "refusal" and part.get("refusal"):
+                    texts.append(part["refusal"])
+        elif item.get("type") == "function_call":
+            arguments = item.get("arguments")
+            if not isinstance(arguments, str):
+                arguments = json.dumps(arguments if arguments is not None else {})
+            tool_calls.append({
+                "id": item.get("call_id") or item.get("id") or "",
+                "type": "function",
+                "function": {"name": item.get("name") or "", "arguments": arguments},
+            })
+
+    return "".join(texts), tool_calls
+
+
+def _apply_responses_event(state: _ResponsesState, event: dict[str, Any]) -> None:
+    """Fold a single Responses SSE event into the accumulated state."""
+    etype = event.get("type")
+
+    if etype == "response.output_text.delta":
+        delta = event.get("delta")
+        if isinstance(delta, str):
+            state.text += delta
+
+    elif etype == "response.output_item.added":
+        item = event.get("item") or {}
+        if item.get("type") == "function_call":
+            key = item.get("id") or event.get("output_index") or len(state.order)
+            if key not in state.calls:
+                state.calls[key] = {
+                    "id": item.get("call_id") or item.get("id") or "",
+                    "name": item.get("name") or "",
+                    "arguments": item.get("arguments") or "",
+                }
+                state.order.append(key)
+
+    elif etype == "response.function_call_arguments.delta":
+        key = event.get("item_id") if event.get("item_id") is not None else event.get("output_index")
+        call = state.calls.get(key)
+        delta = event.get("delta")
+        if call is not None and isinstance(delta, str):
+            call["arguments"] += delta
+
+    elif etype == "response.function_call_arguments.done":
+        key = event.get("item_id") if event.get("item_id") is not None else event.get("output_index")
+        call = state.calls.get(key)
+        arguments = event.get("arguments")
+        if call is not None and isinstance(arguments, str):
+            call["arguments"] = arguments
+
+    elif etype == "response.output_item.done":
+        item = event.get("item") or {}
+        if item.get("type") == "function_call":
+            key = item.get("id") or event.get("output_index")
+            existing = state.calls.get(key)
+            if existing is None:
+                existing = {"id": "", "name": "", "arguments": ""}
+                state.calls[key] = existing
+                state.order.append(key)
+            existing["id"] = item.get("call_id") or existing["id"] or item.get("id") or ""
+            existing["name"] = item.get("name") or existing["name"] or ""
+            if isinstance(item.get("arguments"), str):
+                existing["arguments"] = item["arguments"]
+        elif item.get("type") == "message" and not state.text:
+            content, _ = _parse_responses_output([item])
+            if content:
+                state.text = content
+
+    elif etype == "response.completed":
+        response = event.get("response")
+        state.completed = response if isinstance(response, dict) else None
+
+    elif etype == "error":
+        raise RuntimeError(f"Responses API error: {event.get('message', json.dumps(event))}")
+
+
+def _responses_state_to_message(state: _ResponsesState) -> AgentMessage:
+    """Build the final assistant message from the accumulated Responses state."""
+    content = state.text
+    tool_calls: list[dict[str, Any]] = []
+    for key in state.order:
+        call = state.calls.get(key)
+        if call is None:
+            continue
+        tool_calls.append({
+            "id": call["id"],
+            "type": "function",
+            "function": {"name": call["name"], "arguments": call["arguments"]},
+        })
+
+    # ``response.completed`` carries the authoritative output — prefer it.
+    if state.completed is not None:
+        parsed_content, parsed_calls = _parse_responses_output(state.completed.get("output"))
+        if parsed_content or parsed_calls:
+            content = parsed_content
+            tool_calls = parsed_calls
+
+    return AgentMessage(role="assistant", content=content or None, tool_calls=tool_calls or None)
+
+
+def _process_responses_sse_line(line: str, state: _ResponsesState) -> None:
+    trimmed = line.strip()
+    if not trimmed.startswith("data:"):
+        return
+    data = trimmed[5:].strip()
+    if not data or data == "[DONE]":
+        return
+    try:
+        event = json.loads(data)
+    except json.JSONDecodeError:
+        return  # partial chunk — ignore
+    _apply_responses_event(state, event)
+
+
+async def _responses_adapter(messages: list[AgentMessage], config: AgentConfig) -> list[AgentMessage]:
+    """OpenAI Responses API adapter (``POST /v1/responses``).
+
+    Streams by default (SSE events) and falls back to JSON when the server ignores
+    ``stream``. Set ``config.stream = False`` to force the non-streaming path.
+    """
+    headers: dict[str, str] = {
+        "Content-Type": "application/json",
+        **_build_auth_headers(config),
+    }
+
+    items, instructions = _to_responses_input(messages)
+    stream = config.stream is not False
+
+    body: dict[str, Any] = {
+        "input": items,
+        "tools": [{
+            "type": "function",
+            "name": "any",
+            "description": "Tool",
+            "parameters": {"type": "object", "properties": {}},
+        }],
+        "tool_choice": "auto",
+    }
+    # Only send ``model`` when explicitly configured: agent endpoints own their model,
+    # raw model endpoints (Azure OpenAI, OpenAI) require it.
+    if config.model:
+        body["model"] = config.model
+    if instructions:
+        body["instructions"] = instructions
+    if stream:
+        body["stream"] = True
+
+    async with httpx.AsyncClient(timeout=config.timeout) as client:
+        resp = await client.post(config.url, json=body, headers=headers)
+
+    if resp.status_code >= 400:
+        raise RuntimeError(f"Agent returned {resp.status_code}: {resp.text[:200]}")
+
+    content_type = resp.headers.get("content-type", "")
+    is_event_stream = stream and "application/json" not in content_type
+
+    if is_event_stream:
+        state = _ResponsesState()
+        for line in resp.text.split("\n"):
+            _process_responses_sse_line(line, state)
+        return [_responses_state_to_message(state)]
+
+    data = resp.json()
+    content, tool_calls = _parse_responses_output(data.get("output"))
+    return [AgentMessage(role="assistant", content=content or None, tool_calls=tool_calls or None)]
+
+
 async def _claude_adapter(messages: list[AgentMessage], config: AgentConfig) -> list[AgentMessage]:
     headers: dict[str, str] = {
         "Content-Type": "application/json",
         "x-api-key": config.token or "",
         "anthropic-version": "2023-06-01",
+        **_build_auth_headers(config),
     }
 
     system_msgs = [m for m in messages if m.role == "system"]
@@ -186,7 +473,10 @@ async def _claude_adapter(messages: list[AgentMessage], config: AgentConfig) -> 
 
 
 async def _gemini_adapter(messages: list[AgentMessage], config: AgentConfig) -> list[AgentMessage]:
-    headers: dict[str, str] = {"Content-Type": "application/json"}
+    headers: dict[str, str] = {
+        "Content-Type": "application/json",
+        **_build_auth_headers(config),
+    }
 
     contents = [
         {
@@ -224,6 +514,8 @@ EXEC_ACTIONS = {"calls", "submits", "retrieves", "stores", "updates"}
 
 _AGENT_ADAPTERS = {
     "openai": _openai_adapter,
+    "responses": _responses_adapter,
+    "response": _responses_adapter,  # alias
     "claude": _claude_adapter,
     "gemini": _gemini_adapter,
     "custom": _openai_adapter,

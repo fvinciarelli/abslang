@@ -20,6 +20,7 @@ import click
 from . import __version__
 from .parser import parse, parse_multi, load_dataset, resolve_variables, NormalizedSession
 from .runner import run, AgentConfig, RunResult
+from .evaluators.builtin_judge import configure_builtin_judge
 from .formatters.table import format_table, format_json_output, format_junit
 from .config import merge_config
 
@@ -204,8 +205,11 @@ def init():
             "# ABS project configuration\n"
             "agent:\n"
             "  url: http://localhost:8080/chat\n"
-            "  format: openai\n"
-            "  auth: none\n"
+            "  format: openai          # openai | responses | claude | gemini\n"
+            "  auth: none              # none | api_key | bearer | oauth2\n"
+            "  # model: gpt-4o         # required by the Responses API\n"
+            "  # forward_auth: true    # forward the caller's Authorization header upstream\n"
+            "  # authorization: \"Bearer eyJ...\"  # or pass the header value explicitly\n"
             "\n"
             "adapters:\n"
             "  llm_judge: aievaluator\n"
@@ -264,13 +268,20 @@ def init():
 @click.option("--dataset", "dataset_path", help="Dataset file (.json or .jsonl)", default=None)
 @click.option("--var", "variables", multiple=True, help="Single variable binding (repeatable: --var key=value)")
 @click.option("--filter", "filter_kv", help="Filter dataset rows by key:value")
-@click.option("--agent-format", help="openai, claude, or gemini", default="openai")
+@click.option("--agent-format", help="openai, responses, claude, or gemini", default="openai")
 @click.option("--agent-auth", help="none, api_key, bearer, or oauth2", default="none")
 @click.option("--agent-token", help="Token or API key", default=None)
+@click.option("--agent-model", help="Model name for protocols that require it (Responses API)", default=None)
+@click.option("--agent-forward-auth", is_flag=True, help="Forward the caller's Authorization header to the agent")
+@click.option("--agent-authorization", help="Raw Authorization header value to forward (e.g. 'Bearer eyJ...')", default=None)
 @click.option("--agent-refresh-url", help="OAuth2 token refresh URL", default=None)
 @click.option("--agent-refresh-token", help="OAuth2 refresh token", default=None)
 @click.option("--agent-client-id", help="OAuth2 client ID", default=None)
 @click.option("--adapter", "adapters", multiple=True, help="Evaluator adapter binding (--adapter llm_judge=aievaluator)")
+@click.option("--judge-base-url", help="Built-in judge: OpenAI-compatible base URL (e.g. Azure/Foundry, Ollama)", default=None)
+@click.option("--judge-api-key", help="Built-in judge: API key (overrides ABS_JUDGE_API_KEY / OPENAI_API_KEY)", default=None)
+@click.option("--judge-api-key-header", help="Built-in judge: header for the API key (default: Authorization; use api-key for Azure)", default=None)
+@click.option("--judge-model", help="Built-in judge: model or Azure deployment name", default=None)
 @click.option("--format", "output_format", help="table, json, or junit", default="table")
 @click.option("--ci", is_flag=True, help="CI mode (no colors, no prompts)")
 @click.option("--timeout", type=int, default=300, help="Timeout per session run in seconds")
@@ -285,10 +296,17 @@ def run_cmd(
     agent_format: str,
     agent_auth: str,
     agent_token: Optional[str],
+    agent_model: Optional[str],
+    agent_forward_auth: bool,
+    agent_authorization: Optional[str],
     agent_refresh_url: Optional[str],
     agent_refresh_token: Optional[str],
     agent_client_id: Optional[str],
     adapters: tuple[str, ...],
+    judge_base_url: Optional[str],
+    judge_api_key: Optional[str],
+    judge_api_key_header: Optional[str],
+    judge_model: Optional[str],
     output_format: str,
     ci: bool,
     timeout: int,
@@ -312,6 +330,9 @@ def run_cmd(
         "agent_format": agent_format,
         "agent_auth": agent_auth,
         "agent_token": agent_token,
+        "agent_model": agent_model,
+        "agent_forward_auth": agent_forward_auth,
+        "agent_authorization": agent_authorization,
     })
     agent_url = cfg["agent_url"]
     agent_format = cfg["agent_format"]
@@ -325,11 +346,22 @@ def run_cmd(
     # Configure evaluator adapters (CLI --adapter + abs.config.yaml adapters:)
     _setup_adapters(adapters, cfg.get("adapters"))
 
+    # Configure built-in LLM judge (CLI flags override env vars)
+    configure_builtin_judge(
+        base_url=judge_base_url,
+        api_key=judge_api_key,
+        api_key_header=judge_api_key_header,
+        model=judge_model,
+    )
+
     agent_config = AgentConfig(
         url=agent_url,
         format=agent_format,
         auth=agent_auth,
         token=agent_token or os.environ.get("ABS_AGENT_TOKEN"),
+        model=cfg.get("agent_model"),
+        forward_auth=cfg.get("agent_forward_auth", False),
+        authorization=cfg.get("agent_authorization"),
         refresh_url=agent_refresh_url,
         refresh_token=agent_refresh_token,
         client_id=agent_client_id,

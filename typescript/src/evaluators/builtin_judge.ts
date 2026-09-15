@@ -17,6 +17,49 @@ Be strict but fair. Respond in this format:
 Score: <number between 0.0 and 1.0>
 Reason: <one sentence explaining the score>`;
 
+// ── Configuration (CLI flags override env vars) ──
+
+export interface BuiltinJudgeConfig {
+  /** OpenAI-compatible base URL (e.g. https://<resource>.openai.azure.com/openai/v1). */
+  baseUrl?: string;
+  /** API key for the judge. Falls back to ABS_JUDGE_API_KEY, then the provider key. */
+  apiKey?: string;
+  /** Header used for the API key. Defaults to Authorization; use `api-key` for Azure. */
+  apiKeyHeader?: string;
+  /** Model (or Azure deployment name) for the judge. */
+  model?: string;
+}
+
+let judgeConfig: BuiltinJudgeConfig = {};
+
+/**
+ * Configure the built-in judge. Replaces previous values; anything not provided
+ * falls back to environment variables. CLI flags take precedence over env vars.
+ */
+export function configureBuiltinJudge(config: BuiltinJudgeConfig = {}): void {
+  judgeConfig = { ...config };
+}
+
+function resolveSetting(cliValue: string | undefined, envName: string): string | undefined {
+  return cliValue || process.env[envName] || undefined;
+}
+
+function judgeBaseUrl(): string | undefined {
+  return resolveSetting(judgeConfig.baseUrl, "ABS_JUDGE_BASE_URL");
+}
+
+function judgeApiKey(): string | undefined {
+  return judgeConfig.apiKey || process.env.ABS_JUDGE_API_KEY || process.env.OPENAI_API_KEY;
+}
+
+function judgeApiKeyHeader(): string {
+  return resolveSetting(judgeConfig.apiKeyHeader, "ABS_JUDGE_API_KEY_HEADER") || "Authorization";
+}
+
+function judgeModel(fallback: string): string {
+  return resolveSetting(judgeConfig.model, "ABS_JUDGE_MODEL") || fallback;
+}
+
 function buildPrompt(trace: ObservedStep[], criteria: string): string {
   const traceText = trace
     .map(
@@ -32,6 +75,10 @@ function buildPrompt(trace: ObservedStep[], criteria: string): string {
 // ── Provider detection ──
 
 function detectProvider(): string | null {
+  // A custom base URL implies an OpenAI-compatible judge endpoint
+  // (Azure OpenAI/Foundry, Ollama, vLLM, a gateway, ...).
+  if (judgeBaseUrl()) return "openai";
+
   const explicit = (process.env.ABS_JUDGE_PROVIDER || "").toLowerCase();
   if (explicit === "openai" && process.env.OPENAI_API_KEY) return "openai";
   if (explicit === "anthropic" && process.env.ANTHROPIC_API_KEY) return "anthropic";
@@ -46,15 +93,22 @@ function detectProvider(): string | null {
 // ── OpenAI judge ──
 
 async function judgeOpenAI(trace: ObservedStep[], criteria: string): Promise<EvalResult> {
-  const apiKey = process.env.OPENAI_API_KEY!;
-  const model = process.env.ABS_JUDGE_MODEL || "gpt-4o";
+  const baseUrl = (judgeBaseUrl() || "https://api.openai.com/v1").replace(/\/+$/, "");
+  const apiKey = judgeApiKey();
+  const model = judgeModel("gpt-4o");
+  const apiKeyHeader = judgeApiKeyHeader();
 
-  const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (apiKey) {
+    headers[apiKeyHeader] =
+      apiKeyHeader.toLowerCase() === "authorization" && !apiKey.toLowerCase().startsWith("bearer ")
+        ? `Bearer ${apiKey}`
+        : apiKey;
+  }
+
+  const resp = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify({
       model,
       messages: [
@@ -80,7 +134,7 @@ async function judgeOpenAI(trace: ObservedStep[], criteria: string): Promise<Eva
 
 async function judgeAnthropic(trace: ObservedStep[], criteria: string): Promise<EvalResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY!;
-  const model = process.env.ABS_JUDGE_MODEL || "claude-sonnet-4-20250514";
+  const model = judgeModel("claude-sonnet-4-20250514");
 
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -111,7 +165,7 @@ async function judgeAnthropic(trace: ObservedStep[], criteria: string): Promise<
 
 async function judgeGemini(trace: ObservedStep[], criteria: string): Promise<EvalResult> {
   const apiKey = process.env.GEMINI_API_KEY!;
-  const model = process.env.ABS_JUDGE_MODEL || "gemini-2.0-flash";
+  const model = judgeModel("gemini-2.0-flash");
 
   const fullPrompt = `${JUDGE_SYSTEM}\n\n${buildPrompt(trace, criteria)}`;
 
@@ -190,7 +244,7 @@ function mockJudge(trace: ObservedStep[], evaluation: any): EvalResult {
 
 // ── Main adapter ──
 
-async function builtinLlmJudge(
+export async function builtinLlmJudge(
   trace: ObservedStep[],
   evaluation: any
 ): Promise<EvalResult> {

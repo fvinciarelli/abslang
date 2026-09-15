@@ -91,6 +91,7 @@ Pairs `order-status.abs.yaml` with `order-status.jsonl`, `booking.abs.yaml` with
 
 ```bash
 abslang run session.abs.yaml --agent $URL                        # OpenAI-compatible (default)
+abslang run session.abs.yaml --agent $URL --agent-format responses  # OpenAI Responses API + SSE
 abslang run session.abs.yaml --agent $URL --agent-format claude  # Anthropic Claude
 abslang run session.abs.yaml --agent $URL --agent-format gemini  # Google Gemini
 ```
@@ -107,6 +108,10 @@ abslang run session.abs.yaml --agent $URL --agent-auth bearer --agent-token $TOK
 # OAuth2 with auto-refresh
 abslang run session.abs.yaml --agent $URL --agent-auth oauth2 \
   --agent-token $ACCESS --agent-refresh-url $REFRESH_URL --agent-refresh-token $REFRESH
+
+# Forward the caller's incoming Authorization header to the agent
+abslang run session.abs.yaml --agent $URL --agent-forward-auth \
+  --agent-authorization "Bearer $INCOMING_TOKEN"
 ```
 
 **LLM judge adapters:**
@@ -229,6 +234,9 @@ abslang run examples/order-status.yaml --agent http://localhost:8080/chat
 | `ABS_AGENT_FORMAT` | `--agent-format` |
 | `ABS_AGENT_AUTH` | `--agent-auth` |
 | `ABS_AGENT_TOKEN` | `--agent-token` |
+| `ABS_AGENT_MODEL` | `--agent-model` |
+| `ABS_AGENT_FORWARD_AUTH` | `--agent-forward-auth` |
+| `ABS_AGENT_AUTHORIZATION` | `--agent-authorization` |
 | `ABS_VAR_orderId` | `--var orderId=...` |
 | `OPENAI_API_KEY` | Auto-detected for `llm_judge` |
 | `ANTHROPIC_API_KEY` | Auto-detected for `llm_judge` |

@@ -186,7 +186,7 @@ After explaining the YAML, always add these run examples so the user knows how t
 - **With LLM adapter** (required for llm_judge, Groundedness, Relevance, etc.):
   \`abslang run ./session.abs.yaml --agent $AGENT_URL --dataset cases.jsonl --adapter llm_judge=aievaluator\`
 - **With private LLM** (Ollama, vLLM):
-  \`abslang run ./session.abs.yaml --agent $AGENT_URL --dataset cases.jsonl --adapter llm_judge=local --adapter-url http://localhost:11434/v1\`
+  \`abslang run ./session.abs.yaml --agent $AGENT_URL --dataset cases.jsonl --judge-base-url http://localhost:11434/v1 --judge-model llama3.1\`
 
 ## Examples
 

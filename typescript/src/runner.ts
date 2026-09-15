@@ -39,9 +39,16 @@ export type AgentAdapterFn = (
 
 export interface AgentConfig {
   url: string;
-  format?: "openai" | "claude" | "gemini" | "custom";
+  format?: "openai" | "responses" | "response" | "claude" | "gemini" | "custom";
   auth?: "none" | "api_key" | "bearer" | "oauth2";
   token?: string;
+  /** Model/deployment to send when the endpoint is a raw model (e.g. Azure OpenAI Responses API).
+   * Omit it for agent endpoints that own their model. */
+  model?: string;
+  /** Forward the caller's `Authorization` header to the upstream agent. */
+  forwardAuth?: boolean;
+  /** Raw `Authorization` header value to forward (e.g. "Bearer eyJ..."). Implies forwardAuth. */
+  authorization?: string;
   refreshUrl?: string;
   refreshToken?: string;
   clientId?: string;
@@ -80,13 +87,8 @@ export async function openaiAdapter(
 ): Promise<AgentResponse> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    ...buildAuthHeaders(config),
   };
-
-  if (config.auth === "api_key" && config.token) {
-    headers["X-API-Key"] = config.token;
-  } else if ((config.auth === "bearer" || config.auth === "oauth2") && config.token) {
-    headers["Authorization"] = `Bearer ${config.token}`;
-  }
 
   const body: any = {
     messages: messages.map((m) => ({
@@ -167,6 +169,336 @@ export async function openaiAdapter(
   return { messages: [result], raw: data };
 }
 
+// ── Auth headers (explicit token or forwarded Authorization) ──
+
+/**
+ * Resolve the raw `Authorization` value to forward upstream.
+ *
+ * Order: explicit config.authorization → ABS_AGENT_AUTHORIZATION →
+ * HTTP_AUTHORIZATION → Authorization → Bearer(ABS_AGENT_TOKEN).
+ * A bare token (no scheme) is normalized to `Bearer <token>`.
+ */
+export function resolveForwardedAuthorization(
+  config: Pick<AgentConfig, "forwardAuth" | "authorization">,
+  env: Record<string, string | undefined> = process.env
+): string | undefined {
+  if (!config.forwardAuth && !config.authorization) return undefined;
+
+  const raw =
+    config.authorization ||
+    env.ABS_AGENT_AUTHORIZATION ||
+    env.HTTP_AUTHORIZATION ||
+    env.Authorization;
+
+  if (raw) {
+    const trimmed = raw.trim();
+    if (!trimmed) return undefined;
+    // Already carries a scheme (Bearer, Basic, ...): forward verbatim.
+    if (trimmed.includes(" ")) return trimmed;
+    return `Bearer ${trimmed}`;
+  }
+
+  if (env.ABS_AGENT_TOKEN) return `Bearer ${env.ABS_AGENT_TOKEN}`;
+
+  throw new Error(
+    "Authorization forwarding is enabled but no value was found. " +
+      "Pass --agent-authorization, or set ABS_AGENT_AUTHORIZATION / HTTP_AUTHORIZATION / ABS_AGENT_TOKEN."
+  );
+}
+
+/** Build the auth headers for an agent request. */
+export function buildAuthHeaders(
+  config: AgentConfig,
+  env: Record<string, string | undefined> = process.env
+): Record<string, string> {
+  if (config.auth === "api_key" && config.token) {
+    return { "X-API-Key": config.token };
+  }
+
+  if ((config.auth === "bearer" || config.auth === "oauth2") && config.token) {
+    return { Authorization: `Bearer ${config.token}` };
+  }
+
+  const forwarded = resolveForwardedAuthorization(config, env);
+  return forwarded ? { Authorization: forwarded } : {};
+}
+
+// ── OpenAI Responses API adapter ──
+
+interface ResponsesFunctionCall {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+export interface ResponsesStreamState {
+  text: string;
+  calls: Map<string | number, ResponsesFunctionCall>;
+  order: (string | number)[];
+  completed: any | null;
+}
+
+/** Translate the runner's internal messages into a Responses API `input` array. */
+export function toResponsesInput(
+  messages: AgentMessage[]
+): { instructions?: string; input: any[] } {
+  const instructions: string[] = [];
+  const input: any[] = [];
+
+  for (const m of messages) {
+    if (m.role === "system") {
+      if (m.content) instructions.push(m.content);
+      continue;
+    }
+
+    if (m.role === "tool") {
+      input.push({
+        type: "function_call_output",
+        call_id: m.tool_call_id ?? "",
+        output: m.content ?? "",
+      });
+      continue;
+    }
+
+    if (m.role === "assistant" && m.tool_calls?.length) {
+      if (m.content) input.push({ role: "assistant", content: m.content });
+      for (const tc of m.tool_calls) {
+        input.push({
+          type: "function_call",
+          call_id: tc.id,
+          name: tc.function.name,
+          arguments: tc.function.arguments,
+        });
+      }
+      continue;
+    }
+
+    input.push({ role: m.role, content: m.content ?? "" });
+  }
+
+  const result: { instructions?: string; input: any[] } = { input };
+  if (instructions.length > 0) result.instructions = instructions.join("\n\n");
+  return result;
+}
+
+/** Extract text and tool calls from a Responses API `output` array. */
+export function parseResponsesOutput(
+  output: any[] | undefined
+): { content: string; toolCalls: ToolCall[] } {
+  const texts: string[] = [];
+  const toolCalls: ToolCall[] = [];
+
+  for (const item of output ?? []) {
+    if (item?.type === "message") {
+      for (const part of item.content ?? []) {
+        if (part?.type === "output_text" && part.text) texts.push(part.text);
+        if (part?.type === "refusal" && part.refusal) texts.push(part.refusal);
+      }
+    } else if (item?.type === "function_call") {
+      toolCalls.push({
+        id: item.call_id ?? item.id ?? "",
+        type: "function",
+        function: {
+          name: item.name ?? "",
+          arguments:
+            typeof item.arguments === "string"
+              ? item.arguments
+              : JSON.stringify(item.arguments ?? {}),
+        },
+      });
+    }
+  }
+
+  return { content: texts.join(""), toolCalls };
+}
+
+/** Fold a single Responses SSE event into the accumulated state. */
+export function applyResponsesEvent(state: ResponsesStreamState, event: any): void {
+  switch (event?.type) {
+    case "response.output_text.delta":
+      if (typeof event.delta === "string") state.text += event.delta;
+      break;
+
+    case "response.output_item.added": {
+      const item = event.item;
+      if (item?.type === "function_call") {
+        const key = item.id ?? event.output_index ?? state.order.length;
+        if (!state.calls.has(key)) {
+          state.calls.set(key, {
+            id: item.call_id ?? item.id ?? "",
+            name: item.name ?? "",
+            arguments: item.arguments ?? "",
+          });
+          state.order.push(key);
+        }
+      }
+      break;
+    }
+
+    case "response.function_call_arguments.delta": {
+      const key = event.item_id ?? event.output_index;
+      const call = state.calls.get(key);
+      if (call && typeof event.delta === "string") call.arguments += event.delta;
+      break;
+    }
+
+    case "response.function_call_arguments.done": {
+      const key = event.item_id ?? event.output_index;
+      const call = state.calls.get(key);
+      if (call && typeof event.arguments === "string") call.arguments = event.arguments;
+      break;
+    }
+
+    case "response.output_item.done": {
+      const item = event.item;
+      if (item?.type === "function_call") {
+        const key = item.id ?? event.output_index;
+        const existing = state.calls.get(key);
+        const call: ResponsesFunctionCall = existing ?? { id: "", name: "", arguments: "" };
+        call.id = item.call_id ?? existing?.id ?? item.id ?? "";
+        call.name = item.name ?? existing?.name ?? "";
+        call.arguments = item.arguments ?? existing?.arguments ?? "";
+        if (!existing) {
+          state.calls.set(key, call);
+          state.order.push(key);
+        }
+      } else if (item?.type === "message" && !state.text) {
+        const { content } = parseResponsesOutput([item]);
+        if (content) state.text = content;
+      }
+      break;
+    }
+
+    case "response.completed":
+      state.completed = event.response ?? null;
+      break;
+
+    case "error":
+      throw new Error(`Responses API error: ${event.message ?? JSON.stringify(event)}`);
+
+    default:
+      break;
+  }
+}
+
+function processResponsesSseLine(line: string, state: ResponsesStreamState): void {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("data:")) return;
+  const data = trimmed.slice(5).trim();
+  if (!data || data === "[DONE]") return;
+  try {
+    applyResponsesEvent(state, JSON.parse(data));
+  } catch (err) {
+    if (err instanceof SyntaxError) return; // partial chunk — ignore
+    throw err;
+  }
+}
+
+/** Build the final assistant message from the accumulated Responses state. */
+export function responsesStateToMessage(state: ResponsesStreamState): AgentMessage {
+  let content = state.text;
+  let toolCalls: ToolCall[] = state.order
+    .map((key) => state.calls.get(key))
+    .filter((c): c is ResponsesFunctionCall => Boolean(c))
+    .map((c) => ({
+      id: c.id,
+      type: "function" as const,
+      function: { name: c.name, arguments: c.arguments },
+    }));
+
+  // `response.completed` carries the authoritative output — prefer it.
+  if (state.completed) {
+    const parsed = parseResponsesOutput(state.completed.output);
+    if (parsed.content || parsed.toolCalls.length > 0) {
+      content = parsed.content;
+      toolCalls = parsed.toolCalls;
+    }
+  }
+
+  const message: AgentMessage = { role: "assistant", content: content || null };
+  if (toolCalls.length > 0) message.tool_calls = toolCalls;
+  return message;
+}
+
+/**
+ * OpenAI Responses API adapter (`POST /v1/responses`).
+ *
+ * Streams by default (SSE events) and falls back to JSON when the server ignores
+ * `stream`. Set `config.stream = false` to force the non-streaming path.
+ */
+export async function responsesAdapter(
+  messages: AgentMessage[],
+  config: AgentConfig
+): Promise<AgentResponse> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...buildAuthHeaders(config),
+  };
+
+  const { instructions, input } = toResponsesInput(messages);
+  const stream = config.stream !== false;
+
+  const body: any = {
+    input,
+    tools: [
+      {
+        type: "function",
+        name: "any",
+        description: "Tool",
+        parameters: { type: "object", properties: {} },
+      },
+    ],
+    tool_choice: "auto",
+  };
+  // Only send `model` when explicitly configured: agent endpoints own their model,
+  // raw model endpoints (Azure OpenAI, OpenAI) require it.
+  if (config.model) body.model = config.model;
+  if (instructions) body.instructions = instructions;
+  if (stream) body.stream = true;
+
+  const resp = await absFetch(
+    config.url,
+    { method: "POST", headers, body: JSON.stringify(body) },
+    config.timeout
+  );
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Agent returned ${resp.status}: ${text.substring(0, 200)}`);
+  }
+
+  const contentType = resp.headers.get("content-type") ?? "";
+  const isEventStream = stream && resp.body && !contentType.includes("application/json");
+
+  if (isEventStream && resp.body) {
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    const state: ResponsesStreamState = { text: "", calls: new Map(), order: [], completed: null };
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) processResponsesSseLine(line, state);
+    }
+    if (buffer) processResponsesSseLine(buffer, state);
+
+    return {
+      messages: [responsesStateToMessage(state)],
+      raw: { streamed: true, response: state.completed },
+    };
+  }
+
+  const data = (await resp.json()) as any;
+  const { content, toolCalls } = parseResponsesOutput(data.output);
+  const result: AgentMessage = { role: "assistant", content: content || null };
+  if (toolCalls.length > 0) result.tool_calls = toolCalls;
+  return { messages: [result], raw: data };
+}
+
 // ── Claude adapter ──
 
 async function claudeAdapter(
@@ -178,6 +510,7 @@ async function claudeAdapter(
     "Content-Type": "application/json",
     "x-api-key": config.token ?? "",
     "anthropic-version": "2023-06-01",
+    ...buildAuthHeaders(config),
   };
 
   const systemMsg = messages.find((m) => m.role === "system");
@@ -225,6 +558,7 @@ async function geminiAdapter(
 ): Promise<AgentResponse> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    ...buildAuthHeaders(config),
   };
 
   // Gemini expects contents array
@@ -265,6 +599,8 @@ async function geminiAdapter(
 
 const agentAdapters: Record<string, AgentAdapterFn> = {
   openai: openaiAdapter,
+  responses: responsesAdapter,
+  response: responsesAdapter, // alias
   claude: claudeAdapter,
   gemini: geminiAdapter,
   custom: openaiAdapter, // Default fallback

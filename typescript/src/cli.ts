@@ -14,6 +14,7 @@ import {
 import { run, AgentConfig, RunResult } from "./runner";
 import { formatTable, formatJson, formatJunit } from "./formatters/table";
 import { mergeConfig } from "./config";
+import { configureBuiltinJudge } from "./evaluators/builtin_judge";
 
 const program = new Command();
 
@@ -84,8 +85,11 @@ program
         `# ABS project configuration
 agent:
   url: http://localhost:8080/chat
-  format: openai
-  auth: none
+  format: openai          # openai | responses | claude | gemini
+  auth: none              # none | api_key | bearer | oauth2
+  # model: gpt-4o         # required by the Responses API
+  # forward_auth: true    # forward the caller's Authorization header upstream
+  # authorization: "Bearer eyJ..."  # or pass the header value explicitly
 
 adapters:
   llm_judge: aievaluator
@@ -152,13 +156,20 @@ program
   .option("--dataset <path>", "Dataset file or directory")
   .option("--var <binding>", "Single variable binding (repeatable)", collectVar, {} as Record<string, string>)
   .option("--filter <kv>", "Filter dataset rows by key:value")
-  .option("--agent-format <format>", "openai, claude, or gemini", "openai")
+  .option("--agent-format <format>", "openai, responses, claude, or gemini", "openai")
   .option("--agent-auth <auth>", "none, api_key, bearer, or oauth2", "none")
   .option("--agent-token <token>", "Token or API key")
+  .option("--agent-model <model>", "Model name for protocols that require it (Responses API)")
+  .option("--agent-forward-auth", "Forward the caller's Authorization header to the agent", false)
+  .option("--agent-authorization <value>", "Raw Authorization header value to forward (e.g. 'Bearer eyJ...')")
   .option("--agent-refresh-url <url>", "OAuth2 token refresh URL")
   .option("--agent-refresh-token <token>", "OAuth2 refresh token")
   .option("--agent-client-id <id>", "OAuth2 client ID")
   .option("--adapter <binding>", "Evaluator adapter binding", collectAdapter, {} as Record<string, string>)
+  .option("--judge-base-url <url>", "Built-in judge: OpenAI-compatible base URL (e.g. Azure/Foundry, Ollama)")
+  .option("--judge-api-key <key>", "Built-in judge: API key (overrides ABS_JUDGE_API_KEY / OPENAI_API_KEY)")
+  .option("--judge-api-key-header <header>", "Built-in judge: header for the API key (default: Authorization; use api-key for Azure)")
+  .option("--judge-model <model>", "Built-in judge: model or Azure deployment name")
   .option("--format <format>", "table, json, or junit", "table")
   .option("--ci", "CI mode (no colors, no prompts)", false)
   .option("--timeout <n>", "Timeout per session run in seconds", "300")
@@ -179,6 +190,9 @@ program
       agent_format: options.agentFormat,
       agent_auth: options.agentAuth,
       agent_token: options.agentToken,
+      agent_model: options.agentModel,
+      agent_forward_auth: options.agentForwardAuth,
+      agent_authorization: options.agentAuthorization,
       dataset: options.dataset,
       adapters: options.adapter,
     });
@@ -200,11 +214,22 @@ program
       }
     }
 
+    // Configure built-in LLM judge (CLI flags override env vars)
+    configureBuiltinJudge({
+      baseUrl: options.judgeBaseUrl,
+      apiKey: options.judgeApiKey,
+      apiKeyHeader: options.judgeApiKeyHeader,
+      model: options.judgeModel,
+    });
+
     const agentConfig: AgentConfig = {
       url: cfg.agent_url,
       format: cfg.agent_format,
       auth: cfg.agent_auth,
       token: cfg.agent_token,
+      model: cfg.agent_model,
+      forwardAuth: cfg.agent_forward_auth,
+      authorization: cfg.agent_authorization,
       refreshUrl: options.agentRefreshUrl,
       refreshToken: options.agentRefreshToken,
       clientId: options.agentClientId,
