@@ -20,6 +20,32 @@ jobs:
 
       - run: npm ci
       - run: npm run build
-      - run: npm publish --access public
+
+      - name: Publish to npm
+        run: |
+          npm publish --access public 2>&1 | tee /tmp/npm-publish.log
+          {
+            echo '### npm publish output'
+            echo '```'
+            cat /tmp/npm-publish.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # npm can accept a publish while degraded and never persist the version.
+      # Fail loudly instead of reporting a green run with nothing published.
+      - name: Verify the version is live on npm
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          for attempt in $(seq 1 12); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "https://registry.npmjs.org/abslang/$PKG_VERSION?ts=$(date +%s%N)")
+            if [ "$code" = "200" ]; then
+              echo "✅ abslang@$PKG_VERSION is live on npm"
+              exit 0
+            fi
+            echo "⏳ abslang@$PKG_VERSION not live yet (attempt $attempt/12, HTTP $code)"
+            sleep 15
+          done
+          echo "❌ abslang@$PKG_VERSION was published but is NOT visible on npm after 3 minutes"
+          exit 1
