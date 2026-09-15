@@ -21,7 +21,7 @@ const program = new Command();
 program
   .name("abs")
   .description("ABS — Agent Behavior Specification CLI")
-  .version("0.2.2");
+  .version("0.3.0");
 
 // ── init ──
 
