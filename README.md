@@ -418,6 +418,32 @@ abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
 
 Your session file never changes. Only the `--adapter` flag.
 
+### Auditing a run
+
+Every run produces two artifacts with the same `run_id` — in both the Python and npm CLIs:
+
+- a **report** to stdout (`--format table|json|junit`, save with `--output report.json`)
+- a **structured event log** to stderr (JSONL with `--log-file events.jsonl`)
+
+`--format json` is the audit artifact: the verdict, the trace of every step, what the agent actually did (`observed`, including tool-call arguments), and each evaluation result with a stable failure `code`, the `threshold` it was compared against, the `adapter` used, and `duration_ms`:
+
+```json
+{
+  "type": "Groundedness",
+  "passed": false,
+  "score": 0.41,
+  "reason": "The response claims the order exists but the context does not support it.",
+  "blocking": false,
+  "inconclusive": false,
+  "code": "evaluator.threshold_not_met",
+  "threshold": 0.8,
+  "adapter": "azure",
+  "duration_ms": 412
+}
+```
+
+Because `code` is stable, CI can classify a failure without reading prose, and `details` carries the raw adapter response when you need it. `abslang report report.json --detail <row>` renders any row back as a table. Full field catalog and the failure-code list: [CLI.md → JSON output](./CLI.md#json-output---format-json).
+
 👉 [Explore the full docs and tutorials →](https://fvinciarelli.github.io/abslang/docs/)
 
 ## Documents

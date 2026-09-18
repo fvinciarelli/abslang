@@ -497,48 +497,116 @@ Run `abslang report --detail 3` to see the full trace for row 3.
 
 ### JSON output (`--format json`)
 
+The JSON report is the **audit artifact**: one file with the verdict, the full trace,
+and every evaluation result. The shape is identical in the Python and npm CLIs.
+
+```bash
+abslang run session.abs.yaml --agent $URL --dataset cases.jsonl --format json --output report.json
+```
+
 ```json
 {
-  "session": "order-status",
-  "agent": "http://localhost:8080/chat",
+  "run_id": "r_9f2c1b7a3d4e",
   "passed": false,
   "rows_total": 200,
   "rows_passed": 197,
-  "rows_failed": 3,
-  "rows": [
+  "results": [
     {
-      "row": 1,
-      "variables": { "orderId": "12345" },
-      "passed": true,
-      "steps_matched": 5,
+      "session": "order-status",
+      "row_index": 2,
+      "row_vars": { "orderId": "99999" },
+      "passed": false,
       "steps_total": 5,
-      "evaluations_passed": 3,
+      "steps_matched": 4,
       "evaluations_total": 3,
+      "evaluations_passed": 2,
       "trace": [
-        { "step": 1, "actor": "user", "action": "says", "sent": true },
-        { "step": 2, "actor": "assistant", "action": "asks", "matched": true },
-        { "step": 3, "actor": "user", "action": "says", "sent": true },
         {
-          "step": 4,
-          "actor": "assistant", "action": "calls",
+          "step": 1,
+          "behavior": { "actor": "user", "action": "says" },
           "matched": true,
-          "observed": { "target": "Order MCP", "with": { "orderId": "12345" } }
+          "sent": true,
+          "evaluations": []
         },
         {
-          "step": 5,
-          "actor": "assistant", "action": "informs",
+          "step": 2,
+          "behavior": { "id": "lookup", "actor": "assistant", "action": "calls", "target": "Order MCP" },
           "matched": true,
-          "observed_content": "Your order is on the way",
+          "observed": {
+            "actor": "assistant",
+            "action": "calls",
+            "target": "Order MCP",
+            "with": { "orderId": "99999" },
+            "tool_call_id": "call_1"
+          },
+          "evaluations": []
+        },
+        {
+          "step": 3,
+          "behavior": { "id": "answer", "actor": "assistant", "action": "informs" },
+          "matched": true,
+          "observed": { "actor": "assistant", "action": "informs", "content": "Order not found" },
           "evaluations": [
-            { "type": "contains", "value": "on the way", "passed": true, "score": 1.0 }
+            {
+              "type": "Groundedness",
+              "passed": false,
+              "score": 0.41,
+              "reason": "The response claims the order exists but the context does not support it.",
+              "blocking": false,
+              "inconclusive": false,
+              "code": "evaluator.threshold_not_met",
+              "threshold": 0.8,
+              "adapter": "azure",
+              "duration_ms": 412
+            }
           ]
         }
+      ],
+      "chain_evaluations": [
+        { "type": "sequence", "passed": true, "score": 1, "reason": "All 3 selectors matched in order", "blocking": false, "inconclusive": false }
       ]
     }
-    // ... 199 more rows
   ]
 }
 ```
+
+Field reference:
+
+| Level | Field | Meaning |
+|---|---|---|
+| top | `run_id` | matches the `run_id` in the JSONL event log |
+| top | `passed` / `rows_total` / `rows_passed` | overall verdict and dataset coverage |
+| result | `session`, `row_index`, `row_vars` | which session and which dataset row (and the variables it bound) |
+| result | `steps_total` / `steps_matched` | behaviors and how many matched (`sent` counts for user/tool steps) |
+| result | `evaluations_total` / `evaluations_passed` | step + chain evaluations combined |
+| trace | `step` / `behavior` | the behavior under test (`optional` appears when it is optional) |
+| trace | `matched` / `sent` / `skipped` | `matched` = agent step matched; `sent` = user/tool step sent; `skipped` = optional behavior correctly not triggered |
+| trace | `observed` | what the agent actually did, including `with` (tool-call arguments) and `tool_call_id` |
+| evaluation | `type` / `passed` / `score` / `reason` | always present; `reason` is the human-readable explanation |
+| evaluation | `blocking` / `inconclusive` | `inconclusive: true` = a blocking failure earlier made this one unevaluable |
+| evaluation | `code` | machine-readable failure class (table below) |
+| evaluation | `details` | raw provider payload or metric breakdown (adapters) |
+| evaluation | `threshold` / `adapter` / `duration_ms` | set when applicable |
+
+`code` is stable across runs, so CI can classify a failure without parsing `reason`:
+
+| Code | Meaning |
+|---|---|
+| `evaluator.threshold_not_met` | score below the rule's `threshold` |
+| `evaluator.missing_input` | a reference (`query`/`context`/`response`) resolved to nothing |
+| `evaluator.invalid_option` | malformed rule (bad regex, missing value, ...) |
+| `evaluator.unknown_type` | evaluator type not implemented |
+| `adapter.not_configured` | LLM evaluator without an adapter or judge |
+| `adapter.unsupported_type` | the adapter does not implement that evaluator |
+| `adapter.unknown_evaluator` | unknown evaluator name for the adapter |
+| `adapter.error` | provider call failed — payload in `details` |
+
+Only fields that are set are emitted (no null padding). The JSONL event log
+complements the report as the timeline — same `run_id`, same snake_case keys
+(see [Structured logs and progress](#structured-logs-and-progress)).
+
+`abslang report report.json --detail <row>` renders the same trace as a table, and
+`abslang report report.json --format junit` turns evaluations into CI test cases.
 
 ---
 

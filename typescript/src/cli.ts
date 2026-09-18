@@ -17,6 +17,7 @@ import { formatTable, formatJson, formatJunit } from "./formatters/table";
 import { mergeConfig } from "./config";
 import { configureBuiltinJudge } from "./evaluators/builtin_judge";
 import { configureLogging, closeLogging, newRunId, RunLogger } from "./log";
+import { serializeEval, serializeObserved } from "./report";
 
 const program = new Command();
 
@@ -397,10 +398,10 @@ program
               matched: s.matched,
               sent: s.sent,
               skipped: s.skipped,
-              observed: s.observed,
-              evaluations: s.evaluations,
+              observed: serializeObserved(s.observed),
+              evaluations: s.evaluations.map(serializeEval),
             })),
-            chain_evaluations: r.chainEvaluations,
+            chain_evaluations: r.chainEvaluations.map(serializeEval),
           })),
         },
         null,

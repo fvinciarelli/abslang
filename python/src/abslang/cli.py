@@ -24,6 +24,7 @@ from .evaluators.builtin_judge import configure_builtin_judge
 from .formatters.table import format_table, format_json_output, format_junit
 from .config import merge_config
 from .log import configure_logging, close_logging, new_run_id, RunLogger
+from .report import eval_to_dict, observed_to_dict
 
 SMOKE_SESSION = """session: Order status
 description: User asks about an order. Happy path.
@@ -491,21 +492,6 @@ def run_cmd(
     overall_passed = all(r["result"].passed for r in all_results)
 
     # Format output
-    def _eval_dict(e) -> dict[str, Any]:
-        data: dict[str, Any] = {
-            "type": e.type,
-            "passed": e.passed,
-            "score": e.score,
-            "reason": e.reason,
-            "blocking": e.blocking,
-            "inconclusive": e.inconclusive,
-        }
-        for key in ("code", "details", "threshold", "adapter", "duration_ms"):
-            value = getattr(e, key, None)
-            if value is not None:
-                data[key] = value
-        return data
-
     if output_format == "json":
         output = json.dumps({
             "run_id": run_logger.run_id,
@@ -535,18 +521,12 @@ def run_cmd(
                             "matched": s.matched,
                             "sent": s.sent,
                             "skipped": s.skipped,
-                            "observed": {
-                                "actor": s.observed.actor if s.observed else None,
-                                "action": s.observed.action if s.observed else None,
-                                "target": s.observed.target if s.observed else None,
-                                "content": s.observed.content if s.observed else None,
-                                "tool_call_id": getattr(s.observed, "tool_call_id", None) if s.observed else None,
-                            } if s.observed else None,
-                            "evaluations": [_eval_dict(e) for e in s.evaluations],
+                            "observed": observed_to_dict(s.observed),
+                            "evaluations": [eval_to_dict(e) for e in s.evaluations],
                         }
                         for s in r["result"].steps
                     ],
-                    "chain_evaluations": [_eval_dict(e) for e in r["result"].chain_evaluations],
+                    "chain_evaluations": [eval_to_dict(e) for e in r["result"].chain_evaluations],
                 }
                 for r in all_results
             ],

@@ -11,7 +11,7 @@ import * as assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { ABS_VERSION, CORE, EXAMPLES, MERMAID_EXAMPLES, MERMAID_GUIDE, buildSystemPrompt, looksLikeMermaid, selectExamples } from "../assistant-knowledge";
+import { ABS_VERSION, CORE, EXAMPLES, MERMAID_EXAMPLES, MERMAID_GUIDE, REPORT_GUIDE, TOOLING, buildSystemPrompt, looksLikeAbsOutput, looksLikeMermaid, selectExamples } from "../assistant-knowledge";
 import { parseMulti } from "../parser";
 
 const schema = JSON.parse(readFileSync(resolve(__dirname, "../../../schema/abs.schema.json"), "utf-8"));
@@ -99,5 +99,25 @@ describe("assistant prompt", () => {
       assert.ok(m.diagram.length > 0 && m.yaml.length > 0, `${m.name} fixture is empty`);
       assert.doesNotThrow(() => parseMulti(m.yaml), `mapping ${m.name}.abs.yaml does not parse`);
     }
+  });
+
+  it("always includes the abslang tooling reference", () => {
+    const prompt = buildSystemPrompt("quiero un test de refunds");
+    assert.ok(prompt.includes(TOOLING), "tooling reference missing");
+    assert.ok(prompt.includes("abslang run"), "tooling must mention the run command");
+    assert.ok(!prompt.includes(REPORT_GUIDE), "the report guide should be conditional");
+  });
+
+  it("detects pasted run outputs and injects the report guide", () => {
+    const report = '{"run_id":"r_1","rows_total":2,"results":[]}';
+    const eventLog = '{"v":1,"event":"evaluation.result","passed":false,"code":"adapter.error"}';
+    assert.ok(looksLikeAbsOutput(report));
+    assert.ok(looksLikeAbsOutput(eventLog));
+    assert.ok(buildSystemPrompt(report).includes(REPORT_GUIDE));
+    assert.ok(buildSystemPrompt(eventLog).includes(REPORT_GUIDE));
+
+    const plain = "hola, quiero un test del flujo de reembolsos";
+    assert.equal(looksLikeAbsOutput(plain), false);
+    assert.ok(!buildSystemPrompt(plain).includes(REPORT_GUIDE));
   });
 });
