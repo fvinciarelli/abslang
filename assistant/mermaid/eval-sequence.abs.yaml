@@ -1,0 +1,47 @@
+session: Order lookup with optional ID request
+abs_version: "0.2"
+dataset:
+  id: cases
+  path: cases.jsonl
+behaviors:
+  - id: user_asks
+    actor: user
+    action: says
+    content: "{{cases.userQuery}}"
+
+  - id: ask_id
+    actor: assistant
+    action: asks
+    optional: true
+    matches_when:
+      type: llm_judge
+      criteria: "The agent is requesting the order ID"
+    evaluations:
+      - type: llm_judge
+        criteria: "Politely asks for the ID and explains why it is needed"
+
+  - id: user_gives_id
+    actor: user
+    action: says
+    content: "{{cases.orderId}}"
+    requires: ask_id
+
+  - id: answer
+    actor: assistant
+    action: informs
+    evaluations:
+      - type: Groundedness
+        query: user_asks.says
+        context: "{{cases.kbSnippet}}"
+        response: self
+        threshold: 0.8
+
+evaluations:
+  - type: expected
+    behavior: ask_id
+    when: "{{cases.hasOrderId}} == false"
+    reason: "The agent should ask for the ID when the user does not provide it"
+
+  - type: never
+    match: { actor: assistant, action: asks }
+    when: "{{cases.hasOrderId}} == true"

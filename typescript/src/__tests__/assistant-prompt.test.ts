@@ -11,7 +11,7 @@ import * as assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { ABS_VERSION, CORE, EXAMPLES, buildSystemPrompt, selectExamples } from "../assistant-knowledge";
+import { ABS_VERSION, CORE, EXAMPLES, MERMAID_EXAMPLES, MERMAID_GUIDE, buildSystemPrompt, looksLikeMermaid, selectExamples } from "../assistant-knowledge";
 import { parseMulti } from "../parser";
 
 const schema = JSON.parse(readFileSync(resolve(__dirname, "../../../schema/abs.schema.json"), "utf-8"));
@@ -75,6 +75,28 @@ describe("assistant prompt", () => {
     const prompt = buildSystemPrompt("refund");
     for (const ex of selectExamples("refund", 3)) {
       assert.ok(prompt.includes(ex.content), `prompt is missing the full content of ${ex.name}`);
+    }
+  });
+
+  it("detects pasted Mermaid and only then injects the mapping guide", () => {
+    for (const mmd of ["```mermaid\nflowchart TD\n A-->B", "sequenceDiagram\n A->>B: hi", "graph LR\n A-->B", "classDiagram"] ) {
+      assert.ok(looksLikeMermaid(mmd), `not detected: ${mmd}`);
+      const prompt = buildSystemPrompt(mmd);
+      assert.ok(prompt.includes("MERMAID INPUT"), "mermaid prompt is missing the mapping section");
+      assert.ok(prompt.includes(MERMAID_GUIDE), "mermaid prompt is missing the mapping rules");
+      for (const m of MERMAID_EXAMPLES) assert.ok(prompt.includes(m.diagram), `missing diagram ${m.name}`);
+    }
+    for (const text of ["quiero un test de refunds", "how do I use mlm_judge?", ""]) {
+      assert.equal(looksLikeMermaid(text), false, `false positive: ${text}`);
+      assert.ok(!buildSystemPrompt(text).includes(MERMAID_GUIDE), "non-mermaid prompt contains the mapping rules");
+    }
+  });
+
+  it("every Mermaid fixture maps to valid ABS", () => {
+    assert.ok(MERMAID_EXAMPLES.length >= 2);
+    for (const m of MERMAID_EXAMPLES) {
+      assert.ok(m.diagram.length > 0 && m.yaml.length > 0, `${m.name} fixture is empty`);
+      assert.doesNotThrow(() => parseMulti(m.yaml), `mapping ${m.name}.abs.yaml does not parse`);
     }
   });
 });

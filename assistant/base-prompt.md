@@ -66,3 +66,12 @@ Always show how to run it (llm_judge/quality dimensions need an adapter):
 ## Output format
 
 When the user is ready, output the YAML inside a code block tagged ` ```yaml `, then explain what you built in a few bullet points.
+
+## Mermaid diagrams — input and output
+
+- If the user pastes Mermaid code or a diagram, convert it directly to ABS. Do not ask flow questions you can answer from the diagram. The MERMAID INPUT mapping rules are included with the prompt when a diagram is detected.
+- After every session YAML, always return a Mermaid `sequenceDiagram` of that session so the user can refine it and send it back:
+  - participants: the actors involved (user, assistant, tool) with short aliases;
+  - one arrow per behavior, in order (user → assistant inputs, assistant → user replies, assistant → tool calls, tool → assistant responses);
+  - `Note over` for evaluations (type + what it checks), `opt` blocks for optional behaviors;
+  - if the user sends a revised diagram, treat it as the source of truth and regenerate the YAML. Never include steps that are not in the YAML.

@@ -969,7 +969,7 @@ program
 
     const { model, baseUrl } = getProviderConfig(provider as any);
 
-    const { chat, newConversation, extractYaml } = await import("./assistant");
+    const { chat, newConversation, extractYaml, extractMermaid } = await import("./assistant");
     const messages = newConversation();
     const readline = await import("readline");
     const rl = readline.createInterface({
@@ -980,10 +980,11 @@ program
     console.log(chalk.bold("\n🤖 ABS Assistant — describe the agent behavior you want to test\n"));
     console.log(chalk.dim("  I'll ask you guided questions to understand your flow and build the best possible test."));
     console.log(chalk.dim("  Some questions may feel extra — they're there to make sure we don't miss edge cases.\n"));
-    console.log(chalk.dim("  Type /save <filename> to save (e.g. /save refunds → refunds.abs.yaml), /quit to exit.\n"));
+    console.log(chalk.dim("  Type /mermaid to paste a Mermaid diagram, /save <filename> to save, /quit to exit.\n"));
     console.log(chalk.dim("  ⚠️  Not all agents expose intermediate steps. The assistant will ask about this first.\n"));
 
     let lastYaml: string | null = null;
+    let mermaidLines: string[] | null = null;
 
     const spinner = (running: boolean) => {
       if (!running) return;
@@ -998,13 +999,71 @@ program
       };
     };
 
+    const sendMessage = async (content: string) => {
+      messages.push({ role: "user", content });
+      try {
+        const stop = spinner(true);
+        const response = await chat(messages, { apiKey, model, baseUrl });
+        stop?.();
+        console.log(chalk.blue("Assistant: "));
+        console.log(renderMd(response));
+        console.log();
+
+        messages.push({ role: "assistant", content: response });
+
+        const yaml = extractYaml(response);
+        if (yaml) {
+          // Validate extracted YAML
+          try {
+            const { parseYaml, expandFragments } = await import("./parser");
+            const docs = parseYaml(yaml);
+            expandFragments(docs[0]);
+            lastYaml = yaml;
+            console.log(chalk.dim("  ✅ Valid YAML extracted. Use /save <name> (e.g. /save refunds) or /save path/name\n"));
+          } catch (err: any) {
+            lastYaml = yaml; // still save it so user can /force
+            console.log(chalk.yellow(`  ⚠️  YAML extracted but has issues: ${err.message}`));
+            console.log(chalk.dim("  Use /save <path> to try anyway, or keep chatting to fix.\n"));
+          }
+        }
+
+        const mermaid = extractMermaid(response);
+        if (mermaid) {
+          console.log(chalk.dim("  📊 Mermaid diagram included — edit it and paste it back with /mermaid to refine.\n"));
+        }
+      } catch (err: any) {
+        console.error(chalk.red(`\nError: ${err.message}\n`));
+      }
+    };
+
     const ask = () => {
-      rl.question(chalk.green("You: "), async (input: string) => {
+      rl.question(chalk.green(mermaidLines ? "mermaid> " : "You: "), async (input: string) => {
+        // Collecting a pasted diagram: keep raw lines (indentation matters) until an empty line.
+        if (mermaidLines) {
+          if (input.trim() === "") {
+            const diagram = mermaidLines.join("\n");
+            mermaidLines = null;
+            console.log(chalk.dim(`  → diagram captured (${diagram.split("\n").length} lines)\n`));
+            await sendMessage("```mermaid\n" + diagram + "\n```");
+          } else {
+            mermaidLines.push(input);
+          }
+          ask();
+          return;
+        }
+
         const trimmed = input.trim();
 
         if (trimmed === "/quit" || trimmed === "/q") {
           console.log(chalk.dim("\nBye!\n"));
           rl.close();
+          return;
+        }
+
+        if (trimmed === "/mermaid" || trimmed === "/mmd") {
+          mermaidLines = [];
+          console.log(chalk.dim("  Paste the Mermaid diagram. Finish with an empty line.\n"));
+          ask();
           return;
         }
 
@@ -1063,37 +1122,12 @@ program
           return;
         }
 
-        messages.push({ role: "user", content: trimmed });
-
-        try {
-          const stop = spinner(true);
-          const response = await chat(messages, { apiKey, model, baseUrl });
-          stop?.();
-          console.log(chalk.blue("Assistant: "));
-          console.log(renderMd(response));
-          console.log();
-
-          messages.push({ role: "assistant", content: response });
-
-          const yaml = extractYaml(response);
-          if (yaml) {
-            // Validate extracted YAML
-            try {
-              const { parseYaml, expandFragments } = await import("./parser");
-              const docs = parseYaml(yaml);
-              expandFragments(docs[0]);
-              lastYaml = yaml;
-              console.log(chalk.dim("  ✅ Valid YAML extracted. Use /save <name> (e.g. /save refunds) or /save path/name\n"));
-            } catch (err: any) {
-              lastYaml = yaml; // still save it so user can /force
-              console.log(chalk.yellow(`  ⚠️  YAML extracted but has issues: ${err.message}`));
-              console.log(chalk.dim("  Use /save <path> to try anyway, or keep chatting to fix.\n"));
-            }
-          }
-        } catch (err: any) {
-          console.error(chalk.red(`\nError: ${err.message}\n`));
+        if (!trimmed) {
+          ask();
+          return;
         }
 
+        await sendMessage(trimmed);
         ask();
       });
     };

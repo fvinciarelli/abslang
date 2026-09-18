@@ -1,0 +1,16 @@
+sequenceDiagram
+    participant R as Runner
+    participant A as Your Agent
+    participant E as Evaluator
+
+    R->>A: POST /chat "I want to check my order"
+    A-->>R: "What's your order ID?"
+    Note over R: optional behavior?<br/>matches_when → yes
+    R->>A: POST /chat "5678"
+    A-->>R: "Your order is being prepared"
+    Note over R: answer matched
+    R->>E: { type: "expected", behavior: "ask_id", ... }
+    E-->>R: { passed: true }
+    R->>E: { type: "Groundedness", query: ..., context: ..., response: ... }
+    E-->>R: { passed: true, score: 0.92 }
+```

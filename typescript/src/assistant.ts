@@ -75,3 +75,10 @@ export function extractYaml(text: string): string | null {
   const match = text.match(/```yaml\n([\s\S]*?)```/);
   return match ? match[1].trim() : null;
 }
+
+// ── Convenience: extract Mermaid from assistant response ──
+
+export function extractMermaid(text: string): string | null {
+  const match = text.match(/```mermaid\n([\s\S]*?)```/);
+  return match ? match[1].trim() : null;
+}

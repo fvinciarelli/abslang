@@ -1,0 +1,14 @@
+flowchart TD
+    U1["User: I received a damaged item, I want my money back. Order #8291."]
+    A1["Assistant: I understand your order #8291 arrived damaged. I'll help you get a refund."]
+    U2["User: Yes please, how long?"]
+    A2["Assistant: Refund of €47.50 approved. Reference: R-5512. 3-5 days."]
+    U3["User: Great, thanks."]
+    A3["Assistant: You're welcome! Is there anything else?"]
+
+    U1 --> A1 --> U2 --> A2 --> U3 --> A3
+
+    A1 -.-|evaluate| E1["llm_judge: classifies intent, references #8291, acknowledges damage"]
+    A2 -.-|evaluate| E2["contains: R-5512 | llm_judge: states amount, timeline, tone | Relevance"]
+    A3 -.-|evaluate| E3["llm_judge: offers further help, doesn't reopen refund"]
+```

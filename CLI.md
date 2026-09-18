@@ -146,12 +146,19 @@ Assistant: I'll draft a refund flow with tool calls…
 
 ### How it works
 
-The assistant knows the full ABS v0.1 spec — every action, every evaluator type, every pattern. It asks you what the agent should do, fills in the YAML, and validates it before saving. You can ask it to refine anything: *"add a contains check for the refund ID"*, *"switch to Groundedness for the RAG part"*, *"make this dataset-driven"*.
+The assistant knows the current ABS spec — it is generated from the normative JSON Schema, the vocabulary, and the project examples every time the schema changes, so it cannot drift. It asks you what the agent should do, fills in the YAML, and validates it before saving. You can ask it to refine anything: *"add a contains check for the refund ID"*, *"switch to Groundedness for the RAG part"*, *"make this dataset-driven"*. You can also ask it questions about the spec, and it answers with a minimal example.
+
+### Mermaid diagrams
+
+Paste a Mermaid diagram and the assistant converts it to ABS: flowchart nodes become behaviors, decision diamonds become `optional` + `matches_when`, sequence-diagram messages become behaviors, and `Note`/`evaluate` annotations become evaluations.
+
+After every session YAML, the assistant also returns a Mermaid `sequenceDiagram` of what it built, so you can edit the diagram and paste it back to refine the spec.
 
 ### Commands inside chat
 
 | Command | What it does |
 |---------|-------------|
+| `/mermaid` | Collects a pasted Mermaid diagram (finish with an empty line) and converts it |
 | `/save <path>` | Validates the YAML and writes it to disk |
 | `/force <path>` | Saves without validation (if you want to fix it manually) |
 | `/quit` or `/q` | Ends the session |
