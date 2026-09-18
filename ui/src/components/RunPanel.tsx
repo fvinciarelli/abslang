@@ -104,7 +104,7 @@ export function RunPanel({ session }: Props) {
         onClick={() => setShowConfig(!showConfig)}
       >
         <PlayArrowIcon fontSize="small" color="success" />
-        <Typography variant="body2" fontWeight={600} sx={{ flex: 1 }}>
+        <Typography variant="body2" sx={{ fontWeight: 600, flex: 1 }}>
           Run
         </Typography>
         <SettingsIcon fontSize="small" sx={{ opacity: 0.4 }} />
@@ -188,7 +188,7 @@ export function RunPanel({ session }: Props) {
               ))}
 
               {result.chainEvaluations.length > 0 && (
-                <Typography variant="body2" fontWeight={600} sx={{ mt: 1, mb: 0.5, fontSize: 11 }}>
+                <Typography variant="body2" sx={{ fontWeight: 600, mt: 1, mb: 0.5, fontSize: 11 }}>
                   Chain evaluations
                 </Typography>
               )}

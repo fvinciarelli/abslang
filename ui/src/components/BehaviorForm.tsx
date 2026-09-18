@@ -381,7 +381,7 @@ function EvalFields({ ev, onChange }: { ev: Evaluation; onChange: (u: Partial<Ev
             size="small"
             label="Threshold"
             type="number"
-            inputProps={{ min: 0, max: 1, step: 0.05 }}
+            slotProps={{ htmlInput: { min: 0, max: 1, step: 0.05 } }}
             value={ev.threshold ?? ''}
             onChange={(e) => onChange({ threshold: e.target.value === '' ? undefined : Number(e.target.value) })}
             sx={{ width: 100 }}

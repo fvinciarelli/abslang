@@ -26,7 +26,7 @@ function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-export function AssistantPanel({ onYamlGenerated, isVSCode }: Props) {
+export function AssistantPanel({ onYamlGenerated }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -113,7 +113,7 @@ export function AssistantPanel({ onYamlGenerated, isVSCode }: Props) {
   if (showKeyInput) {
     return (
       <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-        <Typography variant="body2" fontWeight={600}>
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>
           DeepSeek API Key
         </Typography>
         <Typography variant="caption" color="text.secondary">
@@ -153,7 +153,7 @@ export function AssistantPanel({ onYamlGenerated, isVSCode }: Props) {
         }}
       >
         <AutoAwesomeIcon fontSize="small" color="primary" />
-        <Typography variant="body2" fontWeight={600}>
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>
           ABS Assistant
         </Typography>
         <Box sx={{ flex: 1 }} />
