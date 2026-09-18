@@ -1003,7 +1003,7 @@ program
       messages.push({ role: "user", content });
       try {
         const stop = spinner(true);
-        const response = await chat(messages, { apiKey, model, baseUrl });
+        const response = await chat(messages, { apiKey, model, baseUrl, provider });
         stop?.();
         console.log(chalk.blue("Assistant: "));
         console.log(renderMd(response));

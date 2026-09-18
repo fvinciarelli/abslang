@@ -51,6 +51,7 @@ describe("assistant prompt", () => {
   it("the prompt includes rules, reference, catalog, and full examples", () => {
     const prompt = buildSystemPrompt("I want to test a refund flow");
     assert.ok(prompt.includes("BLACK-BOX"), "missing black-box rules");
+    assert.ok(prompt.includes("Above every behavior"), "missing the per-behavior comment rule");
     assert.ok(prompt.includes(`ABS v${ABS_VERSION} quick reference`), "missing generated core");
     assert.ok(prompt.includes("EXAMPLE CATALOG"), "missing example catalog");
     assert.ok(prompt.includes("```yaml"), "missing a full example");

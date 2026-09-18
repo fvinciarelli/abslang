@@ -86,6 +86,44 @@ describe("assistant chat", () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it("uses the Anthropic Messages API when provider is anthropic", async () => {
+    const captured: any[] = [];
+    globalThis.fetch = (async (url: any, init: any) => {
+      captured.push({ url: String(url), init, body: JSON.parse(init.body) });
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: "hola " }, { type: "text", text: "mundo" }] }) };
+    }) as any;
+
+    try {
+      const out = await chat([{ role: "user", content: "quiero un test" }], {
+        apiKey: "sk-ant",
+        provider: "anthropic",
+        model: "claude-test",
+        baseUrl: "https://api.anthropic.test/v1",
+      });
+      assert.equal(out, "hola mundo");
+
+      const { url, init, body } = captured[0];
+      assert.equal(url, "https://api.anthropic.test/v1/messages");
+      assert.equal(init.headers["x-api-key"], "sk-ant");
+      assert.equal(init.headers["anthropic-version"], "2023-06-01");
+      assert.equal(body.model, "claude-test");
+      assert.equal(body.max_tokens, 4096);
+      assert.ok(typeof body.system === "string" && body.system.includes(`ABS v${ABS_VERSION} quick reference`));
+      assert.deepEqual(body.messages, [{ role: "user", content: "quiero un test" }]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("surfaces an Anthropic error with its own label", async () => {
+    globalThis.fetch = stubFetch({ ok: false, status: 400, text: "bad request" });
+    try {
+      await assert.rejects(() => chat([{ role: "user", content: "hi" }], { apiKey: "k", provider: "anthropic" }), /Anthropic returned 400/);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 describe("response extraction", () => {

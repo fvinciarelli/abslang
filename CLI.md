@@ -142,11 +142,12 @@ Assistant: I'll draft a refund flow with tool calls…
 | Nothing — it asks you guided questions | Step-level evaluations (`contains`, `llm_judge`) |
 | Nothing — it infers from the flow | Chain evaluations (`sequence`, `never`, `variable_consistency`) |
 | Nothing — it's dataset-first by default | `dataset:` block + `{{cases.column}}` placeholders |
+| Nothing — every behavior gets one | A short `#` comment above each behavior explaining it, in your language |
 | Nothing — it suggests edge cases | 2-3 alternate scenarios to test next |
 
 ### How it works
 
-The assistant knows the current ABS spec — it is generated from the normative JSON Schema, the vocabulary, and the project examples every time the schema changes, so it cannot drift. It asks you what the agent should do, fills in the YAML, and validates it before saving. You can ask it to refine anything: *"add a contains check for the refund ID"*, *"switch to Groundedness for the RAG part"*, *"make this dataset-driven"*. You can also ask it questions about the spec, and it answers with a minimal example.
+The assistant knows the current ABS spec — it is generated from the normative JSON Schema, the vocabulary, and the project examples every time the schema changes, so it cannot drift. It asks you what the agent should do, fills in the YAML, and validates it before saving. Every behavior comes with a short comment explaining it, so the file reads like documentation. You can ask it to refine anything: *"add a contains check for the refund ID"*, *"switch to Groundedness for the RAG part"*, *"make this dataset-driven"*. You can also ask it questions about the spec, and it answers with a minimal example.
 
 ### Mermaid diagrams
 

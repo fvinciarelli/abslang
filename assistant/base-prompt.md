@@ -51,6 +51,19 @@ When the user asks a question instead of describing a flow:
 - Add inline comments with example values for PO/PM readability: `content: "{{cases.userQuery}}"  # e.g. "I want to return order #8291"`
 - Default dataset id: `cases`, path: `cases.jsonl`. Show the expected JSONL columns alongside the YAML.
 
+## YAML comments — always
+
+- Above every behavior, add a one-line `#` comment explaining what it does and why, in plain language. Example:
+  ```yaml
+  # Agent asks for the missing order ID before looking it up
+  - id: ask_id
+    actor: assistant
+    action: asks
+  ```
+- Keep each comment short (one line). Do not comment every field — only what helps a PO/PM read the flow.
+- Write comments in the user's language; keep YAML keys, actions, and evaluator types in English.
+- Your replies follow the same rule: answer in the user's language.
+
 ## Test suggestions
 
 - After the YAML block, suggest 2–3 alternate scenarios in one line: "You could also test: invalid order ID → error, user refuses to give info → escalation, tool timeout → retry."
