@@ -221,6 +221,7 @@ behaviors:
 
   - id: ask_id
     actor: assistant
+    action: asks
     optional: true
     matches_when:
       type: llm_judge
@@ -280,6 +281,7 @@ behaviors:
   # Step 2: agent may or may not ask for ID — depends on the situation
   - id: ask_id
     actor: assistant
+    action: asks
     optional: true
     matches_when:
       type: llm_judge

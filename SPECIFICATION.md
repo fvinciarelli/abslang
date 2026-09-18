@@ -10,7 +10,7 @@ An **Agent Behavior Specification** document is valid YAML. (JSON is also valid,
 
 ## 2. Top-level structure
 
-```yaml
+```text
 session: <string>            # REQUIRED — human-readable session name
 description: <string>        # OPTIONAL
 abs_version: "0.2"           # REQUIRED in v0.2
@@ -47,7 +47,7 @@ A document with no `evaluations` anywhere (step-level or session-level) is purel
 
 **Note on the informal shorthand seen in early drafts.** Early discussion of **Agent Behavior Specification** used a compact notation where a bare list of Behaviors follows `session:` directly, with no `behaviors:` key:
 
-```yaml
+```text
 session: Order status
 - actor: user
   action: says

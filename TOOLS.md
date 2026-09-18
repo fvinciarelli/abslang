@@ -43,12 +43,15 @@ The observed tool arguments must contain every key in `with`, but may contain ad
 # ABS says:
 with:
   orderId: "12345"
-
-# Agent actually called:
-{ "orderId": "12345", "currency": "USD", "priority": "high" }
-
-# → MATCH. orderId matches. Extra keys are fine.
 ```
+
+The agent actually called:
+
+```json
+{ "orderId": "12345", "currency": "USD", "priority": "high" }
+```
+
+→ **MATCH.** `orderId` matches. Extra keys are fine.
 
 This is the default because it makes sessions resilient: the agent can pass contextual parameters (locale, tracing IDs, internal flags) without breaking the spec.
 
@@ -60,12 +63,15 @@ The observed tool arguments must match exactly — no extra keys allowed:
 # ABS says:
 with_only:
   orderId: "12345"
-
-# Agent actually called:
-{ "orderId": "12345", "currency": "USD" }
-
-# → NO MATCH. currency is present but not declared.
 ```
+
+The agent actually called:
+
+```json
+{ "orderId": "12345", "currency": "USD" }
+```
+
+→ **NO MATCH.** `currency` is present but not declared.
 
 Use `with_only` when the exact set of parameters matters — security-critical calls, compliance boundaries, or when an extra parameter would change behavior.
 

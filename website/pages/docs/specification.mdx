@@ -1,6 +1,6 @@
 import DocsLayout from '@/components/layout/DocsLayout';
 
-export const frontmatter = { title: 'Specification v0.1', description: 'Normative reference for document format, fields, and conformance.' };
+export const frontmatter = { title: 'Specification v0.2', description: 'Normative reference for document format, fields, and conformance.' };
 
 <DocsLayout frontmatter={frontmatter}>
 
@@ -14,20 +14,20 @@ An ABS document is valid YAML. (JSON is also valid, being a syntactic subset of 
 
 ## 2. Top-level structure
 
-```yaml
+```text
 session: <string>            # REQUIRED — human-readable session name
 description: <string>        # OPTIONAL
-abs_version: "0.1"           # OPTIONAL in v0.1, RECOMMENDED, will be REQUIRED in v0.2
+abs_version: "0.2"           # REQUIRED in v0.2
 dataset:                     # OPTIONAL — dataset that feeds this session
-  id: <string>               #   REQUIRED if dataset present
-  path: <string>             #   REQUIRED if dataset present — path to .json or .jsonl
-fragments:                   # OPTIONAL — named reusable lists of Behaviors
-  <fragment_name>:
+  id: <string>               #   REQUIRED if dataset present — short name for column references
+  path: <string>             #   REQUIRED if dataset present — path to .json or .jsonl file
+fragments:                   # OPTIONAL — named reusable lists of Behaviors. See COMPOSITION.md.
+  <fragment_name>:           #   Each key names a fragment, referenced by include: in behaviors
     - actor: <string>
       action: <string>
       # ... any Behavior fields
 behaviors:                   # REQUIRED — ordered list of Behavior objects and/or fragment includes
-  - id: <string>             #   OPTIONAL — unique id, used by evaluations to reference steps
+  - id: <string>             #   OPTIONAL — unique id for this behavior, used by evaluations
     actor: <string>
     action: <string>
     target: <string>         # OPTIONAL
@@ -36,8 +36,15 @@ behaviors:                   # REQUIRED — ordered list of Behavior objects and
     with: <map>              # OPTIONAL — parameters, partial match (default)
     with_only: <map>         # OPTIONAL — parameters, strict match (mutually exclusive with with)
     evaluations: <list>      # OPTIONAL — step-level, checks this Behavior only
+    optional: <boolean>      # OPTIONAL — v0.2+. If true, the runner skips this behavior silently when the agent does not emit it.
+    requires: <string>       # OPTIONAL — v0.2+. ID of a behavior that must have matched for this one to activate. Cascades.
+    matches_when:            # OPTIONAL — v0.2+. Semantic criterion to decide if this behavior matched. Overrides action-based matching.
+      type: llm_judge | contains | regex
+      criteria: <string>     #   For llm_judge
+      value: <string>        #   For contains
+      pattern: <string>      #   For regex
   - include: <fragment_name> # OPTIONAL — inserts a fragment's Behaviors here
-evaluations: <list>           # OPTIONAL — session-level (chain), checks the whole trace
+evaluations: <list>          # OPTIONAL — session-level (chain), checks the whole trace. See EVALUATIONS.md.
 ```
 
 A document with no `evaluations` anywhere (step-level or session-level) is purely descriptive. Adding `evaluations` at either level makes the same document executable as a test.
@@ -46,14 +53,14 @@ A document with no `evaluations` anywhere (step-level or session-level) is purel
 
 Early discussion of ABS used a compact notation where a bare list of Behaviors follows `session:` directly:
 
-```yaml
+```text
 session: Order status
 - actor: user
   action: says
   content: "Where is my order?"
 ```
 
-This is **not valid YAML** — a block mapping cannot be directly followed by a block sequence at the same indentation level. All documents in this project use the explicit `behaviors:` form, which is the only form v0.1 defines as conformant.
+This is **not valid YAML** — a block mapping cannot be directly followed by a block sequence at the same indentation level. All documents in this project use the explicit `behaviors:` form, which is the only form v0.2 defines as conformant.
 
 ## 3. Field definitions
 

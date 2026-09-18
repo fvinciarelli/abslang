@@ -20,9 +20,10 @@ This duplication is not an oversight. It follows directly from storing a tree as
 
 ## The mechanism: fragments
 
-A **fragment** is a named, reusable list of Behaviors. It is declared once under a top-level `fragments:` key and inserted into a Session with an `include:` entry in the `behaviors:` list.
+A **fragment** is a named, reusable list of Behaviors. It is declared under the session's top-level `fragments:` key and inserted into the `behaviors:` list with an `include:` entry.
 
 ```yaml
+session: Appointment booking, slot accepted
 fragments:
   request-dentist-appointment:
     - actor: user
@@ -38,9 +39,6 @@ fragments:
       target: Calendar API
       content:
         slots: ["2026-08-03T09:00", "2026-08-03T14:00"]
-
----
-session: Appointment booking, slot accepted
 behaviors:
   - include: request-dentist-appointment
   - actor: user
@@ -48,9 +46,29 @@ behaviors:
     target: Appointment Options
     content: "2026-08-03T09:00"
   # ...
+```
 
----
+The opening is declared once inside the document, and both the human reader and the runner see the same flat list of Behaviors after expansion.
+
+**Scope note.** `fragments:` is a field of the *session document*, not a global registry: a multi-document file that describes two paths declares the fragment in each document, and `parse_multi` expands each session with its own fragments. Sharing a fragment library across files or repositories is an open roadmap item (see ROADMAP.md). The second path would look like this:
+
+```yaml
 session: Appointment booking, no slot fits
+fragments:
+  request-dentist-appointment:       # declared in every document that uses it
+    - actor: user
+      action: says
+      content: "I need to book a dentist appointment"
+    - actor: assistant
+      action: calls
+      target: Calendar API
+      with:
+        service: "dentist"
+    - actor: tool
+      action: responds
+      target: Calendar API
+      content:
+        slots: ["2026-08-03T09:00", "2026-08-03T14:00"]
 behaviors:
   - include: request-dentist-appointment
   - actor: user
@@ -59,7 +77,7 @@ behaviors:
   # ...
 ```
 
-The shared opening exists once. Both Sessions still read top to bottom. And because `include:` is an ordinary entry in the `behaviors:` list, it can appear at **any** position — not only first. Sessions that share an *ending* (every flow closes with the same confirmation and escalation) or a *middle* factor out just as well, which a prefix-only mechanism cannot express.
+And because `include:` is an ordinary entry in the `behaviors:` list, it can appear at **any** position — not only first. Sessions that share an *ending* (every flow closes with the same confirmation and escalation) or a *middle* factor out just as well, which a prefix-only mechanism cannot express.
 
 ## Expansion is the whole design
 

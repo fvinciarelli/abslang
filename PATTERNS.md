@@ -187,7 +187,9 @@ split makes both the data and the communication separately assertable.
 # Partial: agent can add extra params like locale=toulouse
 with:
   orderId: "8291"
+```
 
+```yaml
 # Strict: no extra params allowed — catches parameter injection
 with_only:
   orderId: "8291"

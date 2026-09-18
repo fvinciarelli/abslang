@@ -259,8 +259,11 @@ The `target` field in a `calls` Behavior is matched against `function.name` in t
 ```yaml
 # ABS spec:
 target: Orders API
+```
 
-# Your agent must produce:
+Your agent must produce:
+
+```json
 { "function": { "name": "Orders API" } }
 ```
 

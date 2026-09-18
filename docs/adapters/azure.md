@@ -127,19 +127,22 @@ evaluations:
 
 `azure.tool_call_accuracy` needs tool definitions. The adapter derives minimal
 definitions from the observed `calls` in the trace (tool name + parameter types) by
-default. Provide a `tools:` block in the session for richer definitions (full JSON
-schema, descriptions, required fields):
+default. Pass `tool_definitions` inline in the evaluation rule for richer
+definitions (full JSON schema, descriptions, required fields):
 
 ```yaml
-session: Order status with tool schema
-tools:
-  - name: Order MCP
-    description: Look up an order by id
-    parameters:
-      type: object
-      properties:
-        orderId: { type: string }
-      required: [orderId]
+evaluations:
+  - type: custom
+    id: azure.tool_call_accuracy
+    tool_definitions:
+      - name: Order MCP
+        description: Look up an order by id
+        parameters:
+          type: object
+          properties:
+            orderId: { type: string }
+          required: [orderId]
+    threshold: 0.6
 ```
 
 ## Score normalization
