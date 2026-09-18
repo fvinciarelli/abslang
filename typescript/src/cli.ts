@@ -956,6 +956,13 @@ program
   .description("Start an ABS assistant chat session")
   .option("--provider <provider>", "openai, anthropic, or deepseek (auto-detects from env if not set)")
   .option("--api-key <key>", "API key (or set OPENAI_API_KEY / ANTHROPIC_API_KEY / DEEPSEEK_API_KEY)")
+  .option("--model <name>", "model or Azure deployment name (overrides ABS_CHAT_MODEL)")
+  .option("--base-url <url>", "API base URL (overrides ABS_CHAT_BASE_URL)")
+  .option("--max-tokens <n>", "max output tokens (default: 4096)")
+  .option("--temperature <n>", "sampling temperature (default: 0.3)")
+  .option("--omit-temperature", "never send temperature (for models that reject it)")
+  .option("--max-tokens-param <name>", "token-limit field name: max_tokens (default) or max_completion_tokens (gpt-5/o-series)")
+  .option("--param <key=value>", "extra request body parameter, repeatable (e.g. --param reasoning_effort=low)", (value: string, previous: string[]) => previous.concat([value]), [])
   .action(async (options) => {
     const { detectProvider, getProviderKey, getProviderKeyEnv, getProviderConfig } = await import("./providers");
 
@@ -967,7 +974,43 @@ program
       process.exit(2);
     }
 
-    const { model, baseUrl } = getProviderConfig(provider as any);
+    const providerConfig = getProviderConfig(provider as any);
+    const model = options.model || providerConfig.model;
+    const baseUrl = options.baseUrl || providerConfig.baseUrl;
+
+    const maxTokens = options.maxTokens !== undefined ? Number(options.maxTokens) : undefined;
+    if (maxTokens !== undefined && (!Number.isFinite(maxTokens) || maxTokens <= 0)) {
+      console.error(chalk.red(`❌ --max-tokens must be a positive number, got '${options.maxTokens}'.`));
+      process.exit(2);
+    }
+
+    const temperature = options.temperature !== undefined ? Number(options.temperature) : undefined;
+    if (temperature !== undefined && !Number.isFinite(temperature)) {
+      console.error(chalk.red(`❌ --temperature must be a number, got '${options.temperature}'.`));
+      process.exit(2);
+    }
+
+    const maxTokensParam = options.maxTokensParam;
+    if (maxTokensParam && maxTokensParam !== "max_tokens" && maxTokensParam !== "max_completion_tokens") {
+      console.error(chalk.red(`❌ --max-tokens-param must be max_tokens or max_completion_tokens, got '${maxTokensParam}'.`));
+      process.exit(2);
+    }
+
+    const extraParams: Record<string, unknown> = {};
+    for (const raw of options.param as string[]) {
+      const eq = raw.indexOf("=");
+      if (eq <= 0) {
+        console.error(chalk.red(`❌ --param expects key=value, got '${raw}'.`));
+        process.exit(2);
+      }
+      const key = raw.slice(0, eq).trim();
+      const value = raw.slice(eq + 1);
+      try {
+        extraParams[key] = JSON.parse(value);
+      } catch {
+        extraParams[key] = value;
+      }
+    }
 
     const { chat, newConversation, extractYaml, extractMermaid } = await import("./assistant");
     const messages = newConversation();
@@ -977,6 +1020,7 @@ program
       output: process.stdout,
     });
 
+    console.log(chalk.dim(`  Provider: ${provider} · model: ${model}\n`));
     console.log(chalk.bold("\n🤖 ABS Assistant — describe the agent behavior you want to test\n"));
     console.log(chalk.dim("  I'll ask you guided questions to understand your flow and build the best possible test."));
     console.log(chalk.dim("  Some questions may feel extra — they're there to make sure we don't miss edge cases.\n"));
@@ -1003,7 +1047,17 @@ program
       messages.push({ role: "user", content });
       try {
         const stop = spinner(true);
-        const response = await chat(messages, { apiKey, model, baseUrl, provider });
+        const response = await chat(messages, {
+          apiKey,
+          model,
+          baseUrl,
+          provider,
+          maxTokens,
+          temperature,
+          omitTemperature: !!options.omitTemperature,
+          maxTokensParam,
+          extraParams,
+        });
         stop?.();
         console.log(chalk.blue("Assistant: "));
         console.log(renderMd(response));

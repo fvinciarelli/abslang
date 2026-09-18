@@ -61,6 +61,62 @@ describe("assistant chat", () => {
     }
   });
 
+  it("sends the token-limit field, temperature and extra params the caller asks for", async () => {
+    const captured: any[] = [];
+    globalThis.fetch = (async (_url: any, init: any) => {
+      captured.push(JSON.parse(init.body));
+      return { ok: true, json: async () => ({ choices: [{ message: { content: "ok" } }] }) };
+    }) as any;
+
+    try {
+      // gpt-5 style: max_completion_tokens, no temperature, reasoning_effort
+      await chat([{ role: "user", content: "hi" }], {
+        apiKey: "k",
+        maxTokens: 1234,
+        maxTokensParam: "max_completion_tokens",
+        omitTemperature: true,
+        extraParams: { reasoning_effort: "low" },
+      });
+      assert.equal(captured[0].max_completion_tokens, 1234);
+      assert.ok(!("max_tokens" in captured[0]), "max_tokens should not be sent");
+      assert.ok(!("temperature" in captured[0]), "temperature should be omitted");
+      assert.equal(captured[0].reasoning_effort, "low");
+
+      // classic style with an explicit temperature
+      await chat([{ role: "user", content: "hi" }], { apiKey: "k", temperature: 0.9 });
+      assert.equal(captured[1].max_tokens, 4096);
+      assert.equal(captured[1].temperature, 0.9);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("hints the CLI flags when the provider rejects a parameter", async () => {
+    globalThis.fetch = stubFetch({
+      ok: false,
+      status: 400,
+      text: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+    });
+    try {
+      await assert.rejects(
+        () => chat([{ role: "user", content: "hi" }], { apiKey: "k", model: "gpt-5.1-mini" }),
+        /--max-tokens-param max_completion_tokens/
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    globalThis.fetch = stubFetch({ ok: false, status: 400, text: "Unsupported value: 'temperature' does not support 0.3 with this model." });
+    try {
+      await assert.rejects(
+        () => chat([{ role: "user", content: "hi" }], { apiKey: "k", model: "gpt-5.1-mini" }),
+        /--omit-temperature/
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("includes the Mermaid mapping section when the user pastes a diagram", async () => {
     const captured: any[] = [];
     globalThis.fetch = (async (_url: any, init: any) => {

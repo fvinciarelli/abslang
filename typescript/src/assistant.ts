@@ -5,8 +5,12 @@
  * generated from the ABS schema, vocabulary, examples, and the base prompt.
  * Regenerate with: npm run gen:knowledge
  *
- * Providers: OpenAI-compatible endpoints (OpenAI, DeepSeek, Ollama, vLLM) and
- * the Anthropic Messages API.
+ * Providers: OpenAI-compatible endpoints (OpenAI, Azure OpenAI, DeepSeek,
+ * Ollama, vLLM) and the Anthropic Messages API.
+ *
+ * Parameter names differ per model (e.g. gpt-5 expects max_completion_tokens and
+ * rejects temperature). Nothing is guessed from the model name: the caller
+ * passes maxTokensParam / temperature / omitTemperature / extraParams explicitly.
  * Used by: CLI (abs chat), Web UI, VSCode extension.
  */
 
@@ -24,6 +28,16 @@ export interface AssistantConfig {
   model?: string;
   baseUrl?: string;
   provider?: "openai" | "anthropic" | "deepseek" | string;
+  /** Output token limit. Default: 4096. */
+  maxTokens?: number;
+  /** Sampling temperature. Default: 0.3. Ignored when omitTemperature is true. */
+  temperature?: number;
+  /** Do not send temperature at all (some models reject it). */
+  omitTemperature?: boolean;
+  /** Name of the token-limit field. Default: max_tokens. Use max_completion_tokens for gpt-5/o-series. */
+  maxTokensParam?: "max_tokens" | "max_completion_tokens";
+  /** Extra request body fields, merged last (e.g. { reasoning_effort: "low" }). */
+  extraParams?: Record<string, unknown>;
 }
 
 // ── Chat completion ──
@@ -42,7 +56,23 @@ export async function chat(
   return chatOpenAICompatible(messages, config, system);
 }
 
-// ── OpenAI-compatible: OpenAI, DeepSeek, Ollama, vLLM ──
+// ── OpenAI-compatible: OpenAI, Azure OpenAI, DeepSeek, Ollama, vLLM ──
+
+function buildOpenAIBody(
+  model: string,
+  messages: AssistantMessage[],
+  system: string,
+  config: AssistantConfig
+): Record<string, any> {
+  const body: Record<string, any> = {
+    model,
+    messages: [{ role: "system", content: system }, ...messages],
+    [config.maxTokensParam ?? "max_tokens"]: config.maxTokens ?? 4096,
+  };
+  if (!config.omitTemperature) body.temperature = config.temperature ?? 0.3;
+  if (config.extraParams) Object.assign(body, config.extraParams);
+  return body;
+}
 
 async function chatOpenAICompatible(
   messages: AssistantMessage[],
@@ -58,20 +88,19 @@ async function chatOpenAICompatible(
       "Content-Type": "application/json",
       Authorization: `Bearer ${config.apiKey}`,
     },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: system },
-        ...messages,
-      ],
-      temperature: 0.3,
-      max_tokens: 4096,
-    }),
+    body: JSON.stringify(buildOpenAIBody(model, messages, system, config)),
   });
 
   if (!resp.ok) {
     const text = await resp.text();
-    throw new Error(`Chat provider returned ${resp.status}: ${text.substring(0, 300)}`);
+    let hint = "";
+    if (text.includes("max_completion_tokens")) {
+      hint += "\nHint: this model expects max_completion_tokens. Retry with --max-tokens-param max_completion_tokens";
+    }
+    if (/temperature/.test(text)) {
+      hint += "\nHint: this model rejects temperature. Retry with --omit-temperature";
+    }
+    throw new Error(`Chat provider returned ${resp.status}: ${text.substring(0, 300)}${hint}`);
   }
 
   const data = await resp.json() as any;
@@ -97,10 +126,11 @@ async function chatAnthropic(
     },
     body: JSON.stringify({
       model,
-      max_tokens: 4096,
-      temperature: 0.3,
+      max_tokens: config.maxTokens ?? 4096,
+      ...(config.omitTemperature ? {} : { temperature: config.temperature ?? 0.3 }),
       system, // top-level field, not a message with role "system"
       messages: messages.filter((m) => m.role !== "system").map((m) => ({ role: m.role, content: m.content })),
+      ...(config.extraParams ?? {}),
     }),
   });
 

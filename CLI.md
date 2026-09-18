@@ -186,6 +186,33 @@ abslang chat --provider deepseek
 
 Override the model with `ABS_CHAT_MODEL` and the base URL with `ABS_CHAT_BASE_URL`.
 
+### Model parameters
+
+Different models expect different request fields, and there is no API to ask which ones. Nothing is guessed from the model name — you pass what your model expects:
+
+| Flag | What it does |
+|---|---|
+| `--model <name>` | Model or Azure deployment name (overrides `ABS_CHAT_MODEL`) |
+| `--base-url <url>` | API base URL (overrides `ABS_CHAT_BASE_URL`) |
+| `--max-tokens <n>` | Output token limit (default: 4096) |
+| `--max-tokens-param <name>` | Token-limit field name: `max_tokens` (default) or `max_completion_tokens` (gpt-5 / o-series) |
+| `--temperature <n>` | Sampling temperature (default: 0.3) |
+| `--omit-temperature` | Do not send temperature at all (models that reject it) |
+| `--param key=value` | Any extra request body field, repeatable. Values are parsed as JSON when possible |
+
+Example: GPT-5.1 on Azure OpenAI, which expects `max_completion_tokens` and rejects `temperature`:
+
+```bash
+abslang chat --provider openai --api-key $AZURE_OPENAI_KEY \
+  --base-url https://my-resource.openai.azure.com/openai/v1 \
+  --model gpt-5.1-mini \
+  --max-tokens-param max_completion_tokens \
+  --omit-temperature \
+  --param reasoning_effort=low
+```
+
+If you send a field the model rejects, the error tells you which flag to use.
+
 ---
 
 ## abslang run
