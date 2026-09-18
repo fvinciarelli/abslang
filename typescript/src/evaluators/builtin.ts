@@ -1,4 +1,5 @@
 import { Behavior, Selector } from "../parser";
+import { resolveRef } from "./trace_utils";
 
 // ── Observed step ──
 
@@ -9,6 +10,7 @@ export interface ObservedStep {
   target?: string;
   content?: any;
   with?: Record<string, any>;
+  tool_call_id?: string;
 }
 
 // ── Eval result ──
@@ -20,6 +22,14 @@ export interface EvalResult {
   reason: string;
   blocking?: boolean;
   inconclusive?: boolean;
+  /** Machine-readable failure classification (stable across runs). */
+  code?: string;
+  /** Raw provider payload / metric breakdown. */
+  details?: Record<string, any>;
+  /** Set by applyThreshold from the evaluation rule. */
+  threshold?: number;
+  adapter?: string;
+  durationMs?: number;
 }
 
 // ── Built-in step-level evaluators ──
@@ -446,18 +456,267 @@ export function toolCall(
   };
 }
 
+// ── Reference-based text metrics (deterministic) ──
+//
+// These compare the observed response against a declared `ground_truth` using
+// pure algorithms: no model, no network, no adapter. Tokenization and metric
+// variants are part of the contract so every implementation agrees on the
+// score (see EVALUATIONS.md). The test vectors are shared with the Python
+// implementation (python/tests/test_text_metrics.py).
+
+const TOKEN_RE = /[\p{L}\p{N}_]+/gu;
+export const BLEU_MAX_N = 4;
+export const ROUGE_VARIANTS: string[] = ["rouge1", "rouge2", "rougeL"];
+export const ROUGE_METRICS: string[] = ["precision", "recall", "f1"];
+
+function tokenize(text: unknown): string[] {
+  const value = text === null || text === undefined ? "" : String(text).toLowerCase();
+  return value.match(TOKEN_RE) ?? [];
+}
+
+function ngramCounts(tokens: string[], n: number): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (let i = 0; i + n <= tokens.length; i++) {
+    const key = tokens.slice(i, i + n).join("\u0001");
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function overlapCount(a: Map<string, number>, b: Map<string, number>): number {
+  let total = 0;
+  for (const [key, count] of a) {
+    const other = b.get(key);
+    if (other) total += Math.min(count, other);
+  }
+  return total;
+}
+
+function prf(overlap: number, totalObserved: number, totalReference: number) {
+  const precision = totalObserved ? overlap / totalObserved : 0;
+  const recall = totalReference ? overlap / totalReference : 0;
+  const f1 = precision + recall ? (2 * precision * recall) / (precision + recall) : 0;
+  return { precision, recall, f1 };
+}
+
+/** Token-level (unigram) F1 between response and reference. */
+export function f1ScoreMetric(
+  response: string,
+  groundTruth: string
+): [number, { precision: number; recall: number; f1: number }] {
+  const observed = tokenize(response);
+  const reference = tokenize(groundTruth);
+  if (observed.length === 0 || reference.length === 0) {
+    return [0, prf(0, observed.length, reference.length)];
+  }
+  const overlap = overlapCount(ngramCounts(observed, 1), ngramCounts(reference, 1));
+  const scores = prf(overlap, observed.length, reference.length);
+  return [scores.f1, scores];
+}
+
+/** BLEU-4 with add-1 smoothing, effective order, and brevity penalty. */
+export function bleuMetric(
+  response: string,
+  groundTruth: string
+): [number, { precisions: number[]; brevity_penalty: number }] {
+  const observed = tokenize(response);
+  const reference = tokenize(groundTruth);
+  if (observed.length === 0 || reference.length === 0) {
+    return [0, { precisions: [], brevity_penalty: 0 }];
+  }
+  const precisions: number[] = [];
+  for (let n = 1; n <= BLEU_MAX_N; n++) {
+    const total = observed.length - n + 1;
+    if (total <= 0) continue;
+    const matches = overlapCount(ngramCounts(observed, n), ngramCounts(reference, n));
+    precisions.push((matches + 1) / (total + 1));
+  }
+  if (precisions.length === 0) {
+    return [0, { precisions: [], brevity_penalty: 0 }];
+  }
+  const logMean = precisions.reduce((sum, p) => sum + Math.log(p), 0) / precisions.length;
+  const brevityPenalty = Math.min(1, Math.exp(1 - reference.length / observed.length));
+  return [brevityPenalty * Math.exp(logMean), { precisions, brevity_penalty: brevityPenalty }];
+}
+
+function lcsLength(a: string[], b: string[]): number {
+  if (a.length === 0 || b.length === 0) return 0;
+  let previous = new Array<number>(b.length + 1).fill(0);
+  for (const x of a) {
+    const current = [0];
+    for (let j = 1; j <= b.length; j++) {
+      current.push(x === b[j - 1] ? previous[j - 1] + 1 : Math.max(previous[j], current[j - 1]));
+    }
+    previous = current;
+  }
+  return previous[b.length];
+}
+
+/** ROUGE-N (n=1,2) or ROUGE-L F1 between response and reference. */
+export function rougeMetric(
+  response: string,
+  groundTruth: string,
+  variant: string = "rougeL"
+): [number, { precision: number; recall: number; f1: number; variant: string }] {
+  const observed = tokenize(response);
+  const reference = tokenize(groundTruth);
+  let scores: { precision: number; recall: number; f1: number };
+  if (variant === "rougeL") {
+    const lcs = lcsLength(observed, reference);
+    scores = prf(lcs, observed.length, reference.length);
+  } else {
+    const n = variant === "rouge1" ? 1 : 2;
+    const observedNgrams = ngramCounts(observed, n);
+    const referenceNgrams = ngramCounts(reference, n);
+    const overlap = overlapCount(observedNgrams, referenceNgrams);
+    const totalObserved = [...observedNgrams.values()].reduce((sum, v) => sum + v, 0);
+    const totalReference = [...referenceNgrams.values()].reduce((sum, v) => sum + v, 0);
+    scores = prf(overlap, totalObserved, totalReference);
+  }
+  return [scores.f1, { ...scores, variant }];
+}
+
+function valueToText(value: any): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function lastAssistantText(trace: ObservedStep[]): string {
+  for (let i = trace.length - 1; i >= 0; i--) {
+    const step = trace[i];
+    if (step.actor === "assistant" && step.content !== undefined && step.content !== null) {
+      return valueToText(step.content);
+    }
+  }
+  return "";
+}
+
+function resolveMetricInputs(
+  observed: ObservedStep | null,
+  rule: any,
+  trace: ObservedStep[],
+  behavior?: Behavior
+): { response: string; groundTruth: string } {
+  const declared = behavior ? valueToText(behavior.content) : "";
+  const observedText = observed ? valueToText(observed.content) : lastAssistantText(trace);
+
+  const gtRef = rule.ground_truth;
+  if (gtRef === undefined || gtRef === null) {
+    throw new Error('requires a "ground_truth" field');
+  }
+  const groundTruth =
+    gtRef === "self" ? declared || observedText : resolveRef(trace, String(gtRef), declared) || declared;
+
+  const responseRef = rule.response;
+  const response =
+    !responseRef || responseRef === "self"
+      ? observedText
+      : resolveRef(trace, String(responseRef), observedText) || observedText;
+
+  return { response, groundTruth };
+}
+
+function referenceMetric(
+  type: string,
+  compute: (response: string, groundTruth: string) => [number, Record<string, any>],
+  observed: ObservedStep | null,
+  rule: any,
+  trace: ObservedStep[],
+  behavior?: Behavior
+): EvalResult {
+  let response: string;
+  let groundTruth: string;
+  try {
+    ({ response, groundTruth } = resolveMetricInputs(observed, rule, trace, behavior));
+  } catch (err: any) {
+    return { type, passed: false, score: 0, reason: `${type}: ${err.message}`, code: "evaluator.missing_input" };
+  }
+
+  let score: number;
+  let details: Record<string, any>;
+  try {
+    [score, details] = compute(response, groundTruth);
+  } catch (err: any) {
+    return { type, passed: false, score: 0, reason: `${type}: ${err.message}`, code: "evaluator.invalid_option" };
+  }
+
+  return { type, passed: score >= 0.5, score, reason: `${type}: score ${score.toFixed(2)}`, details };
+}
+
+export function f1Eval(
+  observed: ObservedStep | null,
+  rule: any,
+  trace: ObservedStep[],
+  behavior?: Behavior
+): EvalResult {
+  return referenceMetric("f1", f1ScoreMetric, observed, rule, trace, behavior);
+}
+
+export function bleuEval(
+  observed: ObservedStep | null,
+  rule: any,
+  trace: ObservedStep[],
+  behavior?: Behavior
+): EvalResult {
+  return referenceMetric("bleu", bleuMetric, observed, rule, trace, behavior);
+}
+
+export function rougeEval(
+  observed: ObservedStep | null,
+  rule: any,
+  trace: ObservedStep[],
+  behavior?: Behavior
+): EvalResult {
+  const variant = String(rule.variant ?? "rougeL");
+  const metric = String(rule.metric ?? "f1");
+  if (!ROUGE_VARIANTS.includes(variant)) {
+    return {
+      type: "rouge",
+      passed: false,
+      score: 0,
+      reason: `rouge: unknown variant "${variant}" (use rouge1, rouge2, rougeL)`,
+      code: "evaluator.invalid_option",
+    };
+  }
+  if (!ROUGE_METRICS.includes(metric)) {
+    return {
+      type: "rouge",
+      passed: false,
+      score: 0,
+      reason: `rouge: unknown metric "${metric}" (use precision, recall, f1)`,
+      code: "evaluator.invalid_option",
+    };
+  }
+
+  const compute = (response: string, groundTruth: string): [number, Record<string, any>] => {
+    const [, details] = rougeMetric(response, groundTruth, variant);
+    return [(details as Record<string, any>)[metric], { ...details, metric }];
+  };
+  return referenceMetric("rouge", compute, observed, rule, trace, behavior);
+}
+
 // ── Apply threshold ──
 
 export function applyThreshold(result: EvalResult, evaluation: any): EvalResult {
+  const updated: EvalResult = {
+    ...result,
+    adapter: result.adapter ?? evaluation.adapter,
+  };
   const threshold = evaluation.threshold;
-  if (threshold !== undefined && result.score < threshold) {
-    return {
-      ...result,
-      passed: false,
-      reason: `${result.reason} (score ${result.score} < threshold ${threshold})`,
-    };
+  if (threshold !== undefined && threshold !== null) {
+    updated.threshold = threshold;
+    if (updated.score < threshold) {
+      updated.passed = false;
+      updated.reason = `${updated.reason} (score ${updated.score} < threshold ${threshold})`;
+      updated.code = updated.code ?? "evaluator.threshold_not_met";
+    }
   }
-  return result;
+  return updated;
 }
 
 // ── Step-level evaluator dispatch ──
@@ -466,7 +725,8 @@ export function evaluateStep(
   observed: ObservedStep | null,
   evaluation: any,
   behaviors: Behavior[],
-  trace: ObservedStep[]
+  trace: ObservedStep[],
+  behavior?: Behavior
 ): EvalResult {
   const blocking = evaluation.blocking === true;
 
@@ -495,8 +755,14 @@ export function evaluateStep(
       const result = toolCall(trace, evaluation);
       return applyThreshold({ ...result, blocking }, evaluation);
     }
+    case "f1":
+      return applyThreshold({ ...f1Eval(observed, evaluation, trace, behavior), blocking }, evaluation);
+    case "bleu":
+      return applyThreshold({ ...bleuEval(observed, evaluation, trace, behavior), blocking }, evaluation);
+    case "rouge":
+      return applyThreshold({ ...rougeEval(observed, evaluation, trace, behavior), blocking }, evaluation);
     case "llm_judge":
-      return applyThreshold({ type: "llm_judge", passed: false, score: 0, reason: "No LLM judge adapter registered. Use --adapter llm_judge=<provider>.", blocking }, evaluation);
+      return applyThreshold({ type: "llm_judge", passed: false, score: 0, reason: "No LLM judge adapter registered. Use --adapter llm_judge=<provider>.", blocking, code: "adapter.not_configured" }, evaluation);
     case "Groundedness":
     case "Relevance":
     case "Coherence":
@@ -506,7 +772,8 @@ export function evaluateStep(
         passed: false,
         score: 0,
         reason: `No adapter registered for ${evaluation.type}. Use --adapter ${evaluation.type}=<provider>.`,
-        blocking
+        blocking,
+        code: "adapter.not_configured"
       }, evaluation);
     case "all_of":
     case "any_of":
@@ -519,6 +786,7 @@ export function evaluateStep(
         score: 0,
         reason: `Unknown evaluator type: ${evaluation.type}`,
         blocking,
+        code: "evaluator.unknown_type",
       };
   }
 }
@@ -624,7 +892,7 @@ export function expected(
   return { type: "expected", passed: true, score: 1, reason: `Behavior "${evaluation.behavior}" matched as expected` };
 }
 
-// ── v0.2 — matches_when matcher ──
+// ── Adapter registry (default + named) ──
 
 export type AdapterFunction = (
   trace: ObservedStep[],
@@ -632,16 +900,40 @@ export type AdapterFunction = (
 ) => Promise<EvalResult>;
 
 const adapters: Record<string, AdapterFunction> = {};
+const namedAdapters: Record<string, AdapterFunction> = {};
 
-export function registerAdapter(type: string, fn: AdapterFunction): void {
-  adapters[type] = fn;
+/**
+ * Register an external evaluator adapter.
+ *
+ * Without `name` the adapter becomes the default for `type`. With `name` it is
+ * registered under `(type, name)` so a rule can select it via `adapter:`.
+ */
+export function registerAdapter(type: string, fn: AdapterFunction, name?: string): void {
+  if (name) namedAdapters[`${type}\u0000${name}`] = fn;
+  else adapters[type] = fn;
 }
 
+/**
+ * Try to evaluate using a registered adapter. Returns null when no adapter is
+ * registered for the type and no name was requested.
+ */
 export async function evaluateWithAdapter(
   type: string,
   trace: ObservedStep[],
-  evaluation: any
+  evaluation: any,
+  adapterName?: string
 ): Promise<EvalResult | null> {
+  if (adapterName) {
+    const named = namedAdapters[`${type}\u0000${adapterName}`];
+    if (named) return named(trace, evaluation);
+    return {
+      type,
+      passed: false,
+      score: 0,
+      reason: `Adapter '${adapterName}' is not registered for '${type}'. Run with --adapter ${type}=${adapterName} (or --adapter ${adapterName}).`,
+      code: "adapter.not_configured",
+    };
+  }
   const adapter = adapters[type];
   if (!adapter) return null;
   return adapter(trace, evaluation);

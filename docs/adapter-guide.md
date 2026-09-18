@@ -68,8 +68,10 @@ async function myEvaluatorAdapter(
   };
 }
 
-// 4. Register it — do this before calling abslang run
-registerAdapter("llm_judge", myEvaluatorAdapter);
+// 4. Register it — do this before calling abslang run.
+//    Pass a name to let a rule select it with `adapter: my-evaluator`.
+registerAdapter("llm_judge", myEvaluatorAdapter, "my-evaluator");
+registerAdapter("llm_judge", myEvaluatorAdapter);  // also make it the default
 ```
 
 ## Step 2: Hook it into abslang
@@ -112,6 +114,10 @@ configureMyEvaluator({ apiKey: process.env.MY_KEY! });
 // now abslang run will route llm_judge through your adapter
 ```
 
+Then point the CLI at it: `--adapter llm_judge=my-evaluator` makes it the default for
+`llm_judge`, `--adapter my-evaluator` covers every type it supports, and a rule can
+select it inline with `adapter: my-evaluator`.
+
 ## The adapter contract
 
 ### Input: `evaluation` fields by type
@@ -126,16 +132,29 @@ configureMyEvaluator({ apiKey: process.env.MY_KEY! });
 
 All evaluators also receive the full `trace: ObservedStep[]`.
 
+Adapters also receive `ground_truth` when the rule declares it, plus any
+provider-specific fields (`id`, `prompt`, `rating_scale`, `tool_definitions`, …).
+
 ### Output
 
 ```typescript
 interface EvalResult {
   type: string;
   passed: boolean;
-  score: number;    // 0.0 to 1.0, used for threshold comparison
-  reason: string;   // shown in reports when the evaluation fails
+  score: number;          // 0.0 to 1.0, used for threshold comparison
+  reason: string;         // human-readable, shown in reports
+  code?: string;          // stable machine-readable classification for failures
+  details?: object;       // raw provider payload / metric breakdown
+  adapter?: string;       // set automatically when registered by name
+  durationMs?: number;    // measured by the runner
 }
 ```
+
+`code` lets CI classify failures without parsing `reason`. Recommended values:
+`adapter.not_configured`, `adapter.unsupported_type`, `adapter.unknown_evaluator`,
+`adapter.error`, `evaluator.missing_input`, `evaluator.invalid_option`. The runner
+fills `threshold`, `adapter`, and `durationMs`; your adapter only needs `passed`,
+`score`, and `reason`.
 
 ### Threshold handling
 
@@ -158,7 +177,8 @@ async def my_evaluator_adapter(trace: list[ObservedStep], evaluation: dict) -> E
         reason="The response addresses the query accurately",
     )
 
-register_adapter("llm_judge", my_evaluator_adapter)
+register_adapter("llm_judge", my_evaluator_adapter, name="my-evaluator")  # selectable per rule
+register_adapter("llm_judge", my_evaluator_adapter)                       # or the default
 ```
 
 ## Testing your adapter
@@ -187,6 +207,6 @@ If you build an adapter for a public evaluation service, we'd love to list it. O
 - A 2-sentence description
 - Configuration example
 
-Examples of adapters that can be built with this contract: Azure AI Evaluation, LangSmith, Galileo, Promptfoo, DeepEval, Ragas, your in-house evaluation service.
+Examples of adapters that can be built with this contract: LangSmith, Galileo, Promptfoo, DeepEval, Ragas, your in-house evaluation service.
 
-Already shipped: [Azure AI Foundry](./adapters/azure.md), [AWS Bedrock](./adapters/aws.md), and [Google Vertex AI](./adapters/google.md) — use them directly, or read them as reference implementations.
+Already shipped: [Azure AI Foundry](./adapters/azure.md) (Python SDK and npm prompt-based ports), [AWS Bedrock](./adapters/aws.md), and [Google Vertex AI](./adapters/google.md) — use them directly, or read them as reference implementations. `aws` and `google` currently ship with the Python CLI.

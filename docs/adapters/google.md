@@ -30,6 +30,27 @@ abslang run session.abs.yaml --agent $AGENT_URL --adapter google
 
 Or per rule with `adapter: google`.
 
+## TypeScript (npm)
+
+The npm package ships the same `--adapter google` without the Python `vertexai`
+SDK. It renders the official pointwise metric prompt templates (Apache-2.0, from
+`google-cloud-aiplatform` 2.1.3) and calls Gemini through the official Node SDK:
+
+```bash
+npm install @google-cloud/vertexai
+export GOOGLE_CLOUD_PROJECT="your-project"
+export GOOGLE_CLOUD_LOCATION="us-central1"
+export GOOGLE_EVALUATOR_MODEL="gemini-2.0-flash-001"   # optional
+# gcloud auth application-default login (or GOOGLE_APPLICATION_CREDENTIALS)
+
+abslang run session.abs.yaml --agent $AGENT_URL --adapter google
+```
+
+Same evaluator coverage (quality + safety + custom) and same 0–1 normalization. The
+safety rubric is binary (1 = safe, 0 = unsafe); the quality dimensions are 1–5
+Likert, normalized by 5. The custom/`llm_judge` prompt builder mirrors the SDK's
+`PointwiseMetricPromptTemplate`.
+
 ## Supported evaluators
 
 | ABS | Vertex metric | Inputs |

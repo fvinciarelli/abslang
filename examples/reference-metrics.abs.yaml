@@ -1,0 +1,29 @@
+session: Reference-based answer check
+description: |
+  Deterministic (offline) regression on expected answers. The behavior declares
+  the expected answer in `content`, and f1/rouge/bleu compare the agent's actual
+  response against it. No model, no network, no cost.
+abs_version: "0.2"
+dataset:
+  id: cases
+  path: reference-metrics.jsonl
+behaviors:
+  - actor: user
+    action: says
+    content: "{{cases.question}}"
+
+  - actor: assistant
+    action: informs
+    content: "{{cases.expectedAnswer}}"
+    evaluations:
+      - type: f1
+        ground_truth: self
+        threshold: 0.6
+      - type: rouge
+        ground_truth: self
+        variant: rougeL
+        metric: f1
+        threshold: 0.5
+      - type: bleu
+        ground_truth: self
+        threshold: 0.3

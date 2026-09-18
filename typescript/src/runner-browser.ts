@@ -4,7 +4,7 @@
  */
 
 import { parseYaml, expandFragments, resolveVariables, Behavior, NormalizedSession, ABSDocument } from "./parser";
-import { ObservedStep, EvalResult, evaluateStep, evaluateWithAdapter, registerAdapter } from "./evaluators";
+import { ObservedStep, EvalResult, evaluateStep, evaluateWithAdapter, applyThreshold, registerAdapter } from "./evaluators";
 
 // ── Agent adapter (browser-compatible — uses fetch) ──
 
@@ -228,11 +228,16 @@ export async function runBrowser(
       const evalResults: EvalResult[] = [];
       if (behavior.evaluations) {
         for (const evalRule of behavior.evaluations) {
-          const adapterResult = await evaluateWithAdapter(evalRule.type, trace, evalRule);
+          const adapterResult = await evaluateWithAdapter(evalRule.type, trace, evalRule, evalRule.adapter);
           if (adapterResult) {
-            evalResults.push(adapterResult);
+            evalResults.push(applyThreshold(adapterResult, evalRule));
           } else {
-            evalResults.push(evaluateStep(matchObserved, evalRule, session.behaviors, trace));
+            evalResults.push(
+              applyThreshold(
+                evaluateStep(matchObserved, evalRule, session.behaviors, trace, behavior),
+                evalRule
+              )
+            );
           }
         }
       }
@@ -245,11 +250,13 @@ export async function runBrowser(
   const chainEvaluations: EvalResult[] = [];
   if (session.evaluations) {
     for (const evalRule of session.evaluations) {
-      const adapterResult = await evaluateWithAdapter(evalRule.type, trace, evalRule);
+      const adapterResult = await evaluateWithAdapter(evalRule.type, trace, evalRule, evalRule.adapter);
       if (adapterResult) {
-        chainEvaluations.push(adapterResult);
+        chainEvaluations.push(applyThreshold(adapterResult, evalRule));
       } else {
-        chainEvaluations.push(evaluateStep(null, evalRule, session.behaviors, trace));
+        chainEvaluations.push(
+          applyThreshold(evaluateStep(null, evalRule, session.behaviors, trace), evalRule)
+        );
       }
     }
   }

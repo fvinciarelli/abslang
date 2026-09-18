@@ -155,6 +155,7 @@ async def aws_adapter(
         type=eval_type,
         passed=False,
         score=0.0,
+        code="adapter.unsupported_type",
         reason=(
             f"AWS adapter does not support '{eval_type}' yet. "
             "The Bedrock backend handles llm_judge and custom; sequence/tool_call "
@@ -168,6 +169,7 @@ def _not_configured(type_name: str) -> EvalResult:
         type=type_name,
         passed=False,
         score=0.0,
+        code="adapter.not_configured",
         reason=(
             "AWS Bedrock is not configured. Set it up:\n"
             "  pip install boto3\n"
@@ -188,7 +190,7 @@ async def _llm_judge(trace: list[ObservedStep], evaluation: dict[str, Any]) -> E
         content = await asyncio.to_thread(_converse, JUDGE_SYSTEM, prompt)
         score, reason = _parse_judge_response(content)
         if score is None:
-            return EvalResult(type="llm_judge", passed=False, score=0.0,
+            return EvalResult(type="llm_judge", passed=False, score=0.0, code="adapter.error",
                               reason=f"[aws] Could not parse score from: {content[:200]}")
         score = max(0.0, min(1.0, score))  # JUDGE_SYSTEM is 0-1
         threshold = evaluation.get("threshold", 0.5)
@@ -202,7 +204,7 @@ async def _llm_judge(trace: list[ObservedStep], evaluation: dict[str, Any]) -> E
         msg = str(e)
         if "boto3" in msg.lower() or "not installed" in msg.lower():
             return _not_configured("llm_judge")
-        return EvalResult(type="llm_judge", passed=False, score=0.0, reason=f"AWS Bedrock error: {msg}")
+        return EvalResult(type="llm_judge", passed=False, score=0.0, code="adapter.error", reason=f"AWS Bedrock error: {msg}")
 
 
 async def _custom(trace: list[ObservedStep], evaluation: dict[str, Any]) -> EvalResult:
@@ -214,6 +216,7 @@ async def _custom(trace: list[ObservedStep], evaluation: dict[str, Any]) -> Eval
             type="custom",
             passed=False,
             score=0.0,
+            code="evaluator.missing_input",
             reason=f"AWS custom evaluator '{eid}' requires a 'prompt' (or 'criteria') field.",
         )
 
@@ -236,7 +239,7 @@ async def _custom(trace: list[ObservedStep], evaluation: dict[str, Any]) -> Eval
         content = await asyncio.to_thread(_converse, system, prompt)
         raw_score, reason = _parse_judge_response(content)
         if raw_score is None:
-            return EvalResult(type="custom", passed=False, score=0.0,
+            return EvalResult(type="custom", passed=False, score=0.0, code="adapter.error",
                               reason=f"[aws:{eid}] Could not parse score from: {content[:200]}")
         score = _normalize(raw_score, scale_max)
         threshold = evaluation.get("threshold", 0.5)
@@ -250,4 +253,4 @@ async def _custom(trace: list[ObservedStep], evaluation: dict[str, Any]) -> Eval
         msg = str(e)
         if "boto3" in msg.lower() or "not installed" in msg.lower():
             return _not_configured("custom")
-        return EvalResult(type="custom", passed=False, score=0.0, reason=f"AWS Bedrock error: {msg}")
+        return EvalResult(type="custom", passed=False, score=0.0, code="adapter.error", reason=f"AWS Bedrock error: {msg}")

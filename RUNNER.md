@@ -121,7 +121,7 @@ The spec deliberately does not mandate a specific API format — `openai` is the
 
 ## The Evaluator Adapter
 
-**Agent Behavior Specification** defines *what* to check. An evaluator adapter defines *how* to check it. The built-in evaluators (`exact_match`, `contains`, `regex`, `schema`, `tool_call`, `sequence`, `eventually`, `never`, `count`, `within`, `variable_consistency`) ship with the Runner. `llm_judge` and `custom` go through adapters.
+**Agent Behavior Specification** defines *what* to check. An evaluator adapter defines *how* to check it. The built-in evaluators (`exact_match`, `contains`, `regex`, `schema`, `tool_call`, `f1`, `bleu`, `rouge`, `sequence`, `eventually`, `never`, `count`, `within`, `variable_consistency`) ship with the Runner. `llm_judge` and `custom` go through adapters.
 
 ### Adapter interface
 
@@ -233,6 +233,16 @@ adapters:
   Groundedness: azure
 ```
 
+Every provider is also registered by name, so a single rule can pick its engine inline
+(see EVALUATIONS.md §Adapter selection):
+
+```yaml
+evaluations:
+  - type: Groundedness
+    adapter: azure
+    threshold: 0.8
+```
+
 ---
 
 ## Evaluator adapters
@@ -270,6 +280,9 @@ export AZURE_OPENAI_ENDPOINT=... AZURE_OPENAI_KEY=... AZURE_OPENAI_DEPLOYMENT=..
 abslang run session.abs.yaml --agent $AGENT_URL --adapter azure
 ```
 
+The npm package ships the same `--adapter azure` without the Python SDK: it renders
+the official Azure prompt templates locally against your deployment.
+
 **AWS Bedrock** — `llm_judge` and custom metrics through a Bedrock model:
 
 ```bash
@@ -285,6 +298,9 @@ pip install "abslang[google]"
 export GOOGLE_CLOUD_PROJECT=... GOOGLE_CLOUD_LOCATION=us-central1
 abslang run session.abs.yaml --agent $AGENT_URL --adapter google
 ```
+
+`aws` and `google` work the same way on npm: install `@aws-sdk/client-bedrock-runtime`
+or `@google-cloud/vertexai` respectively (see [docs/adapters/](./docs/adapters/)).
 
 **AI Evaluator** — free tier, no infrastructure:
 
@@ -377,6 +393,23 @@ For the full evaluator type reference, see [EVALUATIONS.md](./EVALUATIONS.md).
 For CI pipelines (GitHub Actions, GitLab CI, Jenkins). One `<testcase>` per step-level evaluation, plus one per chain evaluation.
 
 ---
+
+## Structured logs
+
+The report is the artifact; the log is the event stream. `run` writes progress and
+events to **stderr** (and optionally to a JSONL file) so the report on stdout stays
+clean:
+
+```bash
+abslang run session.abs.yaml --agent $URL --log-format jsonl --log-file events.jsonl
+```
+
+Events: `run.start/end`, `session.start/end`, `agent.request/response/error`,
+`behavior.match/skipped`, `evaluation.result`, `report.written` — each a JSON object
+with a stable envelope (`v`, `ts`, `level`, `event`, `run_id`) plus step/evaluation
+fields, `duration_ms`, and a machine-readable `code` on failures
+(`evaluator.threshold_not_met`, `adapter.not_configured`, …). `--no-log-content`
+omits trace content and reasons. See [CLI.md](./CLI.md) for the full catalog.
 
 ## What the Runner does NOT do
 

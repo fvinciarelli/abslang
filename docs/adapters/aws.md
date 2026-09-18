@@ -42,6 +42,23 @@ evaluations:
     threshold: 0.8
 ```
 
+## TypeScript (npm)
+
+The npm package ships the same `--adapter aws`. Install the AWS SDK v3 client as an
+optional dependency:
+
+```bash
+npm install @aws-sdk/client-bedrock-runtime
+export AWS_REGION="us-east-1"
+export BEDROCK_EVALUATOR_MODEL_ID="anthropic.claude-3-5-haiku-20241022-v1:0"  # optional
+
+abslang run session.abs.yaml --agent $AGENT_URL --adapter aws
+```
+
+The adapter uses the standard AWS credential chain (env vars, `~/.aws/credentials`,
+`AWS_PROFILE`, IAM role) through the Bedrock Converse API. The judge prompt,
+Score/Reason parsing, and 1–5 → 0–1 normalization are identical to the Python adapter.
+
 ## Supported evaluators
 
 | ABS | What it does |

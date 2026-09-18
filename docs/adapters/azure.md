@@ -62,6 +62,43 @@ Adapter 'azure' is not registered for 'Groundedness'.
 Run with --adapter Groundedness=azure (or --adapter azure).
 ```
 
+## TypeScript (npm)
+
+The npm package ships the same `--adapter azure` without the Python
+`azure-ai-evaluation` dependency. The adapter reimplements modality A locally:
+it renders the official Azure prompt templates (MIT-licensed, from
+`azure-ai-evaluation` 1.18.5) and calls your Azure OpenAI deployment's chat
+completions endpoint. No Foundry project, no Entra ID, no eval runs.
+
+```bash
+# No extra install — the adapter is part of abslang (npm)
+export AZURE_OPENAI_ENDPOINT="https://<account>.services.ai.azure.com"
+export AZURE_OPENAI_KEY="..."
+export AZURE_OPENAI_DEPLOYMENT="<judge-model-deployment>"
+export AZURE_OPENAI_API_VERSION="2024-02-15-preview"   # optional
+
+abslang run session.abs.yaml --agent $AGENT_URL --adapter azure
+abslang run session.abs.yaml --agent $AGENT_URL --adapter Groundedness=azure
+```
+
+Same evaluator coverage and same score normalization as Python:
+
+| Evaluator | npm implementation |
+|---|---|
+| `Groundedness`, `Relevance`, `Coherence`, `Fluency` | Official prompt templates, rendered and called locally |
+| `llm_judge` | Azure OpenAI judge (identical system prompt and parsing as Python) |
+| `custom` `azure.*` (agentic) | Official prompt templates with the conversation built from the ABS trace |
+
+**Fidelity notes.** The quality dimensions and `llm_judge` are faithful to the
+Python SDK. The agentic evaluators (`azure.task_adherence`,
+`azure.intent_resolution`, `azure.tool_call_accuracy`) reuse the official prompt
+templates but with a simplified conversation rendering from the ABS trace: the
+Python SDK applies additional preprocessing (`reformat_conversation_history`,
+`reformat_agent_response`) that is not reproduced in JavaScript. Scores are
+comparable in direction, not guaranteed byte-identical. If you need strict
+parity with the Azure SDK, run the Python CLI. Prompt templates can drift
+between `azure-ai-evaluation` releases; the npm port is pinned to 1.18.5.
+
 ## Supported evaluators
 
 | ABS | Azure evaluator | Inputs |

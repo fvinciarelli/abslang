@@ -12,9 +12,11 @@ import {
   resolveVariables,
 } from "./parser";
 import { run, AgentConfig, RunResult } from "./runner";
+import { registerAdapter } from "./evaluators";
 import { formatTable, formatJson, formatJunit } from "./formatters/table";
 import { mergeConfig } from "./config";
 import { configureBuiltinJudge } from "./evaluators/builtin_judge";
+import { configureLogging, closeLogging, newRunId, RunLogger } from "./log";
 
 const program = new Command();
 
@@ -175,6 +177,10 @@ program
   .option("--timeout <n>", "Timeout per session run in seconds", "300")
   .option("--output <path>", "Write report to file")
   .option("--parallel <n>", "Run N dataset rows in parallel", "1")
+  .option("--log-format <format>", "pretty (human) or jsonl (one event per line)", "pretty")
+  .option("--log-level <level>", "error, warn, info, or debug", "info")
+  .option("--log-file <path>", "Write machine-readable JSONL events to a file")
+  .option("--no-log-content", "Omit trace content and reasons from logs (privacy)")
   .action(async (session, options) => {
     const sessionPath = session || options.session;
     if (!sessionPath) {
@@ -202,17 +208,8 @@ program
       process.exit(2);
     }
 
-    // Configure AI Evaluator
-    const adapters = cfg.adapters || {};
-    for (const [type, provider] of Object.entries(adapters)) {
-      if (provider === "aievaluator") {
-        const { configureAIEvaluator } = require("./evaluators/adapters/aievaluator");
-        configureAIEvaluator({
-          apiKey: process.env.AIEVALUATOR_API_KEY,
-          engineUrl: process.env.AIEVALUATOR_ENGINE_URL,
-        });
-      }
-    }
+    // Configure evaluator adapters (CLI --adapter + abs.config.yaml adapters:)
+    setupAdapters(options.adapter ?? {}, cfg.adapters);
 
     // Configure built-in LLM judge (CLI flags override env vars)
     configureBuiltinJudge({
@@ -235,6 +232,16 @@ program
       clientId: options.agentClientId,
       timeout: parseInt(options.timeout) || 300,
     };
+
+    // Structured logging: stderr (+ optional JSONL file), never stdout.
+    configureLogging({
+      level: options.logLevel,
+      format: options.logFormat,
+      file: options.logFile,
+      includeContent: options.logContent !== false,
+      meta: { abslang: "0.3.2", agent: cfg.agent_url, agent_format: cfg.agent_format },
+    });
+    const runLogger = new RunLogger({ runId: newRunId() });
 
     const runtimeVars: Record<string, any> = {};
     if (options.var) {
@@ -297,7 +304,18 @@ program
     const allResults: (RunResult & { rowVars?: Record<string, any> })[] = [];
     const parallel = parseInt(options.parallel || "1");
 
-    const runOne = async (session: NormalizedSession, vars: Record<string, any>, rowVars?: Record<string, any>) => {
+    runLogger.event("run.start", "info", {
+      sessions: sessions.length,
+      dataset_rows: dataset ? dataset.length : undefined,
+      adapters:
+        options.adapter && Object.keys(options.adapter).length
+          ? options.adapter
+          : cfg.adapters && Object.keys(cfg.adapters).length
+            ? cfg.adapters
+            : undefined,
+    });
+
+    const runOne = async (session: NormalizedSession, vars: Record<string, any>, rowVars?: Record<string, any>, rowIndex?: number) => {
       const resolved = {
         ...session,
         behaviors: resolveVariables(
@@ -305,15 +323,22 @@ program
           vars
         ),
       };
-      const result = await run(resolved, agentConfig, vars);
+      const sessionLogger = new RunLogger({
+        runId: runLogger.runId,
+        session: session.session,
+        ...(dataset ? { row: rowIndex ?? 0 } : {}),
+        ...(rowVars || (vars && Object.keys(vars).length) ? { row_vars: rowVars ?? vars } : {}),
+      });
+      const result = await run(resolved, agentConfig, vars, sessionLogger);
       (result as any).rowVars = rowVars || vars;
+      (result as any).rowIndex = rowIndex;
       return result;
     };
 
     if (dataset) {
       const semaphore = new Array(parallel).fill(null).map(() => Promise.resolve());
       let semIdx = 0;
-      const tasks = dataset.map(async (row) => {
+      const tasks = dataset.map(async (row, rowIndex) => {
         const idx = semIdx++ % parallel;
         await semaphore[idx];
         // Prefix columns with dataset id if declared in-file
@@ -321,28 +346,19 @@ program
           ? Object.fromEntries(Object.entries(row).map(([k, v]) => [`${datasetId}.${k}`, v]))
           : row;
         const vars = { ...runtimeVars, ...prefixedRow };
-        const results = await Promise.all(sessions.map(s => runOne(s, vars, row)));
+        const results = await Promise.all(sessions.map(s => runOne(s, vars, row, rowIndex)));
         results.forEach(r => allResults.push(r));
       });
       await Promise.all(tasks);
     } else if (Object.keys(runtimeVars).length > 0) {
       // Single run with var bindings
       for (const session of sessions) {
-        const resolved = {
-          ...session,
-          behaviors: resolveVariables(
-            JSON.parse(JSON.stringify(session.behaviors)),
-            runtimeVars
-          ),
-        };
-        const result = await run(resolved, agentConfig, runtimeVars);
-        allResults.push(result);
+        allResults.push(await runOne(session, runtimeVars));
       }
     } else {
       // Single run, no dataset
       for (const session of sessions) {
-        const result = await run(session, agentConfig);
-        allResults.push(result);
+        allResults.push(await runOne(session, {}));
       }
     }
 
@@ -356,11 +372,13 @@ program
     if (options.format === "json") {
       output = JSON.stringify(
         {
+          run_id: runLogger.runId,
           passed: overallPassed,
           rows_total: rowsTotal,
           rows_passed: rowsPassed,
           results: allResults.map((r) => ({
             session: r.session,
+            row_index: (r as any).rowIndex,
             row_vars: r.rowVars,
             passed: r.passed,
             steps_total: r.stepsTotal,
@@ -370,12 +388,15 @@ program
             trace: r.steps.map((s) => ({
               step: s.step,
               behavior: {
+                id: s.behavior.id,
                 actor: s.behavior.actor,
                 action: s.behavior.action,
                 target: s.behavior.target,
+                optional: s.behavior.optional,
               },
               matched: s.matched,
               sent: s.sent,
+              skipped: s.skipped,
               observed: s.observed,
               evaluations: s.evaluations,
             })),
@@ -485,13 +506,21 @@ program
       }
     }
 
+    runLogger.event("run.end", "info", {
+      passed: overallPassed,
+      rows_total: rowsTotal,
+      rows_passed: rowsPassed,
+      duration_ms: runLogger.elapsedMs(),
+    });
     if (options.output) {
       writeFileSync(options.output, output);
+      runLogger.event("report.written", "info", { path: options.output, format: options.format });
       console.log(`Report written to ${options.output}`);
     } else {
       console.log(output);
     }
 
+    closeLogging();
     process.exit(overallPassed ? 0 : 1);
   });
 
@@ -642,9 +671,117 @@ function collectAdapter(
   value: string,
   previous: Record<string, string>
 ): Record<string, string> {
-  const [k, v] = value.split("=");
-  previous[k] = v;
+  if (value.includes("=")) {
+    const [k, ...rest] = value.split("=");
+    previous[k.trim()] = rest.join("=").trim();
+  } else {
+    // Bare provider: `--adapter azure` becomes the default for all its types.
+    previous[value.trim()] = "";
+  }
   return previous;
+}
+
+// ── Evaluator adapter registry ──
+
+interface AdapterProvider {
+  module: string;
+  fn: string;
+  configure?: string;
+  /** Evaluator types this provider can handle. */
+  supported: string[];
+}
+
+const ADAPTER_PROVIDERS: Record<string, AdapterProvider> = {
+  aievaluator: {
+    module: "./evaluators/adapters/aievaluator",
+    fn: "aievaluatorAdapter",
+    configure: "configureAIEvaluator",
+    supported: ["llm_judge", "Groundedness", "Relevance", "Coherence", "Fluency"],
+  },
+  azure: {
+    module: "./evaluators/adapters/azure",
+    fn: "azureAdapter",
+    configure: "configureAzure",
+    supported: ["llm_judge", "Groundedness", "Relevance", "Coherence", "Fluency", "custom"],
+  },
+  aws: {
+    module: "./evaluators/adapters/aws",
+    fn: "awsAdapter",
+    configure: "configureAws",
+    supported: ["llm_judge", "custom"],
+  },
+  google: {
+    module: "./evaluators/adapters/google",
+    fn: "googleAdapter",
+    configure: "configureGoogle",
+    supported: [
+      "llm_judge",
+      "Groundedness",
+      "Relevance",
+      "Coherence",
+      "Fluency",
+      "HateUnfairness",
+      "Violence",
+      "Sexual",
+      "SelfHarm",
+      "custom",
+    ],
+  },
+};
+
+/**
+ * Configure evaluator adapters from `--adapter` and `abs.config.yaml`.
+ *
+ *   --adapter azure            → azure becomes the default for all its types
+ *   --adapter llm_judge=azure  → azure becomes the default for llm_judge only
+ *   adapters: { llm_judge: aievaluator } in abs.config.yaml
+ *
+ * Every provider is also registered by name so a rule can select it with
+ * `adapter: <provider>`.
+ */
+function setupAdapters(
+  cliAdapters: Record<string, string>,
+  configAdapters: Record<string, string> | undefined
+): void {
+  const specs: { type?: string; provider: string }[] = [];
+  if (configAdapters) {
+    for (const [type, provider] of Object.entries(configAdapters)) {
+      specs.push({ type, provider: String(provider) });
+    }
+  }
+  for (const [key, value] of Object.entries(cliAdapters ?? {})) {
+    if (value) specs.push({ type: key, provider: value });
+    else specs.push({ provider: key });
+  }
+
+  for (const { type, provider } of specs) {
+    const entry = ADAPTER_PROVIDERS[provider];
+    if (!entry) {
+      console.error(chalk.yellow(`⚠️  Unknown adapter provider: ${provider}`));
+      continue;
+    }
+    let mod: any;
+    try {
+      mod = require(entry.module);
+    } catch (err: any) {
+      console.error(chalk.red(`❌ Cannot load adapter '${provider}': ${err.message}`));
+      continue;
+    }
+    if (entry.configure && typeof mod[entry.configure] === "function") {
+      mod[entry.configure]();
+    }
+    const fn = mod[entry.fn];
+    if (typeof fn !== "function") {
+      console.error(chalk.red(`❌ Adapter '${provider}' does not export ${entry.fn}`));
+      continue;
+    }
+    // Named registration → selectable per-rule via `adapter: <provider>`
+    for (const t of entry.supported) registerAdapter(t, fn, provider);
+    // Default registration
+    for (const t of type ? [type] : entry.supported) {
+      if (entry.supported.includes(t)) registerAdapter(t, fn);
+    }
+  }
 }
 
 function escapeXml(s: string): string {

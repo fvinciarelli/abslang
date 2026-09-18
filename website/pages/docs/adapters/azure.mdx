@@ -36,6 +36,22 @@ abslang run session.abs.yaml --agent $AGENT_URL --adapter azure
 Or per rule with `adapter: azure`. If a rule declares `adapter: azure` but azure was
 never registered, the runner reports a clear error instead of silently falling back.
 
+## TypeScript (npm)
+
+The npm package ships the same `--adapter azure` without the Python
+`azure-ai-evaluation` dependency. The adapter renders the official Azure prompt
+templates (MIT, pinned to `azure-ai-evaluation` 1.18.5) locally and calls your Azure
+OpenAI deployment's chat completions endpoint:
+
+```bash
+export AZURE_OPENAI_ENDPOINT=... AZURE_OPENAI_KEY=... AZURE_OPENAI_DEPLOYMENT=...
+abslang run session.abs.yaml --agent $AGENT_URL --adapter azure
+```
+
+Quality dimensions and `llm_judge` are faithful to the Python SDK. The agentic
+evaluators reuse the official templates with a simplified conversation rendering from
+the ABS trace, so scores are comparable in direction, not guaranteed byte-identical.
+
 ## Supported evaluators
 
 | ABS | Azure evaluator | Inputs |

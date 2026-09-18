@@ -93,9 +93,30 @@ export default function App() {
   const handleAdd = useCallback(
     (actor: string, action: string) => {
       const afterId = s.session.behaviors[s.session.behaviors.length - 1]?.id;
-      s.addBehavior(afterId, { actor, action });
+      return s.addBehavior(afterId, { actor, action });
     },
     [s.addBehavior, s.session.behaviors],
+  );
+
+  const handleConnect = useCallback(
+    (source: string, target: string) => {
+      s.updateBehavior(target, { requires: source, optional: true });
+    },
+    [s.updateBehavior],
+  );
+
+  const handleDisconnect = useCallback(
+    (target: string) => {
+      s.updateBehavior(target, { requires: undefined });
+    },
+    [s.updateBehavior],
+  );
+
+  const handleRemoveBehavior = useCallback(
+    (id: string) => {
+      s.removeBehavior(id);
+    },
+    [s.removeBehavior],
   );
 
   // VSCode bridge: receive documents
@@ -222,6 +243,10 @@ export default function App() {
               behaviors={s.session.behaviors}
               selectedId={s.selectedId}
               onSelect={onSelect}
+              onAdd={handleAdd}
+              onConnect={handleConnect}
+              onDisconnect={handleDisconnect}
+              onRemove={handleRemoveBehavior}
             />
           )}
         </Box>

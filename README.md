@@ -343,7 +343,7 @@ abslang chat
 
 `abslang` calls your agent, captures the full trace, and hands it off to **evaluators** — pluggable checkers that verify specific things. An evaluator is a function that receives `{type, input, context, response, threshold}` and returns `{passed, score, reason}`.
 
-Built-in evaluators run locally: `contains`, `regex`, `sequence`, `never`, plus safety dimensions (`Violence`, `HateUnfairness`, `Sexual`, `SelfHarm`) that ship with curated rubrics — no criteria to write. LLM-based evaluators — `llm_judge`, `Groundedness`, `Relevance` — need an **adapter**, a small bridge to an evaluation service. Azure AI Foundry, AWS Bedrock, and Google Vertex AI ship out of the box; anyone can add their own by implementing the adapter contract. The evaluator **never calls your agent**; it only looks at the trace that was already captured. [Want to build one? Here's how →](./docs/adapter-guide.md)
+Built-in evaluators run locally: `contains`, `regex`, `sequence`, `never`, reference metrics (`f1`, `bleu`, `rouge`), plus safety dimensions (`Violence`, `HateUnfairness`, `Sexual`, `SelfHarm`) that ship with curated rubrics — no criteria to write. LLM-based evaluators — `llm_judge`, `Groundedness`, `Relevance` — need an **adapter**, a small bridge to an evaluation service. Azure AI Foundry, AWS Bedrock, and Google Vertex AI ship out of the box; anyone can add their own by implementing the adapter contract. The evaluator **never calls your agent**; it only looks at the trace that was already captured. [Want to build one? Here's how →](./docs/adapter-guide.md)
 
 Switch evaluators — or the LLM behind them — by changing one flag. Your session file never changes:
 
@@ -399,7 +399,7 @@ Your session file never changes. Only the `--adapter` flag.
 |---|---|
 | [TUTORIAL.md](./TUTORIAL.md) | Step-by-step guide for QA — learn **Agent Behavior Specification** in 20 minutes |
 | [MANIFESTO.md](./MANIFESTO.md) | Why **Agent Behavior Specification** exists, principles, what it is and isn't |
-| [SPECIFICATION.md](./SPECIFICATION.md) | Formal v0.1 spec — document format, conformance |
+| [SPECIFICATION.md](./SPECIFICATION.md) | Formal v0.2 spec — document format, conformance |
 | [CORE_MODEL.md](./CORE_MODEL.md) | Session, Behavior, Actor, Action, Target, Content, Variables, Evaluations |
 | [VOCABULARY.md](./VOCABULARY.md) | Standard action vocabulary and semantics |
 | [EVALUATIONS.md](./EVALUATIONS.md) | How Behaviors are verified |
@@ -407,7 +407,7 @@ Your session file never changes. Only the `--adapter` flag.
 | [COMPOSITION.md](./COMPOSITION.md) | Fragments and reusable Behaviors |
 | [TOOLS.md](./TOOLS.md) | Tool interaction — `calls`, `responds`, matching rules |
 | [RUNNER.md](./RUNNER.md) | How **Agent Behavior Specification** sessions get executed against a real agent |
-| [CLI.md](./CLI.md) | `abslang init`, `abslang run`, `abslang report` — the command-line interface |
+| [CLI.md](./CLI.md) | `abslang init`, `chat`, `run`, `report`, `generate-ci` — the command-line interface, adapters, and structured logs |
 | [PATTERNS.md](./PATTERNS.md) | How to model real agent behaviors — recipes, not reference |
 | [EXAMPLES.md](./EXAMPLES.md) | Worked, narrated examples |
 | [ROADMAP.md](./ROADMAP.md) | What's next, and open design questions |
@@ -415,6 +415,7 @@ Your session file never changes. Only the `--adapter` flag.
 | [docs/adapters/azure.md](./docs/adapters/azure.md) | Azure AI Foundry adapter — setup and evaluators |
 | [docs/adapters/aws.md](./docs/adapters/aws.md) | AWS Bedrock adapter — setup and evaluators |
 | [docs/adapters/google.md](./docs/adapters/google.md) | Google Vertex AI adapter — setup and evaluators |
+| [docs/adapter-guide.md](./docs/adapter-guide.md) | How to build your own evaluator adapter |
 | [examples/](./examples/) | Runnable example sessions in `.yaml` |
 | [.plans/branching-optional-behaviors.md](./.plans/branching-optional-behaviors.md) | v0.2 design: optional behaviors, branching |
 
@@ -422,16 +423,22 @@ Your session file never changes. Only the `--adapter` flag.
 
 v0.2 introduces **optional behaviors** — agent-driven branching without separate sessions. New concepts: `optional`, `requires`, `matches_when` (llm_judge / contains / regex), `expected` evaluator, `when` expressions, `after`. The runner now observes the agent's real decisions and validates whether they were correct, rather than following a rigid script. See [SPECIFICATION.md §7](./SPECIFICATION.md#7-optional-behaviors-v02) and the example above.
 
-## What's new — adapters & safety dimensions
+## What's new — adapters, reference metrics & observability
 
-- **Pick your evaluation engine.** `--adapter azure` (Azure AI Foundry), `--adapter aws` (AWS Bedrock), `--adapter google` (Google Vertex AI), `--adapter aievaluator`, or the built-in judge — your session file never changes. Select an engine per rule with `adapter:`.
+- **Pick your evaluation engine.** `--adapter azure` (Azure AI Foundry), `--adapter aws` (AWS Bedrock), `--adapter google` (Google Vertex AI) — all three ship on Python and npm — plus `--adapter aievaluator` or the built-in judge. Your session file never changes. Select an engine per rule with `adapter:`.
 - **Safety checks, no criteria needed.** `Violence`, `HateUnfairness`, `Sexual`, and `SelfHarm` ship with curated rubrics and work with any engine. Override the rubric with `criteria:` when you need a stricter definition.
+- **Reference metrics, offline.** `f1`, `bleu`, and `rouge` compare the response against a declared `ground_truth` — deterministic, no model, no cost. See [EVALUATIONS.md](./EVALUATIONS.md#reference-based-evaluators--f1-bleu-rouge).
+- **Structured logs.** `--log-format jsonl`, `--log-level`, and `--log-file` emit a stable event stream (run → session → step → evaluation) on stderr for CI and dashboards. See [CLI.md](./CLI.md#structured-logs-and-progress).
+- **Azure adapter on npm.** `--adapter azure` now works in the TypeScript CLI by rendering the official Azure prompt templates locally against your Azure OpenAI deployment — no Python SDK, no Foundry project. See [docs/adapters/azure.md](./docs/adapters/azure.md#typescript-npm).
 - **Deterministic first.** Declare expected behavior (`optional` + `expected` + `when` + a dataset) and ABS checks it deterministically; use `llm_judge` for what genuinely can't be declared. See the [manifesto](./MANIFESTO.md).
 
 ## Status of the standard
 
 Closed in v0.2:
 Optional Behaviors · `expected` evaluator · `matches_when` semantic matching · `when` expressions · batch optional resolution.
+
+Closed in v0.3 (implementation):
+Reference metrics (`f1`, `bleu`, `rouge`) with `ground_truth` · per-rule `adapter:` selection enforced in both implementations · structured logs (`--log-format jsonl`) and machine-readable failure codes · Azure, AWS, and Google adapters on npm.
 
 Closed in v0.1:
 Scope · Session · Behavior · Actor · Action · Target · Content · Variables · Evaluations (step-level + chain-level) · Vocabulary · Sequencing · Fragments · Tool Interaction · JSON Schema · alternate flows as separate Sessions.

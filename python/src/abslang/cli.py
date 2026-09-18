@@ -23,6 +23,7 @@ from .runner import run, AgentConfig, RunResult
 from .evaluators.builtin_judge import configure_builtin_judge
 from .formatters.table import format_table, format_json_output, format_junit
 from .config import merge_config
+from .log import configure_logging, close_logging, new_run_id, RunLogger
 
 SMOKE_SESSION = """session: Order status
 description: User asks about an order. Happy path.
@@ -287,6 +288,14 @@ def init():
 @click.option("--timeout", type=int, default=300, help="Timeout per session run in seconds")
 @click.option("--output", "output_file", help="Write report to file")
 @click.option("--parallel", type=int, default=1, help="Run N dataset rows in parallel")
+@click.option("--log-format", "log_format", type=click.Choice(["pretty", "jsonl"]), default="pretty",
+              help="Progress/log format: pretty (human) or jsonl (one event per line)")
+@click.option("--log-level", "log_level", type=click.Choice(["error", "warn", "info", "debug"]), default="info",
+              help="Minimum log level")
+@click.option("--log-file", "log_file", default=None,
+              help="Write machine-readable JSONL events to a file")
+@click.option("--no-log-content", "no_log_content", is_flag=True,
+              help="Omit trace content and reasons from logs (privacy)")
 def run_cmd(
     session: str,
     agent: Optional[str],
@@ -312,6 +321,10 @@ def run_cmd(
     timeout: int,
     output_file: Optional[str],
     parallel: int,
+    log_format: str,
+    log_level: str,
+    log_file: Optional[str],
+    no_log_content: bool,
 ):
     """Execute ABS sessions against an agent.
 
@@ -345,6 +358,18 @@ def run_cmd(
 
     # Configure evaluator adapters (CLI --adapter + abs.config.yaml adapters:)
     _setup_adapters(adapters, cfg.get("adapters"))
+
+    # Structured logging: stderr (+ optional JSONL file), never stdout.
+    configure_logging(
+        level=log_level,
+        format=log_format,
+        file=log_file,
+        include_content=not no_log_content,
+        abslang=__version__,
+        agent=agent_url,
+        agent_format=agent_format,
+    )
+    run_logger = RunLogger(run_id=new_run_id())
 
     # Configure built-in LLM judge (CLI flags override env vars)
     configure_builtin_judge(
@@ -408,29 +433,47 @@ def run_cmd(
     # Run
     all_results: list[dict[str, Any]] = []
 
+    run_logger.event(
+        "run.start",
+        sessions=len(sessions),
+        dataset_rows=len(dataset) if dataset else None,
+        adapters=list(adapters) if adapters else (cfg.get("adapters") or None),
+    )
+
     async def _run_all():
         nonlocal all_results
 
-        async def run_one(sess: NormalizedSession, vars_dict: dict[str, Any]):
+        async def run_one(
+            sess: NormalizedSession,
+            vars_dict: dict[str, Any],
+            row_index: int = 0,
+            row_vars: dict[str, Any] | None = None,
+        ):
             import copy
             sess_copy = copy.deepcopy(sess)
             sess_copy.behaviors = resolve_variables(sess_copy.behaviors, vars_dict)
-            result = await run(sess_copy, agent_config, vars_dict)
-            return {"result": result, "row_vars": vars_dict}
+            session_logger = RunLogger(
+                run_id=run_logger.run_id,
+                session=sess.session,
+                row=row_index if dataset is not None else None,
+                row_vars=row_vars if row_vars is not None else (vars_dict or None),
+            )
+            result = await run(sess_copy, agent_config, vars_dict, session_logger)
+            return {"result": result, "row_vars": vars_dict, "row_index": row_index}
 
         if dataset:
             sem = asyncio.Semaphore(parallel)
-            async def run_with_semaphore(row: dict[str, Any]):
+            async def run_with_semaphore(index: int, row: dict[str, Any]):
                 async with sem:
                     # Prefix columns with dataset id if declared in-file
                     prefixed = {f"{dataset_id}.{k}": v for k, v in row.items()} if dataset_id else row
                     vars_combined = {**runtime_vars, **prefixed}
                     tasks = []
                     for sess in sessions:
-                        tasks.append(run_one(sess, vars_combined))
+                        tasks.append(run_one(sess, vars_combined, row_index=index, row_vars=row))
                     return await asyncio.gather(*tasks)
-            
-            all_batches = await asyncio.gather(*[run_with_semaphore(row) for row in dataset])
+
+            all_batches = await asyncio.gather(*[run_with_semaphore(i, row) for i, row in enumerate(dataset)])
             for batch in all_batches:
                 all_results.extend(batch)
         elif runtime_vars:
@@ -448,14 +491,31 @@ def run_cmd(
     overall_passed = all(r["result"].passed for r in all_results)
 
     # Format output
+    def _eval_dict(e) -> dict[str, Any]:
+        data: dict[str, Any] = {
+            "type": e.type,
+            "passed": e.passed,
+            "score": e.score,
+            "reason": e.reason,
+            "blocking": e.blocking,
+            "inconclusive": e.inconclusive,
+        }
+        for key in ("code", "details", "threshold", "adapter", "duration_ms"):
+            value = getattr(e, key, None)
+            if value is not None:
+                data[key] = value
+        return data
+
     if output_format == "json":
         output = json.dumps({
+            "run_id": run_logger.run_id,
             "passed": overall_passed,
             "rows_total": rows_total,
             "rows_passed": rows_passed,
             "results": [
                 {
                     "session": r["result"].session,
+                    "row_index": r.get("row_index"),
                     "row_vars": r["row_vars"],
                     "passed": r["result"].passed,
                     "steps_total": r["result"].steps_total,
@@ -466,29 +526,27 @@ def run_cmd(
                         {
                             "step": s.step,
                             "behavior": {
+                                "id": s.behavior.id,
                                 "actor": s.behavior.actor,
                                 "action": s.behavior.action,
                                 "target": s.behavior.target,
+                                "optional": s.behavior.optional,
                             },
                             "matched": s.matched,
                             "sent": s.sent,
+                            "skipped": s.skipped,
                             "observed": {
                                 "actor": s.observed.actor if s.observed else None,
                                 "action": s.observed.action if s.observed else None,
                                 "target": s.observed.target if s.observed else None,
-                                "content": str(s.observed.content) if s.observed else None,
+                                "content": s.observed.content if s.observed else None,
+                                "tool_call_id": getattr(s.observed, "tool_call_id", None) if s.observed else None,
                             } if s.observed else None,
-                            "evaluations": [
-                                {"type": e.type, "passed": e.passed, "score": e.score, "reason": e.reason}
-                                for e in s.evaluations
-                            ],
+                            "evaluations": [_eval_dict(e) for e in s.evaluations],
                         }
                         for s in r["result"].steps
                     ],
-                    "chain_evaluations": [
-                        {"type": e.type, "passed": e.passed, "score": e.score, "reason": e.reason}
-                        for e in r["result"].chain_evaluations
-                    ],
+                    "chain_evaluations": [_eval_dict(e) for e in r["result"].chain_evaluations],
                 }
                 for r in all_results
             ],
@@ -566,12 +624,21 @@ def run_cmd(
 
             output = "\n".join(lines)
 
+    run_logger.event(
+        "run.end",
+        passed=overall_passed,
+        rows_total=rows_total,
+        rows_passed=rows_passed,
+        duration_ms=run_logger.elapsed_ms(),
+    )
     if output_file:
         Path(output_file).write_text(output)
+        run_logger.event("report.written", path=str(output_file), format=output_format)
         click.echo(f"Report written to {output_file}")
     else:
         click.echo(output)
 
+    close_logging()
     sys.exit(0 if overall_passed else 1)
 
 

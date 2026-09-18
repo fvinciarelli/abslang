@@ -162,6 +162,7 @@ def _not_configured(type_name: str) -> EvalResult:
         type=type_name,
         passed=False,
         score=0.0,
+        code="adapter.not_configured",
         reason=(
             "Azure AI Evaluation is not configured. Set it up:\n"
             "  pip install azure-ai-evaluation\n"
@@ -216,6 +217,15 @@ async def azure_adapter(
     trace: list[ObservedStep],
     evaluation: dict[str, Any],
 ) -> EvalResult:
+    result = await _route(trace, evaluation)
+    result.adapter = result.adapter or "azure"
+    return result
+
+
+async def _route(
+    trace: list[ObservedStep],
+    evaluation: dict[str, Any],
+) -> EvalResult:
     eval_type = evaluation["type"]
 
     if eval_type == "llm_judge":
@@ -229,6 +239,7 @@ async def azure_adapter(
         type=eval_type,
         passed=False,
         score=0.0,
+        code="adapter.unsupported_type",
         reason=f"Azure adapter does not support evaluator type: {eval_type}",
     )
 
@@ -264,6 +275,7 @@ async def _llm_judge(trace: list[ObservedStep], evaluation: dict[str, Any]) -> E
                 type="llm_judge",
                 passed=False,
                 score=0.0,
+                code="adapter.error",
                 reason=f"Azure judge returned {resp.status_code}: {resp.text[:200]}",
             )
         content = resp.json()["choices"][0]["message"]["content"]
@@ -276,7 +288,7 @@ async def _llm_judge(trace: list[ObservedStep], evaluation: dict[str, Any]) -> E
             reason=parsed["reason"],
         )
     except Exception as e:
-        return EvalResult(type="llm_judge", passed=False, score=0.0, reason=f"Azure judge error: {e}")
+        return EvalResult(type="llm_judge", passed=False, score=0.0, code="adapter.error", reason=f"Azure judge error: {e}")
 
 
 async def _builtin(
@@ -289,6 +301,7 @@ async def _builtin(
             type=eval_type,
             passed=False,
             score=0.0,
+            code="adapter.not_configured",
             reason="azure-ai-evaluation is not installed. Run: pip install azure-ai-evaluation",
         )
     cfg = _get_model_config()
@@ -300,7 +313,7 @@ async def _builtin(
     try:
         evaluator = _make_evaluator(cls_name)
     except Exception as e:
-        return EvalResult(type=eval_type, passed=False, score=0.0, reason=f"Azure {cls_name} init error: {e}")
+        return EvalResult(type=eval_type, passed=False, score=0.0, code="adapter.error", reason=f"Azure {cls_name} init error: {e}")
 
     self_content = _last_assistant_content(trace)
     kwargs: dict[str, Any] = {}
@@ -321,7 +334,7 @@ async def _builtin(
             reason=f"[{metric_key}] {reason}" if reason else f"[{metric_key}] score {score:.2f}",
         )
     except Exception as e:
-        return EvalResult(type=eval_type, passed=False, score=0.0, reason=f"Azure {cls_name} error: {e}")
+        return EvalResult(type=eval_type, passed=False, score=0.0, code="adapter.error", reason=f"Azure {cls_name} error: {e}")
 
 
 async def _custom(trace: list[ObservedStep], evaluation: dict[str, Any]) -> EvalResult:
@@ -331,6 +344,7 @@ async def _custom(trace: list[ObservedStep], evaluation: dict[str, Any]) -> Eval
             type="custom",
             passed=False,
             score=0.0,
+            code="adapter.unknown_evaluator",
             reason=f"Unknown Azure custom evaluator: {eid} (available: {', '.join(CUSTOM_EVALUATORS)})",
         )
 
@@ -339,6 +353,7 @@ async def _custom(trace: list[ObservedStep], evaluation: dict[str, Any]) -> Eval
             type="custom",
             passed=False,
             score=0.0,
+            code="adapter.not_configured",
             reason="azure-ai-evaluation is not installed. Run: pip install azure-ai-evaluation",
         )
     cfg = _get_model_config()
@@ -350,7 +365,7 @@ async def _custom(trace: list[ObservedStep], evaluation: dict[str, Any]) -> Eval
     try:
         evaluator = _make_evaluator(cls_name)
     except Exception as e:
-        return EvalResult(type="custom", passed=False, score=0.0, reason=f"Azure {cls_name} init error: {e}")
+        return EvalResult(type="custom", passed=False, score=0.0, code="adapter.error", reason=f"Azure {cls_name} init error: {e}")
 
     conv = trace_to_conversation(trace)
     kwargs: dict[str, Any] = {"query": conv["query"], "response": conv["response"]}
@@ -362,6 +377,7 @@ async def _custom(trace: list[ObservedStep], evaluation: dict[str, Any]) -> Eval
                 type="custom",
                 passed=False,
                 score=0.0,
+                code="evaluator.missing_input",
                 reason="azure.tool_call_accuracy requires tool_definitions (add a tools: block or inline tool_definitions)",
             )
         kwargs["tool_definitions"] = td
@@ -377,4 +393,4 @@ async def _custom(trace: list[ObservedStep], evaluation: dict[str, Any]) -> Eval
             reason=f"[{eid}] {reason}" if reason else f"[{eid}] score {score:.2f}",
         )
     except Exception as e:
-        return EvalResult(type="custom", passed=False, score=0.0, reason=f"Azure {eid} error: {e}")
+        return EvalResult(type="custom", passed=False, score=0.0, code="adapter.error", reason=f"Azure {eid} error: {e}")

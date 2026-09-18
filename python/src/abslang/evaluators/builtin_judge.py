@@ -306,6 +306,7 @@ async def evaluate(trace: list[Any], evaluation: dict[str, Any]) -> Any:
             type=etype,
             passed=False,
             score=0.0,
+            code="adapter.not_configured",
             reason=(
                 "No LLM provider available. Set one of:\n"
                 "  OPENAI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY\n"
@@ -334,5 +335,6 @@ async def evaluate(trace: list[Any], evaluation: dict[str, Any]) -> Any:
             type=etype,
             passed=False,
             score=0.0,
+            code="adapter.error",
             reason=f"Judge error ({provider}): {e}",
         )

@@ -162,7 +162,7 @@
           "type": "string",
           "enum": [
             "exact_match", "contains", "regex", "schema", "tool_call",
-            "llm_judge", "custom",
+            "llm_judge", "custom", "f1", "bleu", "rouge",
             "Groundedness", "Relevance", "Coherence", "Fluency",
             "HateUnfairness", "Violence", "Sexual", "SelfHarm",
             "sequence", "eventually", "never", "count", "within", "variable_consistency",
@@ -173,6 +173,20 @@
         "blocking": { "type": "boolean" },
         "threshold": { "type": "number", "minimum": 0, "maximum": 1 },
         "adapter": { "type": "string" },
+        "ground_truth": {
+          "type": "string",
+          "description": "Reference text or trace reference for the reference-based evaluators (f1, bleu, rouge). Resolves like query/context/response; `self` means the declared content of the behavior carrying the evaluation. v0.3+"
+        },
+        "variant": {
+          "type": "string",
+          "enum": ["rouge1", "rouge2", "rougeL"],
+          "description": "For rouge: n-gram variant. Default: rougeL. v0.3+"
+        },
+        "metric": {
+          "type": "string",
+          "enum": ["precision", "recall", "f1"],
+          "description": "For rouge: which score to use. Default: f1. v0.3+"
+        },
         "behavior": { "type": "string", "description": "For expected: ID of the optional behavior to check. v0.2+." },
         "reason": { "type": "string", "description": "For expected: human-readable failure message. v0.2+." },
         "when": { "type": "string", "description": "Dataset expression. The evaluation only runs when this evaluates to true. v0.2+." },

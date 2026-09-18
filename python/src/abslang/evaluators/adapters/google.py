@@ -98,6 +98,7 @@ def _not_configured(type_name: str) -> EvalResult:
         type=type_name,
         passed=False,
         score=0.0,
+        code="adapter.not_configured",
         reason=(
             "Google Vertex AI Evaluation is not configured. Set it up:\n"
             "  pip install 'abslang[google]'\n"
@@ -210,6 +211,7 @@ async def google_adapter(
         type=eval_type,
         passed=False,
         score=0.0,
+        code="adapter.unsupported_type",
         reason=f"Google adapter does not support evaluator type: {eval_type}",
     )
 
@@ -226,7 +228,7 @@ def _resolve_inputs(trace: list[ObservedStep], evaluation: dict[str, Any]) -> di
 
 async def _managed(trace: list[ObservedStep], evaluation: dict[str, Any], eval_type: str) -> EvalResult:
     if not _sdk_available():
-        return EvalResult(type=eval_type, passed=False, score=0.0,
+        return EvalResult(type=eval_type, passed=False, score=0.0, code="adapter.not_configured",
                           reason="google-cloud-aiplatform is not installed. Run: pip install 'abslang[google]'")
     if not _get_project():
         return _not_configured(eval_type)
@@ -246,12 +248,12 @@ async def _managed(trace: list[ObservedStep], evaluation: dict[str, Any], eval_t
             reason=f"[{metric_name}] {reason}" if reason else f"[{metric_name}] score {score:.2f}",
         )
     except Exception as e:
-        return EvalResult(type=eval_type, passed=False, score=0.0, reason=f"Google {eval_type} error: {e}")
+        return EvalResult(type=eval_type, passed=False, score=0.0, code="adapter.error", reason=f"Google {eval_type} error: {e}")
 
 
 async def _llm_judge(trace: list[ObservedStep], evaluation: dict[str, Any]) -> EvalResult:
     if not _sdk_available():
-        return EvalResult(type="llm_judge", passed=False, score=0.0,
+        return EvalResult(type="llm_judge", passed=False, score=0.0, code="adapter.not_configured",
                           reason="google-cloud-aiplatform is not installed. Run: pip install 'abslang[google]'")
     if not _get_project():
         return _not_configured("llm_judge")
@@ -272,12 +274,12 @@ async def _llm_judge(trace: list[ObservedStep], evaluation: dict[str, Any]) -> E
             reason=f"[{metric_name}] {reason}" if reason else f"[{metric_name}] score {score:.2f}",
         )
     except Exception as e:
-        return EvalResult(type="llm_judge", passed=False, score=0.0, reason=f"Google judge error: {e}")
+        return EvalResult(type="llm_judge", passed=False, score=0.0, code="adapter.error", reason=f"Google judge error: {e}")
 
 
 async def _custom(trace: list[ObservedStep], evaluation: dict[str, Any]) -> EvalResult:
     if not _sdk_available():
-        return EvalResult(type="custom", passed=False, score=0.0,
+        return EvalResult(type="custom", passed=False, score=0.0, code="adapter.not_configured",
                           reason="google-cloud-aiplatform is not installed. Run: pip install 'abslang[google]'")
     if not _get_project():
         return _not_configured("custom")
@@ -285,7 +287,7 @@ async def _custom(trace: list[ObservedStep], evaluation: dict[str, Any]) -> Eval
     eid = evaluation.get("id", "custom")
     criteria = evaluation.get("criteria") or evaluation.get("prompt")
     if not criteria:
-        return EvalResult(type="custom", passed=False, score=0.0,
+        return EvalResult(type="custom", passed=False, score=0.0, code="evaluator.missing_input",
                           reason=f"Google custom evaluator '{eid}' requires a 'criteria' or 'prompt' field.")
     scale_max = _scale_max(evaluation.get("rating_scale", "1-5"))
 
@@ -302,4 +304,4 @@ async def _custom(trace: list[ObservedStep], evaluation: dict[str, Any]) -> Eval
             reason=f"[{eid}] {reason}" if reason else f"[{eid}] score {score:.2f}",
         )
     except Exception as e:
-        return EvalResult(type="custom", passed=False, score=0.0, reason=f"Google {eid} error: {e}")
+        return EvalResult(type="custom", passed=False, score=0.0, code="adapter.error", reason=f"Google {eid} error: {e}")

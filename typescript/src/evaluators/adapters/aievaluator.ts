@@ -65,7 +65,7 @@ function getClient(): any {
 
 // ── Main adapter ──
 
-async function aievaluatorAdapter(
+export async function aievaluatorAdapter(
   trace: ObservedStep[],
   evaluation: any
 ): Promise<EvalResult> {
@@ -75,6 +75,7 @@ async function aievaluatorAdapter(
       type: evaluation.type,
       passed: false,
       score: 0,
+      code: "adapter.not_configured",
       reason:
         "AI Evaluator is not installed. Install it and try again:\n" +
         "  npm install -g aievaluator\n" +
@@ -129,7 +130,7 @@ async function aievaluatorAdapter(
     const result = await client.evaluateDirect([rowPayload], [metric], undefined, thresholds);
     const row = result.results?.[0];
     if (!row) {
-      return { type: evalType, passed: false, score: 0, reason: "No result from AI Evaluator" };
+      return { type: evalType, passed: false, score: 0, code: "adapter.error", reason: "No result from AI Evaluator" };
     }
 
     const score = row.scores?.[metric] ?? row.scores?.[Object.keys(row.scores)[0]] ?? 0.5;
@@ -148,6 +149,7 @@ async function aievaluatorAdapter(
       type: evalType,
       passed: false,
       score: 0,
+      code: "adapter.error",
       reason: `AI Evaluator error: ${err.message}`,
     };
   }
@@ -159,7 +161,7 @@ export function configureAIEvaluator(cfg: {
   apiKey?: string;
   engineUrl?: string;
   judgeModel?: string;
-}): void {
+} = {}): void {
   if (cfg.apiKey) process.env.AIEVALUATOR_API_KEY = cfg.apiKey;
   if (cfg.engineUrl) process.env.AIEVALUATOR_ENGINE_URL = cfg.engineUrl;
 

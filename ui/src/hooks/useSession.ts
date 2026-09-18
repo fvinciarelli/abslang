@@ -44,8 +44,8 @@ export function useSession() {
   }, []);
 
   const addBehavior = useCallback((afterId?: string, initial?: Partial<Behavior>) => {
+    const nb = { ...newBehavior(), ...initial };
     setSession((prev) => {
-      const nb = { ...newBehavior(), ...initial };
       const idx = afterId
         ? prev.behaviors.findIndex((b) => b.id === afterId)
         : prev.behaviors.length - 1;
@@ -54,12 +54,16 @@ export function useSession() {
       setSelectedId(nb.id);
       return { ...prev, behaviors: updated };
     });
+    return nb.id;
   }, []);
 
   const removeBehavior = useCallback((id: string) => {
     setSession((prev) => {
       const index = prev.behaviors.findIndex((b) => b.id === id);
-      const nextBehaviors = prev.behaviors.filter((b) => b.id !== id);
+      // Drop the behavior and clear any `requires` that pointed at it.
+      const nextBehaviors = prev.behaviors
+        .filter((b) => b.id !== id)
+        .map((b) => (b.requires === id ? { ...b, requires: undefined } : b));
 
       if (selectedId === id) {
         const replacement = nextBehaviors[index] ?? nextBehaviors[index - 1] ?? null;

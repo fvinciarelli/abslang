@@ -508,6 +508,7 @@ OPENAI_API_KEY=sk-... abslang run session.abs.yaml --agent $URL
 | Category | Types | Needs |
 |---|---|---|
 | **Built-in** | `contains`, `exact_match`, `regex`, `schema`, `tool_call` | Nothing — runs locally |
+| **Reference metrics** | `f1`, `bleu`, `rouge` (with `ground_truth`) | Nothing — deterministic, runs locally |
 | **Chain** | `sequence`, `eventually`, `never`, `count`, `within`, `variable_consistency` | Nothing — runs locally |
 | **`llm_judge`** | Free-form criteria in natural language | Built-in judge (auto-detects OpenAI/Anthropic/Gemini), Azure, AWS Bedrock, Google Vertex AI, or AI Evaluator |
 | **Quality dimensions** | `Groundedness`, `Relevance`, `Coherence`, `Fluency` | Azure AI Foundry, Google Vertex AI, or AI Evaluator |

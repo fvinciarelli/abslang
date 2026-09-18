@@ -9,6 +9,7 @@ Tell ABS what you want to check, in plain words, and pick the evaluator:
 | the response contains a word or phrase | `contains` |
 | the response is exactly this | `exact_match` |
 | the response matches a pattern | `regex` |
+| the response is close to a reference text (graded) | `f1`, `bleu`, `rouge` |
 | the response is valid structured data | `schema` |
 | the agent called the right tool, with the right parameters | `tool_call` |
 | steps happened in the right order | `sequence` |
@@ -74,12 +75,15 @@ Every evaluator type accepts these optional fields in addition to its type-speci
 |---|---|---|
 | `threshold` | number (0–1) | Minimum score for this evaluation to pass. Default: `0.5`. Applies to evaluators that produce a score: `llm_judge`, `custom`, and composition types (`all_of`, `any_of`, `none_of`). Non-scoring evaluators (`contains`, `exact_match`, `sequence`, etc.) ignore it. |
 | `adapter` | string | Opaque identifier selecting which LLM judge implementation to use. The runner maps this string to a configured adapter at execution time (via CLI flag `--adapter`, config file, or environment variable). If omitted, the runner uses its default adapter. Examples of values a deployment might use: `aievaluator`, `azure`, `aws`, `google`, `builtin`. |
+| `ground_truth` | string | Reference for the reference-based evaluators (`f1`, `bleu`, `rouge`). Resolves like `query`/`context`/`response`: `self` (the declared content of the behavior carrying the evaluation), a trace reference (`behavior_id.action`, `actor.action`), or an already-resolved literal (`{{cases.expected}}`). |
 | `dataset` | string, array, or object | Reference data passed to the evaluator. Can be: a UUID string referencing an external dataset registry, an inline array of objects (`[{context: ..., response: ...}]`), or a JSONL string. The adapter decides how to use it. |
 | `prompt` | string | Custom prompt template for evaluators that call an LLM. Variables like `{{criteria}}`, `{{context}}`, `{{response}}` are interpolated by the adapter before sending to the judge. |
 
 ### Adapter selection and score normalization
 
 `adapter` is enforced at run time. Resolution order: a named adapter registered for `(type, adapter)` wins; otherwise the default adapter for that type is used. If `adapter: <name>` names an adapter that was never registered, the run reports a clear error instead of silently falling back. Register adapters with `--adapter <provider>`, `--adapter <type>=<provider>`, or `adapters:` in `abs.config.yaml`.
+
+`azure` is available in both implementations. The npm adapter has no Python SDK dependency: it renders the official Azure prompt templates locally against your deployment ([docs/adapters/azure.md §TypeScript](./docs/adapters/azure.md#typescript-npm)). `aws` and `google` are also available on npm: the AWS adapter uses `@aws-sdk/client-bedrock-runtime`, and the Google adapter renders the official pointwise templates through `@google-cloud/vertexai` ([docs/adapters](./docs/adapters/)). The built-in judge (OpenAI/Anthropic/Gemini, or any OpenAI-compatible endpoint) works everywhere and needs no adapter install.
 
 Adapters return scores normalized to 0–1. Provider scales (e.g. Azure's 1–5 Likert) are normalized by the adapter before `threshold` is applied, so a `threshold` of 0–1 is meaningful regardless of provider.
 
@@ -235,6 +239,80 @@ evaluations:
     threshold: 0.5
 ```
 
+## Reference-based evaluators — `f1`, `bleu`, `rouge`
+
+These compare the observed response against a **declared reference** using pure
+algorithms: no model, no network, no adapter. They run offline and deterministically,
+which makes them ideal for CI regression on expected answers.
+
+```yaml
+behaviors:
+  - actor: user
+    action: says
+    content: "What is the capital of France?"
+
+  - actor: assistant
+    action: informs
+    content: "The capital of France is Paris."
+    evaluations:
+      - type: f1
+        ground_truth: self        # the behavior's declared content
+        threshold: 0.6
+      - type: rouge
+        ground_truth: "{{cases.expectedAnswer}}"
+        variant: rougeL
+        metric: f1
+        threshold: 0.5
+      - type: bleu
+        ground_truth: "{{cases.expectedAnswer}}"
+        threshold: 0.3
+```
+
+`ground_truth` resolves like `query`/`context`/`response`:
+
+| Form | Meaning |
+|---|---|
+| `self` | the **declared content** of the behavior carrying the evaluation — the expected value |
+| `behavior_id.action` / `actor.action` | a step already in the trace (`kb.responds`, `user.says`) |
+| literal or `{{cases.column}}` | an already-resolved value from a dataset |
+
+The observed response defaults to the step being evaluated (`response: self`). Use
+`response: <ref>` to compare against another step instead.
+
+| Type | What it measures | Options | Score |
+|---|---|---|---|
+| `f1` | token-level (unigram) overlap: harmonic mean of precision and recall | — | 0–1 |
+| `bleu` | n-gram precision (orders 1–4) with brevity penalty | — | 0–1 |
+| `rouge` | n-gram or longest-common-subsequence overlap | `variant: rouge1 \| rouge2 \| rougeL` (default `rougeL`), `metric: precision \| recall \| f1` (default `f1`) | 0–1 |
+
+Results carry the full breakdown in `details`: `f1` and `rouge` expose
+`precision`/`recall`/`f1`, and `bleu` exposes its per-order `precisions` and
+`brevity_penalty`.
+
+The algorithm is part of the contract so every implementation agrees on the score:
+
+- **Tokenization**: lowercase, Unicode word characters (`\w+`).
+- **F1**: multiset (count-aware) overlap between response and reference tokens.
+- **BLEU**: BLEU-4 with add-1 smoothing (`(matches + 1) / (total + 1)`), effective
+  order (orders longer than the response are skipped), and brevity penalty
+  `min(1, exp(1 - ref_len / obs_len))`.
+- **ROUGE-L**: longest common subsequence precision/recall/F1.
+
+**Thresholds.** These scores have task-specific distributions. The default `0.5` is
+reasonable for `f1` and `rougeL`, but BLEU is stricter: set an explicit threshold
+calibrated on your dataset (often 0.2–0.4 for paraphrase-tolerant matching).
+
+Use these when you have a *reference* answer and want a graded, reproducible score.
+For exact or containment checks use `exact_match`/`contains`. For semantic
+equivalence without a reference (paraphrases, synonyms) use an LLM-based evaluator
+(`llm_judge`, `Groundedness`, `Relevance`) or a provider `custom` id such as
+`azure.similarity`.
+
+Model-based reference metrics stay vendor-specific until they converge across
+providers: `azure.similarity` (semantic similarity to a ground truth) and
+`azure.response_completeness` (preview, recall against a ground truth) are used as
+`custom` evaluators.
+
 ## Step-level evaluator types
 
 ```yaml
@@ -376,6 +454,8 @@ Note that listing multiple evaluations directly under a Behavior's `evaluations:
 
 **Escape hatch: `blocking: true`.** An evaluation MAY set `blocking: true` to mark it as a checkpoint. If a `blocking: true` evaluation fails, any other evaluation whose Behavior depends — directly or via a captured variable — on the step that failed SHOULD be reported as `inconclusive` rather than `failed`, since the input it needed may never have been produced correctly. This keeps a single early failure from generating a wall of misleading downstream failures.
 
+**Machine-readable failures.** Implementations SHOULD attach a stable `code` to failed results alongside the human-readable `reason`, so CI can classify failures without parsing text. The catalog currently includes `evaluator.threshold_not_met`, `evaluator.missing_input`, `evaluator.invalid_option`, `evaluator.unknown_type`, `adapter.not_configured`, `adapter.unsupported_type`, `adapter.unknown_evaluator`, and `adapter.error`. Reports and structured logs expose `code` (and the optional `details` payload) — see CLI.md.
+
 ```yaml
 - actor: assistant
   action: calls
@@ -391,3 +471,4 @@ Note that listing multiple evaluations directly under a Behavior's `evaluations:
 ## Open questions
 
 - Whether the Sression-level `evaluations` should be able to reference a specific Behavior by an explicit `id:` field (rather than only by selector) once real documents show selectors are ambiguous in practice.
+- Whether `rouge` should return one score (today: the selected `metric`, with the full breakdown in `details`) or the three values as separate evaluators.

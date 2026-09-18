@@ -215,7 +215,7 @@ def resolve_variables(
             capture=b.capture,
             with_=_resolve_value(b.with_, variables) if b.with_ else None,
             with_only=_resolve_value(b.with_only, variables) if b.with_only else None,
-            evaluations=b.evaluations,
+            evaluations=[_resolve_value(e, variables) for e in b.evaluations] if b.evaluations else None,
             optional=b.optional,
             requires=b.requires,
             matches_when=_resolve_value(b.matches_when, variables) if b.matches_when else None,

@@ -2,12 +2,14 @@
 
 import json
 import os
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
 
+from .log import RunLogger
 from .parser import Behavior, NormalizedSession, resolve_variables
 from .evaluators import (
     ObservedStep,
@@ -526,7 +528,12 @@ _AGENT_ADAPTERS = {
 
 # ── Runner ──
 
-async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: dict[str, Any] | None = None) -> RunResult:
+async def run(
+    session: NormalizedSession,
+    agent_config: AgentConfig,
+    row_vars: dict[str, Any] | None = None,
+    logger: RunLogger | None = None,
+) -> RunResult:
     adapter = _AGENT_ADAPTERS.get(agent_config.format, _openai_adapter)
     trace: list[ObservedStep] = []
     step_results: list[StepResult] = []
@@ -539,6 +546,39 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
     turn_start = 0
     turn_consumed = 0
 
+    logger = logger or RunLogger(session=session.session)
+    logger.event("session.start", behaviors=len(session.behaviors))
+
+    async def _evaluate_rule(
+        rule: dict[str, Any],
+        observed: ObservedStep | None,
+        behavior: Behavior | None,
+        step: int | None,
+    ) -> EvalResult:
+        """Evaluate one rule, apply threshold, log the result."""
+        rule_started = time.perf_counter()
+        adapter_result = await evaluate_with_adapter(rule["type"], trace, rule, rule.get("adapter"))
+        if adapter_result is not None:
+            result = apply_threshold(adapter_result, rule)
+        else:
+            result = apply_threshold(
+                evaluate_step(observed, rule, session.behaviors, trace, behavior), rule
+            )
+        result.duration_ms = int((time.perf_counter() - rule_started) * 1000)
+        logger.event(
+            "evaluation.result",
+            step=step,
+            evaluation_type=result.type,
+            adapter=result.adapter,
+            passed=result.passed,
+            score=result.score,
+            threshold=result.threshold,
+            code=result.code,
+            duration_ms=result.duration_ms,
+            reason=result.reason if logger.content_enabled() else None,
+        )
+        return result
+
     for behavior in session.behaviors:
         step_num += 1
 
@@ -546,6 +586,10 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
         if behavior.requires and behavior.requires in skipped_ids:
             if behavior.id:
                 skipped_ids.add(behavior.id)
+            logger.event(
+                "behavior.skipped", step=step_num, behavior_id=behavior.id,
+                actor=behavior.actor, action=behavior.action, reason="requires",
+            )
             step_results.append(StepResult(
                 step=step_num, behavior=behavior,
                 observed=None, matched=False, skipped=True, evaluations=[],
@@ -574,9 +618,15 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
             turn_start = len(trace)
             turn_consumed = 0
 
+            agent_started = time.perf_counter()
+            logger.event("agent.request", step=step_num, messages=len(messages))
             try:
                 new_msgs = await adapter(list(messages), agent_config)
             except Exception as e:
+                logger.event(
+                    "agent.error", level="error", step=step_num, error=str(e),
+                    duration_ms=int((time.perf_counter() - agent_started) * 1000),
+                )
                 step_results.append(StepResult(
                     step=step_num, behavior=behavior, matched=False, sent=True,
                 ))
@@ -584,6 +634,10 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
                     actor="error", action="responds", content=f"Agent error: {e}",
                 ))
                 continue
+            logger.event(
+                "agent.response", step=step_num, new_messages=len(new_msgs),
+                duration_ms=int((time.perf_counter() - agent_started) * 1000),
+            )
 
             for msg in new_msgs:
                 messages.append(msg)
@@ -605,6 +659,10 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
                         content=msg.content,
                     ))
 
+            logger.event(
+                "behavior.match", step=step_num, behavior_id=behavior.id,
+                actor=behavior.actor, action=behavior.action, matched=True, sent=True,
+            )
             step_results.append(StepResult(
                 step=step_num, behavior=behavior, matched=False, sent=True,
             ))
@@ -647,17 +705,30 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
             ))
             turn_consumed += 1
 
+            agent_started = time.perf_counter()
+            logger.event("agent.request", step=step_num, messages=len(messages))
             try:
                 new_msgs = await adapter(list(messages), agent_config)
+                logger.event(
+                    "agent.response", step=step_num, new_messages=len(new_msgs),
+                    duration_ms=int((time.perf_counter() - agent_started) * 1000),
+                )
                 for msg in new_msgs:
                     messages.append(msg)
                     if msg.role == "assistant" and msg.content:
                         trace.append(ObservedStep(
                             actor="assistant", action="responds", content=msg.content,
                         ))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.event(
+                    "agent.error", level="error", step=step_num, error=str(e),
+                    duration_ms=int((time.perf_counter() - agent_started) * 1000),
+                )
 
+            logger.event(
+                "behavior.match", step=step_num, behavior_id=behavior.id,
+                actor=behavior.actor, action=behavior.action, matched=True,
+            )
             step_results.append(StepResult(
                 step=step_num,
                 behavior=behavior,
@@ -721,6 +792,10 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
             if behavior.optional and not matched:
                 if behavior.id:
                     skipped_ids.add(behavior.id)
+                logger.event(
+                    "behavior.skipped", step=step_num, behavior_id=behavior.id,
+                    actor=behavior.actor, action=behavior.action, reason="optional",
+                )
                 step_results.append(StepResult(
                     step=step_num, behavior=behavior,
                     observed=observed, matched=False, skipped=True, evaluations=[],
@@ -734,19 +809,16 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
 
             match_observed = observed if matched else None
 
+            logger.event(
+                "behavior.match", step=step_num, behavior_id=behavior.id,
+                actor=behavior.actor, action=behavior.action, matched=matched,
+            )
+
             # Run step-level evaluations
             eval_results: list[EvalResult] = []
             if behavior.evaluations:
                 for rule in behavior.evaluations:
-                    adapter_result = await evaluate_with_adapter(
-                        rule["type"], trace, rule, rule.get("adapter"),
-                    )
-                    if adapter_result is not None:
-                        eval_results.append(apply_threshold(adapter_result, rule))
-                    else:
-                        eval_results.append(
-                            apply_threshold(evaluate_step(match_observed, rule, session.behaviors, trace), rule)
-                        )
+                    eval_results.append(await _evaluate_rule(rule, match_observed, behavior, step_num))
 
             step_results.append(StepResult(
                 step=step_num,
@@ -777,13 +849,7 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
                 if not eval_when(rule["when"], row_vars or {}):
                     chain_evals.append(EvalResult(type="never", passed=True, score=1.0, reason="when condition not met — skipped"))
                     continue
-            adapter_result = await evaluate_with_adapter(rule["type"], trace, rule, rule.get("adapter"))
-            if adapter_result is not None:
-                chain_evals.append(apply_threshold(adapter_result, rule))
-            else:
-                chain_evals.append(
-                    apply_threshold(evaluate_step(None, rule, session.behaviors, trace), rule)
-                )
+            chain_evals.append(await _evaluate_rule(rule, None, None, None))
 
     all_evals = [e for s in step_results for e in s.evaluations] + chain_evals
 
@@ -792,7 +858,7 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
 
     all_evals_final = [e for s in step_results for e in s.evaluations] + chain_evals
 
-    return RunResult(
+    result = RunResult(
         session=session.session,
         agent=agent_config.url,
         passed=all(e.passed or e.inconclusive for e in all_evals_final),
@@ -803,6 +869,16 @@ async def run(session: NormalizedSession, agent_config: AgentConfig, row_vars: d
         evaluations_total=len(all_evals_final),
         evaluations_passed=sum(1 for e in all_evals_final if e.passed or e.inconclusive),
     )
+    logger.event(
+        "session.end",
+        passed=result.passed,
+        steps_total=result.steps_total,
+        steps_matched=result.steps_matched,
+        evaluations_total=result.evaluations_total,
+        evaluations_passed=result.evaluations_passed,
+        duration_ms=logger.elapsed_ms(),
+    )
+    return result
 
 
 def _try_parse_json(s: str) -> Any:

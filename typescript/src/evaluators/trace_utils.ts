@@ -6,7 +6,7 @@
  * `kb_result.responds` against the trace.
  */
 
-import { ObservedStep } from "./builtin";
+import type { ObservedStep } from "./builtin";
 
 export const COMM_ACTIONS = [
   "says",
@@ -98,4 +98,96 @@ export function resolveRef(
   }
 
   return ref;
+}
+
+// ── OpenAI-style message mapping ──
+
+/**
+ * Convert an ABS trace into an OpenAI-style message array.
+ *
+ * Mapping:
+ *   - `user` / `system` steps          → text messages
+ *   - consecutive `assistant` `calls`  → one assistant message with tool_call items
+ *   - `tool` `responds`                → a tool message with a tool_result item
+ *   - other `assistant` steps          → text messages
+ */
+export function traceToMessages(trace: ObservedStep[], toolCallPrefix = "call_abs_"): any[] {
+  const messages: any[] = [];
+  const pendingIds: string[] = [];
+  let seq = 0;
+  const nextId = () => `${toolCallPrefix}${seq++}`;
+
+  let i = 0;
+  while (i < trace.length) {
+    const step = trace[i];
+
+    // Group consecutive tool calls into a single assistant message
+    if (step.actor === "assistant" && step.action === "calls") {
+      const contentItems: any[] = [];
+      while (i < trace.length && trace[i].actor === "assistant" && trace[i].action === "calls") {
+        const call = trace[i];
+        const id = call.tool_call_id ?? nextId();
+        contentItems.push({
+          type: "tool_call",
+          tool_call_id: id,
+          name: call.target ?? "",
+          arguments: call.with ?? {},
+        });
+        pendingIds.push(id);
+        i++;
+      }
+      messages.push({ role: "assistant", content: contentItems });
+      continue;
+    }
+
+    if (step.actor === "tool") {
+      let id = step.tool_call_id;
+      if (!id && pendingIds.length > 0) id = pendingIds.shift();
+      if (!id) id = nextId();
+      messages.push({
+        role: "tool",
+        tool_call_id: id,
+        content: [{ type: "tool_result", tool_result: step.content ?? "" }],
+      });
+      i++;
+      continue;
+    }
+
+    if (step.actor === "user" || step.actor === "system") {
+      messages.push({ role: step.actor, content: toText(step.content) });
+    } else if (step.actor === "assistant") {
+      messages.push({ role: "assistant", content: toText(step.content) });
+    }
+    // other actors (human, external, error) are skipped
+
+    i++;
+  }
+
+  return messages;
+}
+
+/** Split a trace into the `{query, response}` conversation shape. */
+export function traceToConversation(
+  trace: ObservedStep[],
+  toolCallPrefix = "call_abs_"
+): { query: any[]; response: any[] } {
+  const query: any[] = [];
+  const response: any[] = [];
+  for (const msg of traceToMessages(trace, toolCallPrefix)) {
+    if (msg.role === "system" || msg.role === "user") query.push(msg);
+    else response.push(msg);
+  }
+  return { query, response };
+}
+
+/** Return the assistant `calls` steps in order. */
+export function extractToolCalls(trace: ObservedStep[]): ObservedStep[] {
+  return trace.filter((s) => s.actor === "assistant" && s.action === "calls");
+}
+
+/** Return the ordered list of tool names called by the assistant. */
+export function extractToolTrajectory(trace: ObservedStep[]): string[] {
+  return extractToolCalls(trace)
+    .map((s) => s.target)
+    .filter((target): target is string => Boolean(target));
 }

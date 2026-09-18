@@ -69,6 +69,7 @@ async def aievaluator_adapter(
             type=evaluation["type"],
             passed=False,
             score=0.0,
+            code="adapter.not_configured",
             reason=(
                 "AI Evaluator is not installed. Install it and try again:\n"
                 "  pip install aievaluator\n"
@@ -144,6 +145,7 @@ async def aievaluator_adapter(
                 type=eval_type,
                 passed=False,
                 score=0.0,
+                code="adapter.error",
                 reason=f"AI Evaluator returned {resp.status_code}: {resp.text[:200]}",
             )
 
@@ -151,7 +153,7 @@ async def aievaluator_adapter(
 
         row = (data.get("results") or [{}])[0]
         if not row:
-            return EvalResult(type=eval_type, passed=False, score=0.0, reason="No result from AI Evaluator")
+            return EvalResult(type=eval_type, passed=False, score=0.0, code="adapter.error", reason="No result from AI Evaluator")
 
         scores = row.get("scores", {})
         score = scores.get(metric, list(scores.values())[0] if scores else 0.5)
@@ -171,6 +173,7 @@ async def aievaluator_adapter(
             type=eval_type,
             passed=False,
             score=0.0,
+            code="adapter.error",
             reason=f"AI Evaluator error: {e}",
         )
 

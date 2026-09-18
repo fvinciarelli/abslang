@@ -426,6 +426,7 @@ When you add an `llm_judge`, `Groundedness`, `Relevance`, `Coherence`, `Fluency`
 | `Relevance` — answers the question | Azure AI Foundry, Google Vertex AI, AI Evaluator |
 | `Coherence` — logical flow | Azure AI Foundry, Google Vertex AI, AI Evaluator |
 | `Fluency` — language quality | Azure AI Foundry, Google Vertex AI, AI Evaluator |
+| `f1` / `bleu` / `rouge` — graded match against a reference | Nothing — deterministic, runs locally (no judge) |
 | `Violence` / `HateUnfairness` / `Sexual` / `SelfHarm` | Built-in judge (curated rubric — no criteria to write) |
 
 ### Built-in judge: zero setup
@@ -591,6 +592,7 @@ adapter.evaluate(
 | `contains` | Text includes a substring | Hard facts: IDs, amounts, names |
 | `exact_match` | Text equals exactly | Deterministic responses |
 | `regex` | Text matches a pattern | Formats: emails, dates, codes |
+| `f1` / `bleu` / `rouge` | Response is graded against a reference (`ground_truth`) | Regression on expected answers |
 | `schema` | Content validates against JSON Schema | API responses |
 | `llm_judge` | Qualitative criteria in natural language | Tone, empathy, completeness |
 | `sequence` | Multiple steps occur in order | Multi-step flows |

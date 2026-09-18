@@ -167,6 +167,32 @@ evaluations:
     id: my-org.sentiment-positive
 ```
 
+### Reference-based evaluators — `f1`, `bleu`, `rouge`
+
+Deterministic metrics against a declared **reference**. No model, no network, no cost —
+ideal for CI regression on expected answers:
+
+```yaml
+evaluations:
+  - type: f1
+    ground_truth: self          # the behavior's declared content
+    threshold: 0.6
+  - type: rouge
+    ground_truth: "{{cases.expectedAnswer}}"
+    variant: rougeL
+    metric: f1
+    threshold: 0.5
+```
+
+`f1` measures token-level overlap, `bleu` n-gram precision (BLEU-4 with add-1
+smoothing), and `rouge` n-gram / longest-common-subsequence overlap
+(`variant: rouge1 | rouge2 | rougeL`, `metric: precision | recall | f1`).
+`ground_truth` resolves like `query`/`context`/`response`: `self` (the declared
+content of the behavior), a trace reference (`kb.responds`), or an already-resolved
+dataset value. Results expose the full `precision`/`recall`/`f1` breakdown in
+`details`. For semantic similarity instead of token overlap, use `llm_judge` or a
+provider `custom` id such as `azure.similarity`.
+
 ### Quality dimensions — `Groundedness`, `Relevance`, `Coherence`, `Fluency`
 
 Standard quality checks every major platform supports. Point them at the trace and

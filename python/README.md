@@ -52,6 +52,9 @@ abslang run sessions/ --agent $STAGING --dataset datasets/ --format junit --ci >
 | `--agent-format` | `openai` (default), `responses`, `claude`, or `gemini` |
 | `--agent-auth` | `none`, `api_key`, `bearer`, or `oauth2` |
 | `--agent-token` | Auth token or API key |
+| `--agent-refresh-url` | OAuth2 token refresh URL |
+| `--agent-refresh-token` | OAuth2 refresh token |
+| `--agent-client-id` | OAuth2 client ID |
 | `--agent-model` | Model/deployment for model endpoints (e.g. Azure OpenAI Responses) — omit when the agent owns its model |
 | `--agent-forward-auth` | Forward the caller's `Authorization` header to the agent |
 | `--agent-authorization` | Raw `Authorization` header value to forward |
@@ -65,6 +68,12 @@ abslang run sessions/ --agent $STAGING --dataset datasets/ --format junit --ci >
 | `--timeout <n>` | Timeout per session in seconds (default: 300) |
 | `--output <path>` | Write report to file |
 | `--parallel <n>` | Run N dataset rows in parallel |
+| `--log-format` | `pretty` (default) or `jsonl` (one event per line) |
+| `--log-level` | `error`, `warn`, `info` (default), `debug` |
+| `--log-file` | Write machine-readable JSONL events to a file |
+| `--no-log-content` | Omit trace content and reasons from logs (privacy) |
+
+You can also run the module directly: `python -m abslang run ...`.
 
 ### `abslang report`
 

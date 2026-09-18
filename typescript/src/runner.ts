@@ -8,6 +8,7 @@ import {
   expected,
   evalWhen,
 } from "./evaluators";
+import { RunLogger } from "./log";
 
 // ── Agent adapter interface ──
 
@@ -614,7 +615,8 @@ const agentAdapters: Record<string, AgentAdapterFn> = {
 export async function run(
   session: NormalizedSession,
   agentConfig: AgentConfig,
-  rowVars?: Record<string, any>
+  rowVars?: Record<string, any>,
+  logger?: RunLogger
 ): Promise<RunResult> {
   const adapter = agentAdapters[agentConfig.format ?? "openai"] ?? openaiAdapter;
   const trace: ObservedStep[] = [];
@@ -628,12 +630,52 @@ export async function run(
   let turnStart = 0;
   let turnConsumed = 0;
 
+  logger = logger ?? new RunLogger({ session: session.session });
+  logger.event("session.start", "info", { behaviors: session.behaviors.length });
+
+  /** Evaluate one rule, apply threshold, log the result. */
+  const evaluateRule = async (
+    rule: any,
+    observed: ObservedStep | null,
+    behavior: Behavior | undefined,
+    step: number | undefined
+  ): Promise<EvalResult> => {
+    const ruleStarted = Date.now();
+    const adapterResult = await evaluateWithAdapter(rule.type, trace, rule, rule.adapter);
+    const result = adapterResult
+      ? applyThreshold(adapterResult, rule)
+      : applyThreshold(
+          evaluateStep(observed, rule, session.behaviors, trace, behavior),
+          rule
+        );
+    result.durationMs = Date.now() - ruleStarted;
+    logger!.event("evaluation.result", "info", {
+      step,
+      evaluation_type: result.type,
+      adapter: result.adapter,
+      passed: result.passed,
+      score: result.score,
+      threshold: result.threshold,
+      code: result.code,
+      duration_ms: result.durationMs,
+      reason: logger!.contentEnabled() ? result.reason : undefined,
+    });
+    return result;
+  };
+
   for (const behavior of session.behaviors) {
     stepNum++;
 
     // ── v0.2: skip if dependency was not matched ──
     if (behavior.requires && skippedIds.has(behavior.requires)) {
       if (behavior.id) skippedIds.add(behavior.id);
+      logger.event("behavior.skipped", "info", {
+        step: stepNum,
+        behavior_id: behavior.id,
+        actor: behavior.actor,
+        action: behavior.action,
+        reason: "requires",
+      });
       stepResults.push({
         step: stepNum,
         behavior,
@@ -668,9 +710,16 @@ export async function run(
       turnConsumed = 0;
 
       let response: AgentResponse;
+      const userAgentStarted = Date.now();
+      logger.event("agent.request", "info", { step: stepNum, messages: messages.length });
       try {
         response = await adapter([...messages], agentConfig);
       } catch (err: any) {
+        logger.event("agent.error", "error", {
+          step: stepNum,
+          error: err.message,
+          duration_ms: Date.now() - userAgentStarted,
+        });
         stepResults.push({
           step: stepNum,
           behavior,
@@ -687,6 +736,11 @@ export async function run(
         });
         continue;
       }
+      logger.event("agent.response", "info", {
+        step: stepNum,
+        new_messages: response.messages.length,
+        duration_ms: Date.now() - userAgentStarted,
+      });
 
       for (const msg of response.messages) {
         messages.push(msg);
@@ -701,6 +755,7 @@ export async function run(
               action: "calls",
               target: tc.function.name,
               with: tryParseJson(tc.function.arguments),
+              tool_call_id: tc.id,
             };
             trace.push(step);
           }
@@ -713,6 +768,7 @@ export async function run(
             action: "responds",
             target: msg.name,
             content: tryParseJson(msg.content ?? ""),
+            tool_call_id: msg.tool_call_id,
           };
         } else if (msg.role === "assistant") {
           observed = {
@@ -727,6 +783,14 @@ export async function run(
         }
       }
 
+      logger.event("behavior.match", "info", {
+        step: stepNum,
+        behavior_id: behavior.id,
+        actor: behavior.actor,
+        action: behavior.action,
+        matched: true,
+        sent: true,
+      });
       stepResults.push({
         step: stepNum,
         behavior,
@@ -763,9 +827,21 @@ export async function run(
 
       // Let agent continue with tool results
       let response: AgentResponse;
+      const toolAgentStarted = Date.now();
+      logger.event("agent.request", "info", { step: stepNum, messages: messages.length });
       try {
         response = await adapter([...messages], agentConfig);
+        logger.event("agent.response", "info", {
+          step: stepNum,
+          new_messages: response.messages.length,
+          duration_ms: Date.now() - toolAgentStarted,
+        });
       } catch (err: any) {
+        logger.event("agent.error", "error", {
+          step: stepNum,
+          error: err.message,
+          duration_ms: Date.now() - toolAgentStarted,
+        });
         stepResults.push({
           step: stepNum,
           behavior,
@@ -787,6 +863,13 @@ export async function run(
         }
       }
 
+      logger.event("behavior.match", "info", {
+        step: stepNum,
+        behavior_id: behavior.id,
+        actor: behavior.actor,
+        action: behavior.action,
+        matched: true,
+      });
       stepResults.push({
         step: stepNum,
         behavior,
@@ -856,6 +939,13 @@ export async function run(
       // ── v0.2: optional — skip if no match ──
       if (behavior.optional && !matched) {
         if (behavior.id) skippedIds.add(behavior.id);
+        logger.event("behavior.skipped", "info", {
+          step: stepNum,
+          behavior_id: behavior.id,
+          actor: behavior.actor,
+          action: behavior.action,
+          reason: "optional",
+        });
         stepResults.push({
           step: stepNum,
           behavior,
@@ -873,23 +963,20 @@ export async function run(
 
       const matchObserved: ObservedStep | null = matched ? observed : null;
 
+      logger.event("behavior.match", "info", {
+        step: stepNum,
+        behavior_id: behavior.id,
+        actor: behavior.actor,
+        action: behavior.action,
+        matched,
+      });
+
       // Run step-level evaluations
       const evalResults: EvalResult[] = [];
       if (behavior.evaluations) {
         for (const evalRule of behavior.evaluations) {
           // Try adapter first (llm_judge, etc.)
-          const adapterResult = await evaluateWithAdapter(
-            evalRule.type,
-            trace,
-            evalRule
-          );
-          if (adapterResult) {
-            evalResults.push(applyThreshold(adapterResult, evalRule));
-          } else {
-            evalResults.push(
-              evaluateStep(matchObserved, evalRule, session.behaviors, trace)
-            );
-          }
+          evalResults.push(await evaluateRule(evalRule, matchObserved, behavior, stepNum));
         }
       }
 
@@ -924,18 +1011,8 @@ export async function run(
           continue;
         }
       }
-      const adapterResult = await evaluateWithAdapter(
-        evalRule.type,
-        trace,
-        evalRule
-      );
-      if (adapterResult) {
-        chainEvaluations.push(applyThreshold(adapterResult, evalRule));
-      } else {
-        chainEvaluations.push(
-          evaluateStep(null, evalRule, session.behaviors, trace)
-        );
-      }
+      const adapterResult = await evaluateRule(evalRule, null, undefined, undefined);
+      chainEvaluations.push(adapterResult);
     }
   }
 
@@ -953,7 +1030,7 @@ export async function run(
     ...chainEvaluations,
   ];
 
-  return {
+  const result: RunResult = {
     session: session.session,
     agent: agentConfig.url,
     passed: allEvalsFinal.every((e) => e.passed || e.inconclusive),
@@ -964,6 +1041,15 @@ export async function run(
     evaluationsTotal: allEvalsFinal.length,
     evaluationsPassed: allEvalsFinal.filter((e) => e.passed || e.inconclusive).length,
   };
+  logger.event("session.end", "info", {
+    passed: result.passed,
+    steps_total: result.stepsTotal,
+    steps_matched: result.stepsMatched,
+    evaluations_total: result.evaluationsTotal,
+    evaluations_passed: result.evaluationsPassed,
+    duration_ms: logger.elapsedMs(),
+  });
+  return result;
 }
 
 function propagateBlocking(stepResults: StepResult[]): void {

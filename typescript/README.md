@@ -55,6 +55,9 @@ abslang run sessions/ --agent $STAGING --dataset datasets/ --format junit --ci >
 | `--agent-model` | Model/deployment for model endpoints (e.g. Azure OpenAI Responses) — omit when the agent owns its model |
 | `--agent-forward-auth` | Forward the caller's `Authorization` header to the agent |
 | `--agent-authorization` | Raw `Authorization` header value to forward |
+| `--agent-refresh-url` | OAuth2 token refresh URL |
+| `--agent-refresh-token` | OAuth2 refresh token |
+| `--agent-client-id` | OAuth2 client ID |
 | `--adapter llm_judge=<name>` | Route LLM evaluations through an adapter (`aievaluator`, `azure`, `aws`, `google`) — see below |
 | `--judge-base-url` | Built-in judge on a custom OpenAI-compatible endpoint (Azure/Foundry, Ollama, vLLM) |
 | `--judge-api-key` | Built-in judge API key (overrides `ABS_JUDGE_API_KEY` / `OPENAI_API_KEY`) |
@@ -65,6 +68,10 @@ abslang run sessions/ --agent $STAGING --dataset datasets/ --format junit --ci >
 | `--timeout <n>` | Timeout per session in seconds (default: 300) |
 | `--output <path>` | Write report to file |
 | `--parallel <n>` | Run N dataset rows in parallel |
+| `--log-format` | `pretty` (default) or `jsonl` (one event per line) |
+| `--log-level` | `error`, `warn`, `info` (default), `debug` |
+| `--log-file` | Write machine-readable JSONL events to a file |
+| `--no-log-content` | Omit trace content and reasons from logs (privacy) |
 
 ### `abslang report`
 
@@ -130,18 +137,20 @@ abslang run session.abs.yaml --agent $URL \
   --judge-model gpt-4o-mini
 ```
 
-**Azure AI Foundry** (quality dimensions + agentic evaluators):
+**Azure AI Foundry** (quality dimensions + agentic evaluators — no Python SDK needed):
 
 ```bash
-pip install "abslang[azure]"
 export AZURE_OPENAI_ENDPOINT=... AZURE_OPENAI_KEY=... AZURE_OPENAI_DEPLOYMENT=...
 abslang run session.abs.yaml --agent $URL --adapter azure
 ```
 
+The npm adapter renders the official Azure prompt templates locally and calls
+your deployment's chat completions endpoint.
+
 **AWS Bedrock** (LLM-as-judge):
 
 ```bash
-pip install "abslang[aws]"
+npm install @aws-sdk/client-bedrock-runtime
 export AWS_REGION=us-east-1
 abslang run session.abs.yaml --agent $URL --adapter aws
 ```
@@ -149,7 +158,7 @@ abslang run session.abs.yaml --agent $URL --adapter aws
 **Google Vertex AI** (quality + safety):
 
 ```bash
-pip install "abslang[google]"
+npm install @google-cloud/vertexai
 export GOOGLE_CLOUD_PROJECT=... GOOGLE_CLOUD_LOCATION=us-central1
 abslang run session.abs.yaml --agent $URL --adapter google
 ```

@@ -1,6 +1,6 @@
 import DocsLayout from '@/components/layout/DocsLayout';
 
-export const frontmatter = { title: 'CLI Reference', description: 'abslang init, abslang run, abslang report — the three commands that take ABS from a file to a quality gate in CI.' };
+export const frontmatter = { title: 'CLI Reference', description: 'abslang init, chat, run, report, generate-ci — the commands that take ABS from a file to a quality gate in CI.' };
 
 <DocsLayout frontmatter={frontmatter}>
 
@@ -14,13 +14,14 @@ All three should succeed on their first try.
 
 ---
 
-## The four commands
+## The five commands
 
 ```
 abslang init                    # Scaffold a project
 abslang chat                    # Generate a session by describing it in plain language
 abslang run                     # Execute sessions against an agent
 abslang report                  # View results from a previous run
+abslang generate-ci             # Generate a CI/CD workflow (GitHub Actions / GitLab CI)
 ```
 
 ---
@@ -158,6 +159,27 @@ Every flag can also be set via environment variable:
 
 ---
 
+## Structured logs and progress
+
+`run` writes progress and events to **stderr** and the final report to **stdout**, so
+`abslang run ... --format json > report.json` stays clean:
+
+```bash
+abslang run session.abs.yaml --agent $URL --log-format jsonl --log-file events.jsonl
+```
+
+- `--log-format pretty` (default) or `jsonl` (one JSON object per line).
+- `--log-level error | warn | info | debug`.
+- `--log-file` always writes JSONL, regardless of the console format.
+- `--no-log-content` omits trace content and reasons (privacy).
+
+Events cover `run`, `session`, `agent.request/response/error`, `behavior.match/skipped`,
+`evaluation.result`, and `report.written`, with a stable envelope (`v`, `ts`, `level`,
+`event`, `run_id`). Failed evaluations also carry a machine-readable `code`
+(`evaluator.threshold_not_met`, `adapter.not_configured`, …) alongside the human `reason`.
+
+---
+
 ## Evaluator adapters
 
 Pick where LLM-based evaluations are judged — without touching the session file:
@@ -189,6 +211,11 @@ abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
 Safety dimensions (`Violence`, `HateUnfairness`, `Sexual`, `SelfHarm`) work with the
 built-in judge out of the box — no criteria required. See
 [Evaluations](/abslang/docs/evaluations).
+
+`azure` ships with both the Python and npm CLIs (the npm adapter renders the official
+Azure prompt templates locally, without the Python SDK). `aws` and `google` also
+ship on npm — they need `@aws-sdk/client-bedrock-runtime` and `@google-cloud/vertexai`
+respectively.
 
 ---
 

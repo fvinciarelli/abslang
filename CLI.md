@@ -1,6 +1,6 @@
 # CLI
 
-> `abslang init`, `abslang run`, `abslang report`, `abslang chat`. Four commands that take **Agent Behavior Specification** from idea to quality gate.
+> `abslang init`, `abslang chat`, `abslang run`, `abslang report`, `abslang generate-ci`. Five commands that take **Agent Behavior Specification** from idea to quality gate.
 
 The CLI is the first thing anyone touches. It has to make three people happy at the same time:
 
@@ -12,16 +12,19 @@ All three should succeed on their first try.
 
 ---
 
-## The four commands
+## The five commands
 
 ```
 abslang init               # Scaffold a project
 abslang chat               # Generate a session by describing it in plain language
 abslang run                # Execute sessions against an agent
 abslang report             # View results from a previous run
+abslang generate-ci        # Generate a CI/CD workflow (GitHub Actions / GitLab CI)
 ```
 
 That's the surface. Everything else is flags.
+
+The Python implementation can also be invoked as a module: `python -m abslang run ...`. Both implementations accept the same flags.
 
 ---
 
@@ -238,6 +241,7 @@ Runs every `.abs.yaml` in the directory against every `.jsonl` whose filename st
 | `--agent-authorization` | No | — | Raw `Authorization` header value to forward (e.g. `Bearer eyJ...`) |
 | `--agent-refresh-url` | No | — | OAuth2 token refresh URL |
 | `--agent-refresh-token` | No | — | OAuth2 refresh token |
+| `--agent-client-id` | No | — | OAuth2 client ID |
 | `--adapter` | No | — | Evaluator adapter binding (repeatable: `--adapter llm_judge=azure`) |
 | `--judge-base-url` | No | — | Built-in judge: OpenAI-compatible base URL (Azure/Foundry, Ollama, vLLM, gateway) |
 | `--judge-api-key` | No | — | Built-in judge: API key (overrides `ABS_JUDGE_API_KEY` / `OPENAI_API_KEY`) |
@@ -248,6 +252,10 @@ Runs every `.abs.yaml` in the directory against every `.jsonl` whose filename st
 | `--timeout` | No | `300` | Timeout per session run in seconds |
 | `--output` | No | — | Write report to file instead of stdout |
 | `--parallel` | No | `1` | Number of dataset rows to run in parallel |
+| `--log-format` | No | `pretty` | Progress format: `pretty` (human) or `jsonl` (one event per line) |
+| `--log-level` | No | `info` | `error`, `warn`, `info`, `debug` |
+| `--log-file` | No | — | Write machine-readable JSONL events to a file |
+| `--no-log-content` | No | `false` | Omit trace content and reasons from logs (privacy) |
 
 ### Environment variables
 
@@ -268,6 +276,47 @@ Every flag can also be set via environment variable:
 | `ABS_JUDGE_API_KEY` | `--judge-api-key` |
 | `ABS_JUDGE_API_KEY_HEADER` | `--judge-api-key-header` |
 | `ABS_VAR_orderId` | `--var orderId=...` |
+
+### Structured logs and progress
+
+`run` writes progress and events to **stderr** and the final report to **stdout**, so
+both stay clean:
+
+```bash
+# report only — logs don't pollute the JSON
+abslang run session.abs.yaml --agent $URL --format json > report.json
+
+# machine-readable event stream alongside the report
+abslang run session.abs.yaml --agent $URL --log-format jsonl --log-file events.jsonl
+```
+
+- `--log-format pretty` (default) prints human lines: `→ evaluation.result step=2 passed=true score=0.83`.
+- `--log-format jsonl` prints one JSON object per line with a stable schema.
+- `--log-file` **always** writes JSONL, regardless of the console format.
+- `--log-level error` keeps only failures of the tool itself; `debug` also includes payload-level detail.
+- `--no-log-content` omits trace content and failure reasons from logs (privacy), while keeping the event structure.
+
+Every event shares a v1 envelope (`v`, `ts`, `level`, `event`, `run_id`) plus the
+bound context (`session`, `row`, `row_vars`):
+
+```json
+{"v":1,"ts":"2026-01-01T00:00:00.000Z","level":"info","event":"evaluation.result","run_id":"r_ab12cd34ef56","session":"refund","row":0,"step":2,"evaluation_type":"Groundedness","adapter":"azure","passed":true,"score":0.83,"threshold":0.8,"duration_ms":412}
+```
+
+| Event | When | Key fields |
+|---|---|---|
+| `run.start` / `run.end` | the CLI run begins/ends | `sessions`, `dataset_rows`, `adapters` / `passed`, `rows_total`, `rows_passed`, `duration_ms` |
+| `session.start` / `session.end` | one session + dataset row starts/ends | `behaviors` / `passed`, `steps_total`, `steps_matched`, `evaluations_total`, `evaluations_passed`, `duration_ms` |
+| `agent.request` / `agent.response` / `agent.error` | around every call to the agent | `step`, `messages`, `new_messages`, `duration_ms`, `error` |
+| `behavior.match` / `behavior.skipped` | matching decision per behavior | `step`, `behavior_id`, `actor`, `action`, `matched`, `sent`, `reason` |
+| `evaluation.result` | after every evaluator | `step`, `evaluation_type`, `adapter`, `passed`, `score`, `threshold`, `code`, `duration_ms` |
+| `report.written` | report persisted with `--output` | `path`, `format` |
+
+Failed evaluations also carry a machine-readable `code`, so CI can classify without
+parsing `reason`: `evaluator.threshold_not_met`, `evaluator.missing_input`,
+`evaluator.invalid_option`, `evaluator.unknown_type`, `adapter.not_configured`,
+`adapter.unsupported_type`, `adapter.unknown_evaluator`, `adapter.error`.
+`reason` remains the human-readable explanation.
 
 ### Evaluator adapters
 
@@ -300,6 +349,13 @@ abslang run session.abs.yaml --agent $URL --adapter llm_judge=aievaluator
 Safety dimensions (`Violence`, `HateUnfairness`, `Sexual`, `SelfHarm`) work with the
 built-in judge out of the box — no criteria required. See
 [EVALUATIONS.md](./EVALUATIONS.md) and [docs/adapters/](./docs/adapters/).
+
+`azure` ships with both the Python and npm CLIs. The npm adapter has no Python SDK
+dependency: it renders the official Azure prompt templates locally against your
+deployment ([docs/adapters/azure.md](./docs/adapters/azure.md#typescript-npm)).
+`aws` and `google` also ship on npm — the AWS adapter needs
+`@aws-sdk/client-bedrock-runtime` and the Google adapter `@google-cloud/vertexai`
+(see [docs/adapters/](./docs/adapters/)).
 
 ---
 

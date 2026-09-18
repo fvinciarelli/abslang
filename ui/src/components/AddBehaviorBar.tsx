@@ -70,7 +70,15 @@ export function AddBehaviorBar({ onAdd }: Props) {
               arrow
             >
               <IconButton
+                draggable
                 onClick={() => onAdd(item.actor, item.action)}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(
+                    'application/abs-node',
+                    JSON.stringify({ actor: item.actor, action: item.action }),
+                  );
+                  e.dataTransfer.effectAllowed = 'move';
+                }}
                 sx={{
                   width: 40,
                   height: 40,

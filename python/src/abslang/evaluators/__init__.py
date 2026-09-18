@@ -1,7 +1,9 @@
 """Built-in evaluators and adapter registry."""
 
 import json
+import math
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Callable, Awaitable
 
@@ -29,6 +31,15 @@ class EvalResult:
     reason: str
     blocking: bool = False
     inconclusive: bool = False
+    # Machine-readable failure classification (stable across runs) and the
+    # raw provider payload when the adapter has one. ``reason`` stays human.
+    code: str | None = None
+    details: dict[str, Any] | None = None
+    # Filled in by ``apply_threshold`` from the evaluation rule; useful for
+    # reports and structured logs.
+    threshold: float | None = None
+    adapter: str | None = None
+    duration_ms: int | None = None
 
 
 @dataclass
@@ -415,6 +426,246 @@ def tool_call_eval(trace: list[ObservedStep], rule: dict[str, Any]) -> EvalResul
     )
 
 
+# ── Reference-based text metrics (deterministic) ──
+#
+# These compare the observed response against a declared ``ground_truth`` using
+# pure algorithms: no model, no network, no adapter. The tokenization and the
+# metric variants are part of the contract so every implementation agrees on the
+# score (see EVALUATIONS.md).
+
+_TOKEN_RE = re.compile(r"\w+", re.UNICODE)
+BLEU_MAX_N = 4
+ROUGE_VARIANTS = ("rouge1", "rouge2", "rougeL")
+ROUGE_METRICS = ("precision", "recall", "f1")
+
+
+def _tokens(text: Any) -> list[str]:
+    return _TOKEN_RE.findall(str(text if text is not None else "").lower())
+
+
+def _ngrams(tokens: list[str], n: int) -> Counter:
+    return Counter(tuple(tokens[i:i + n]) for i in range(len(tokens) - n + 1))
+
+
+def _value_to_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, default=str)
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _prf(overlap: float, total_observed: float, total_reference: float) -> dict[str, float]:
+    precision = overlap / total_observed if total_observed else 0.0
+    recall = overlap / total_reference if total_reference else 0.0
+    f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) else 0.0
+    return {"precision": precision, "recall": recall, "f1": f1}
+
+
+def f1_score_metric(response: str, ground_truth: str) -> tuple[float, dict[str, Any]]:
+    """Token-level (unigram) F1 between response and reference."""
+    observed, reference = _tokens(response), _tokens(ground_truth)
+    if not observed or not reference:
+        return 0.0, _prf(0, len(observed), len(reference))
+    overlap = sum((Counter(observed) & Counter(reference)).values())
+    scores = _prf(overlap, len(observed), len(reference))
+    return scores["f1"], scores
+
+
+def bleu_metric(response: str, ground_truth: str) -> tuple[float, dict[str, Any]]:
+    """BLEU-4 with add-1 smoothing, effective order, and brevity penalty.
+
+    - Add-1 smoothing: ``p_n = (matches + 1) / (total + 1)``.
+    - Effective order: orders longer than the observed response are skipped.
+    - Brevity penalty: ``min(1, exp(1 - ref_len / obs_len))``.
+    """
+    observed, reference = _tokens(response), _tokens(ground_truth)
+    if not observed or not reference:
+        return 0.0, {"precisions": [], "brevity_penalty": 0.0}
+
+    precisions: list[float] = []
+    for n in range(1, BLEU_MAX_N + 1):
+        total = len(observed) - n + 1
+        if total <= 0:
+            continue
+        matches = sum((_ngrams(observed, n) & _ngrams(reference, n)).values())
+        precisions.append((matches + 1) / (total + 1))
+    if not precisions:
+        return 0.0, {"precisions": [], "brevity_penalty": 0.0}
+
+    log_mean = sum(math.log(p) for p in precisions) / len(precisions)
+    brevity_penalty = min(1.0, math.exp(1 - len(reference) / len(observed)))
+    score = brevity_penalty * math.exp(log_mean)
+    return score, {"precisions": precisions, "brevity_penalty": brevity_penalty}
+
+
+def _lcs_length(a: list[str], b: list[str]) -> int:
+    if not a or not b:
+        return 0
+    previous = [0] * (len(b) + 1)
+    for x in a:
+        current = [0]
+        for j, y in enumerate(b, 1):
+            if x == y:
+                current.append(previous[j - 1] + 1)
+            else:
+                current.append(max(previous[j], current[-1]))
+        previous = current
+    return previous[-1]
+
+
+def rouge_metric(response: str, ground_truth: str, variant: str = "rougeL") -> tuple[float, dict[str, Any]]:
+    """ROUGE-N (n=1,2) or ROUGE-L F1 between response and reference."""
+    observed, reference = _tokens(response), _tokens(ground_truth)
+    if variant == "rougeL":
+        lcs = _lcs_length(observed, reference)
+        scores = _prf(lcs, len(observed), len(reference))
+    else:
+        n = 1 if variant == "rouge1" else 2
+        observed_ngrams, reference_ngrams = _ngrams(observed, n), _ngrams(reference, n)
+        overlap = sum((observed_ngrams & reference_ngrams).values())
+        scores = _prf(overlap, sum(observed_ngrams.values()), sum(reference_ngrams.values()))
+    return scores["f1"], {**scores, "variant": variant}
+
+
+def _last_assistant_text(trace: list[ObservedStep]) -> str:
+    for step in reversed(trace):
+        if step.actor == "assistant" and step.content is not None:
+            return _value_to_text(step.content)
+    return ""
+
+
+def _metric_inputs(
+    observed: ObservedStep | None,
+    rule: dict[str, Any],
+    trace: list[ObservedStep],
+    behavior: Behavior | None,
+) -> tuple[str, str]:
+    """Resolve ``(response, ground_truth)`` for reference-based metrics.
+
+    ``ground_truth`` accepts the same references as ``query``/``context``/
+    ``response`` (``self``, ``behavior_id.action``, ``actor.action``) plus an
+    already-resolved literal (e.g. a dataset placeholder). For ``self`` the
+    reference is the *declared* content of the behavior carrying the evaluation:
+    in ABS the behavior content is the expected value, while the observed step
+    is the actual response.
+    """
+    from .trace_utils import resolve_ref  # local import to avoid a cycle
+
+    declared = _value_to_text(behavior.content) if behavior is not None else ""
+    observed_text = (
+        _value_to_text(observed.content) if observed is not None else _last_assistant_text(trace)
+    )
+
+    gt_ref = rule.get("ground_truth")
+    if gt_ref is None:
+        raise ValueError('requires a "ground_truth" field')
+    if gt_ref == "self":
+        ground_truth = declared or observed_text
+    else:
+        ground_truth = resolve_ref(trace, gt_ref, declared) or declared
+
+    response_ref = rule.get("response")
+    if not response_ref or response_ref == "self":
+        response = observed_text
+    else:
+        response = resolve_ref(trace, response_ref, observed_text) or observed_text
+
+    return response, ground_truth
+
+
+def _reference_metric(
+    metric_type: str,
+    compute: Callable[[str, str], tuple[float, dict[str, Any]]],
+    observed: ObservedStep | None,
+    rule: dict[str, Any],
+    trace: list[ObservedStep],
+    behavior: Behavior | None,
+) -> EvalResult:
+    try:
+        response, ground_truth = _metric_inputs(observed, rule, trace, behavior)
+    except ValueError as exc:
+        return EvalResult(
+            type=metric_type,
+            passed=False,
+            score=0.0,
+            reason=f"{metric_type}: {exc}",
+            code="evaluator.missing_input",
+        )
+
+    try:
+        score, details = compute(response, ground_truth)
+    except ValueError as exc:
+        return EvalResult(
+            type=metric_type,
+            passed=False,
+            score=0.0,
+            reason=f"{metric_type}: {exc}",
+            code="evaluator.invalid_option",
+        )
+
+    return EvalResult(
+        type=metric_type,
+        passed=score >= 0.5,  # provisional; apply_threshold refines when set
+        score=score,
+        reason=f"{metric_type}: score {score:.2f}",
+        details=details,
+    )
+
+
+def f1_eval(
+    observed: ObservedStep | None,
+    rule: dict[str, Any],
+    trace: list[ObservedStep],
+    behavior: Behavior | None = None,
+) -> EvalResult:
+    return _reference_metric("f1", f1_score_metric, observed, rule, trace, behavior)
+
+
+def bleu_eval(
+    observed: ObservedStep | None,
+    rule: dict[str, Any],
+    trace: list[ObservedStep],
+    behavior: Behavior | None = None,
+) -> EvalResult:
+    return _reference_metric("bleu", bleu_metric, observed, rule, trace, behavior)
+
+
+def rouge_eval(
+    observed: ObservedStep | None,
+    rule: dict[str, Any],
+    trace: list[ObservedStep],
+    behavior: Behavior | None = None,
+) -> EvalResult:
+    variant = str(rule.get("variant", "rougeL"))
+    metric = str(rule.get("metric", "f1"))
+    if variant not in ROUGE_VARIANTS:
+        return EvalResult(
+            type="rouge",
+            passed=False,
+            score=0.0,
+            reason=f'rouge: unknown variant "{variant}" (use rouge1, rouge2, rougeL)',
+            code="evaluator.invalid_option",
+        )
+    if metric not in ROUGE_METRICS:
+        return EvalResult(
+            type="rouge",
+            passed=False,
+            score=0.0,
+            reason=f'rouge: unknown metric "{metric}" (use precision, recall, f1)',
+            code="evaluator.invalid_option",
+        )
+
+    def compute(response: str, ground_truth: str) -> tuple[float, dict[str, Any]]:
+        score, details = rouge_metric(response, ground_truth, variant)
+        return float(details[metric]), {**details, "metric": metric}
+
+    return _reference_metric("rouge", compute, observed, rule, trace, behavior)
+
+
 # ── Step-level evaluator dispatch ──
 
 def evaluate_step(
@@ -422,6 +673,7 @@ def evaluate_step(
     evaluation: dict[str, Any],
     behaviors: list[Behavior],
     trace: list[ObservedStep],
+    behavior: Behavior | None = None,
 ) -> EvalResult:
     """Dispatch an evaluation rule to the appropriate built-in evaluator."""
     blocking = evaluation.get("blocking", False)
@@ -449,14 +701,20 @@ def evaluate_step(
         return _with_blocking(variable_consistency(trace, behaviors, evaluation), blocking)
     elif etype == "tool_call":
         return _with_blocking(tool_call_eval(trace, evaluation), blocking)
+    elif etype == "f1":
+        return _with_blocking(f1_eval(observed, evaluation, trace, behavior), blocking)
+    elif etype == "bleu":
+        return _with_blocking(bleu_eval(observed, evaluation, trace, behavior), blocking)
+    elif etype == "rouge":
+        return _with_blocking(rouge_eval(observed, evaluation, trace, behavior), blocking)
     elif etype == "llm_judge":
         return EvalResult(type="llm_judge", passed=False, score=0.0,
                           reason="No LLM judge adapter registered. Use --adapter llm_judge=<provider>.",
-                          blocking=blocking)
+                          blocking=blocking, code="adapter.not_configured")
     elif etype in ("Groundedness", "Relevance", "Coherence", "Fluency"):
         return EvalResult(type=etype, passed=False, score=0.0,
                           reason=f"No adapter registered for {etype}. Use --adapter {etype}=<provider>.",
-                          blocking=blocking)
+                          blocking=blocking, code="adapter.not_configured")
     elif etype in ("all_of", "any_of", "none_of"):
         return _evaluate_composition(trace, evaluation, behaviors)
     else:
@@ -466,6 +724,7 @@ def evaluate_step(
             score=0.0,
             reason=f"Unknown evaluator type: {etype}",
             blocking=blocking,
+            code="evaluator.unknown_type",
         )
 
 
@@ -476,10 +735,14 @@ def _with_blocking(result: EvalResult, blocking: bool) -> EvalResult:
 
 def apply_threshold(result: EvalResult, evaluation: dict[str, Any]) -> EvalResult:
     """Apply threshold from evaluation config to a result. Called by the runner."""
+    result.adapter = result.adapter or evaluation.get("adapter")
     threshold = evaluation.get("threshold")
-    if threshold is not None and result.score < threshold:
-        result.passed = False
-        result.reason = f"{result.reason} (score {result.score} < threshold {threshold})"
+    if threshold is not None:
+        result.threshold = threshold
+        if result.score < threshold:
+            result.passed = False
+            result.reason = f"{result.reason} (score {result.score} < threshold {threshold})"
+            result.code = result.code or "evaluator.threshold_not_met"
     return result
 
 
