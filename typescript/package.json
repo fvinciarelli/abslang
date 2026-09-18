@@ -10,6 +10,7 @@
     "dist/"
   ],
   "scripts": {
+    "gen:knowledge": "node ../scripts/build-knowledge.mjs",
     "build": "tsc",
     "start": "node dist/cli.js",
     "dev": "tsc && node dist/cli.js",
