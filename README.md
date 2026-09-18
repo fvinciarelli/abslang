@@ -34,7 +34,15 @@ Suppose you've been assigned this chatbot flow and need to evaluate it. Here's t
 
 A customer reports a damaged item. The agent handles the refund across three turns — classifying the request, processing the refund, and closing the conversation. **Five LLM-as-judge evaluations run across three distinct stages**, sharing the accumulated trace at each point.
 
-```mermaid
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagram-refund-flow-dark.svg">
+  <img src="docs/images/diagram-refund-flow.svg" alt="Refund flow: the user reports a damaged item, the assistant clarifies, approves the refund and closes. Five evaluations run across the three assistant turns." width="820">
+</picture>
+
+<details>
+<summary>Diagram source</summary>
+
+```text
 flowchart TD
     U1["User: I received a damaged item, I want my money back. Order #8291."]
     A1["Assistant: I understand your order #8291 arrived damaged. I'll help you get a refund."]
@@ -49,6 +57,8 @@ flowchart TD
     A2 -.-|evaluate| E2["contains: R-5512 | llm_judge: states amount, timeline, tone | Relevance"]
     A3 -.-|evaluate| E3["llm_judge: offers further help, doesn't reopen refund"]
 ```
+
+</details>
 
 So this is how you'd describe it in ABS:
 
@@ -350,7 +360,15 @@ Built-in evaluators run locally: `contains`, `regex`, `sequence`, `never`, refer
 
 Switch evaluators — or the LLM behind them — by changing one flag. Your session file never changes:
 
-```mermaid
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/diagram-eval-sequence-dark.svg">
+  <img src="docs/images/diagram-eval-sequence.svg" alt="Sequence: the runner posts a chat message, the agent asks for the order ID, the runner matches the optional behavior and sends the ID, then routes the trace to the evaluator, which returns expected and Groundedness results." width="760">
+</picture>
+
+<details>
+<summary>Diagram source</summary>
+
+```text
 sequenceDiagram
     participant R as Runner
     participant A as Your Agent
@@ -367,6 +385,8 @@ sequenceDiagram
     R->>E: { type: "Groundedness", query: ..., context: ..., response: ... }
     E-->>R: { passed: true, score: 0.92 }
 ```
+
+</details>
 
 ```bash
 # Built-in judge (OpenAI, Anthropic, Gemini) — just set an env var
