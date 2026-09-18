@@ -48,7 +48,7 @@ const EVALUATOR_HINTS = {
   tool_call: "target, with, ordered",
   f1: "ground_truth",
   bleu: "ground_truth",
-  rouge: "ground_truth, variant (rouge1|rouge2|rougeL), metric (precision|recall|f1)",
+  rouge: "ground_truth; variant: rouge1|rouge2|rougeL; metric: precision|recall|f1",
   llm_judge: "criteria, prompt",
   Groundedness: "query, context, response, threshold",
   Relevance: "query, response, threshold",
@@ -69,6 +69,18 @@ const EVALUATOR_HINTS = {
   none_of: "evaluations",
   expected: "behavior, when, reason, after",
   custom: "adapter",
+};
+
+// Short glosses for the actions where the verb alone is ambiguous. Everything
+// else is listed with actors only, to keep the core small.
+const ACTION_GLOSS = {
+  responds: "reply to a prior says/asks/calls",
+  informs: "final resolution / outcome",
+  clarifies: "disambiguates a prior statement",
+  shows: "displays structured content",
+  calls: "invokes a system/tool/API; pair with a tool responds",
+  submits: "sends completed input, e.g. a form",
+  hands_off: "transfers to another actor, usually human",
 };
 
 const ADAPTER_NOTES = {
@@ -182,6 +194,9 @@ function validate(schema) {
   if (ungrouped.length) throw new Error(`Schema evaluators not covered by EVALUATOR_GROUPS: ${ungrouped.join(", ")}`);
   const staleHints = Object.keys(EVALUATOR_HINTS).filter((t) => !enumTypes.includes(t));
   if (staleHints.length) throw new Error(`EVALUATOR_HINTS mentions unknown evaluators: ${staleHints.join(", ")}`);
+  const actions = new Set(readVocabulary().flatMap((g) => g.entries.map((e) => e.action)));
+  const staleGlosses = Object.keys(ACTION_GLOSS).filter((a) => !actions.has(a));
+  if (staleGlosses.length) throw new Error(`ACTION_GLOSS mentions unknown actions: ${staleGlosses.join(", ")}`);
   const version = (schema.title.match(/v(\d+\.\d+)/) || [])[1];
   if (!version) throw new Error("Cannot read the ABS version from the schema title");
   return { enumTypes, version };
@@ -196,7 +211,11 @@ function buildCore(schema, version, vocabulary, adapters) {
     return `- **${group.name}:** ${items.join(", ")}`;
   });
   const actionLines = vocabulary.map(
-    (group) => `- **${group.name}:** ${group.entries.map((e) => `${e.action} (${e.actors}) — ${e.meaning}`).join(" ")}`
+    (group) =>
+      `- **${group.name}:** ` +
+      group.entries
+        .map((e) => `${e.action} (${e.actors})${ACTION_GLOSS[e.action] ? ` — ${ACTION_GLOSS[e.action]}` : ""}`)
+        .join(", ")
   );
   const adapterLines = adapters.map((name) => `- ${name} — ${ADAPTER_NOTES[name]}`);
 
@@ -233,9 +252,7 @@ function buildCore(schema, version, vocabulary, adapters) {
 }
 
 function buildCatalog(examples) {
-  return examples
-    .map((ex) => `- ${ex.name} — ${ex.title} [${ex.tags.join(", ")}]`)
-    .join("\n");
+  return examples.map((ex) => `- ${ex.name} — ${ex.title}`).join("\n");
 }
 
 function jsString(value) {
@@ -266,8 +283,9 @@ export const BASE_PROMPT = ${jsString(basePrompt)};
 export const EXAMPLE_CATALOG = ${jsString(catalog)};
 
 /** Picks the examples whose tags best match the query. Deterministic; no model involved. */
-export function selectExamples(query: string, limit = 3, maxChars = 8000): KnowledgeExample[] {
-  const q = (query || "").toLowerCase();
+export function selectExamples(query: string, limit = 3, maxChars = 5000): KnowledgeExample[] {
+  const q = (query || "").trim().toLowerCase();
+  if (!q) return [];
   const scored = EXAMPLES.map((ex) => {
     let score = 0;
     for (const tag of ex.tags) if (q.includes(tag.toLowerCase())) score += 3;
@@ -275,11 +293,13 @@ export function selectExamples(query: string, limit = 3, maxChars = 8000): Knowl
     for (const word of ex.title.toLowerCase().split(/[^a-z0-9]+/)) if (word.length > 3 && q.includes(word)) score += 1;
     return { ex, score };
   });
-  scored.sort((a, b) => b.score - a.score || a.ex.name.localeCompare(b.ex.name));
+  const ranked = scored.some((s) => s.score > 0)
+    ? scored.sort((a, b) => b.score - a.score || a.ex.content.length - b.ex.content.length || a.ex.name.localeCompare(b.ex.name))
+    : scored.sort((a, b) => a.ex.content.length - b.ex.content.length);
 
   const picked: KnowledgeExample[] = [];
   let total = 0;
-  for (const { ex } of scored) {
+  for (const { ex } of ranked) {
     if (picked.length >= limit) break;
     if (picked.length > 0 && total + ex.content.length > maxChars) continue;
     picked.push(ex);
