@@ -1,6 +1,10 @@
-# Under the hood: the README example, line by line
+# Under the hood: the README example, step by step
 
-The session from the README:
+This is the *Order lookup chatbot — complete* session from the README. First the
+full YAML, then how the parser reads each part, how the runner applies it, and how
+the two dataset branches play out.
+
+## The session
 
 ```yaml
 session: Order lookup chatbot — complete
@@ -56,18 +60,32 @@ evaluations:
     criteria: "Overall conversation is helpful, professional, and resolves the user's request"
 ```
 
-## Top level
+The dataset has two rows: one where the user never gives an order ID, one where
+they do.
+
+```jsonl
+{"userQuery": "I want to check my order", "orderId": "5678", "expectedAnswer": "On its way", "hasOrderId": false, "kbSnippet": "orders ship in 3 days"}
+{"userQuery": "Where is order #8291?", "orderId": "8291", "expectedAnswer": "On its way", "hasOrderId": true, "kbSnippet": "orders ship today"}
+```
+
+## How the parser reads it
+
+Pipeline: load the YAML → validate it against the JSON Schema → type it into a
+session → expand `include:` fragments (none here) → resolve `{{...}}` with the
+dataset row. A document that fails the schema never reaches the runner.
+
+### Header
 
 | Line | Parser | Runner |
 |---|---|---|
-| `session: Order lookup chatbot — complete` | session name | report label |
+| `session:` | session name | report label |
 | `abs_version: "0.2"` | declared version | enables `optional`, `requires`, `matches_when`, `when` |
-| `dataset:` → `id: cases` | dataset reference | every dataset column is addressable as `cases.<column>` |
-| `dataset:` → `path: cases.jsonl` | path string | CLI loads it relative to the session file |
-| `behaviors:` | ordered list of behaviors | processed top to bottom |
-| `evaluations:` (bottom) | list of chain rules | run after all behaviors |
+| `dataset:` → `id: cases` | dataset reference | every column is addressable as `cases.<column>` |
+| `dataset:` → `path: cases.jsonl` | path | loaded by the CLI relative to the session file |
+| `behaviors:` | ordered list | processed top to bottom |
+| `evaluations:` (bottom) | chain rules | run after all behaviors |
 
-## `user_asks`
+### `user_asks`
 
 ```yaml
 - id: user_asks
@@ -76,14 +94,13 @@ evaluations:
   content: "{{cases.userQuery}}"
 ```
 
-| Line | Parser | Runner |
-|---|---|---|
-| `id: user_asks` | keeps the step id | later refs like `query: user_asks.says` resolve through it |
-| `actor: user` | actor | this behavior sends a message to the agent |
-| `action: says` | action | the sent turn is recorded in the trace as `user says` |
-| `content: "{{cases.userQuery}}"` | placeholder kept as-is | dataset resolution replaces it with the row value |
+- **Parser**: stores `actor: user`, `action: says`, the id, and the content literal
+  with its `{{cases.userQuery}}` placeholder.
+- **Runner**: sends the resolved message to the agent and records the turn in the
+  trace as `user says`. The id stays on that step, so references like
+  `query: user_asks.says` resolve to it later.
 
-## `ask_id`
+### `ask_id`
 
 ```yaml
 - id: ask_id
@@ -98,19 +115,21 @@ evaluations:
       criteria: "Politely asks, explains why the ID is needed"
 ```
 
-| Line | Parser | Runner |
-|---|---|---|
-| `id: ask_id` | keeps the step id | used by `requires`, `expected`, and the report |
-| `actor: assistant` | expectation about the agent | the step is matched against the agent's reply |
-| `action: asks` | action | required by the schema; tags the reply as `asks` when it matches |
-| `optional: true` | flag | if it does not match: skipped, not failed; its evaluations do not run |
-| `matches_when:` | overrides actor/action matching | the judge decides the match |
-| `matches_when.type: llm_judge` | matcher type | calls the `llm_judge` adapter with the criteria |
-| `matches_when.criteria` | text | the question asked about the reply: *"is the agent requesting the order ID?"* |
-| `evaluations:` → `type: llm_judge` | step evaluation | runs only if the step matched |
-| `evaluations:` → `criteria` | text | second judge call over the same reply: *"politely asks, explains why?"* |
+- **Parser**: `actor: assistant` and `action: asks` mark this as an expected agent
+  step. `optional: true` means it may not happen. `matches_when` says how to decide.
+  The schema still requires `action`, even though `matches_when` overrides matching:
+  the action is what tags the reply as `asks` when it matches.
+- **Runner**:
+  1. Takes the agent's reply to the current user turn.
+  2. Because `matches_when` is present, it ignores actor/action and calls the
+     `llm_judge` adapter with the criterion: *"is the agent requesting the order ID?"*.
+  3. If the judge passes: the step matches, the reply is tagged `asks`, and the
+     step-level evaluation runs on that same reply.
+  4. If the judge fails: the step is skipped — not a failure — and its evaluation
+     does not run. The conversation does not advance, so the next behavior can
+     still evaluate the same reply.
 
-## `user_gives_id`
+### `user_gives_id`
 
 ```yaml
 - id: user_gives_id
@@ -120,14 +139,12 @@ evaluations:
   requires: ask_id
 ```
 
-| Line | Parser | Runner |
-|---|---|---|
-| `id: user_gives_id` | keeps the step id | step label in the report |
-| `actor: user` + `action: says` | user message | sent to the agent only when the step runs |
-| `content: "{{cases.orderId}}"` | placeholder kept | sends the row's `orderId` |
-| `requires: ask_id` | dependency (checked: `ask_id` must exist) | if `ask_id` was skipped, this step is skipped too |
+- **Parser**: stores the user message and `requires: ask_id`. It also checks that a
+  behavior with that id exists — a reference to a missing id is a parse error.
+- **Runner**: only sends the order ID when `ask_id` matched. If `ask_id` was
+  skipped, this behavior is skipped too, and so is anything that requires it later.
 
-## `answer`
+### `answer`
 
 ```yaml
 - id: answer
@@ -142,17 +159,15 @@ evaluations:
       threshold: 0.8
 ```
 
-| Line | Parser | Runner |
-|---|---|---|
-| `id: answer` | keeps the step id | report label |
-| `actor: assistant` | assistant expectation | matched against the agent's next reply |
-| `action: informs` | communication action | matches a reply recorded as `responds` |
-| `content: "{{cases.expectedAnswer}}"` | expected value | **not used to match**; it is the declared expected answer |
-| `evaluations:` → `type: Groundedness` | evaluation rule | routed to the `Groundedness` adapter |
-| `query: user_asks.says` | reference | resolved from the trace by behavior id |
-| `context: "{{cases.kbSnippet}}"` | placeholder | resolved to the row's `kbSnippet` |
-| `response: self` | reference | the agent's observed reply |
-| `threshold: 0.8` | number | applied by the runner to the normalized score |
+- **Parser**: stores the expected content and the `Groundedness` evaluation as a
+  rule dict. `threshold` must be between 0 and 1.
+- **Runner**: matches the agent's next reply by actor and communication action.
+  The declared `content` is **not** used to match — it is the expected answer for
+  the reader. The actual reply is what the evaluation sees:
+  - `query: user_asks.says` resolves to the user step from the trace;
+  - `context: "{{cases.kbSnippet}}"` resolves to the dataset value;
+  - `response: self` is the agent's observed reply;
+  - `threshold: 0.8` is applied by the runner to the adapter's normalized score.
 
 ## Session evaluations
 
@@ -165,14 +180,12 @@ evaluations:
   reason: "Agent should ask for ID when user doesn't provide it"
 ```
 
-| Line | Parser | Runner |
-|---|---|---|
-| `type: expected` | chain evaluator | checks that an optional step *should* have matched |
-| `behavior: ask_id` | id reference | looks up the result of that step |
-| `when: "..."` | expression kept | evaluated per row: false → passes as skipped; true → fails if `ask_id` did not match |
-| `reason:` | message | shown when it fails |
+- **Parser**: a chain rule that references a behavior id.
+- **Runner**: evaluates `when` against the dataset row. If it is false, the
+  evaluation passes as skipped. If it is true, `ask_id` must have matched; when it
+  did not, the evaluation fails with `reason`.
 
-### `never`
+### `never` + `when`
 
 ```yaml
 - type: never
@@ -180,14 +193,11 @@ evaluations:
   when: "{{cases.hasOrderId}} == true"
 ```
 
-| Line | Parser | Runner |
-|---|---|---|
-| `type: never` | chain evaluator | scans the whole trace |
-| `match: { actor, action }` | selector | fails if any step matches `assistant asks` |
-| `when: "..."` | expression kept | false → passes as skipped; true → the selector check runs |
-
-`action: asks` only exists in the trace when a matched behavior tagged a reply with
-it — for example, when `ask_id` matched. That tag is what `never` inspects.
+- **Parser**: a selector — `actor`, `action`, `target`, all optional.
+- **Runner**: if `when` is false, it passes as skipped. If true, it scans the trace
+  for a step matching `assistant asks`. That action only exists when a matched
+  behavior tagged a reply with it — for example, when `ask_id` matched. So the
+  correctness of `never` depends on `ask_id` classifying the reply correctly.
 
 ### `llm_judge`
 
@@ -196,26 +206,47 @@ it — for example, when `ask_id` matched. That tag is what `never` inspects.
   criteria: "Overall conversation is helpful, professional, and resolves the user's request"
 ```
 
-| Line | Parser | Runner |
-|---|---|---|
-| `type: llm_judge` | chain evaluator | sends the full trace to the judge |
-| `criteria:` | text | the question asked about the whole conversation |
+- **Parser**: a chain rule with no `when`, so it always runs.
+- **Runner**: sends the whole trace to the judge and applies the default threshold.
 
 ## How it plays out
 
-| Step | `hasOrderId: false` | `hasOrderId: true` |
-|---|---|---|
-| `user_asks` | sent | sent |
-| `ask_id` | matched (judge: asking), evaluation runs | skipped |
-| `user_gives_id` | sent (`requires` met) | skipped (requires a skipped step) |
-| `answer` | matched, Groundedness 0.92 | matched, Groundedness 0.92 |
-| `expected` | passed | skipped (`when` false) |
-| `never` | skipped (`when` false) | passed |
-| `llm_judge` | passed | passed |
+Same session, two dataset rows. The agent asks for the ID when it is missing and
+answers directly when the user already provided it.
 
-- Branch B works because a skipped optional step does not advance the conversation:
+**Row `hasOrderId: false`** — the agent asks:
+
+```
+step 1 user_asks     sent=True
+step 2 ask_id        matched=True
+    └─ llm_judge     passed=True
+step 3 user_gives_id sent=True
+step 4 answer        matched=True
+    └─ Groundedness  passed=True score=0.92
+chain expected   passed=True  "Behavior ask_id matched as expected"
+chain never      passed=True  "when condition not met — skipped"
+chain llm_judge  passed=True
+```
+
+**Row `hasOrderId: true`** — the user gave the ID upfront:
+
+```
+step 1 user_asks     sent=True
+step 2 ask_id        skipped=True
+step 3 user_gives_id skipped=True
+step 4 answer        matched=True
+    └─ Groundedness  passed=True score=0.92
+chain expected   passed=True  "when condition not met — skipped"
+chain never      passed=True  "Disallowed step never occurred"
+chain llm_judge  passed=True
+```
+
+Two details make both branches work with one linear session:
+
+- In the second row, the skipped optional does not advance the conversation, so
   `answer` checks the same reply that `ask_id` declined.
-- `never` works because a matched `ask_id` tags the reply as `asks`.
+- When `ask_id` matches, it tags the reply as `asks` — the exact thing `never`
+  inspects in the first row.
 
 ## What the run needs
 
