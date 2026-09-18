@@ -1,4 +1,15 @@
-# Agent Behavior Specification (ABS)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/fvinciarelli/abslang/main/docs/images/logo.svg" alt="ABS — Agent Behavior Specification" width="260">
+</p>
+
+<h3 align="center">Specify how your AI agents behave — then verify it.</h3>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/abslang"><img src="https://img.shields.io/npm/v/abslang?color=0284c7" alt="npm version"></a>
+  <a href="https://pypi.org/project/abslang/"><img src="https://img.shields.io/pypi/v/abslang?color=0284c7" alt="PyPI version"></a>
+  <a href="https://github.com/fvinciarelli/abslang/actions/workflows/test.yml"><img src="https://github.com/fvinciarelli/abslang/actions/workflows/test.yml/badge.svg" alt="Tests"></a>
+  <a href="https://github.com/fvinciarelli/abslang/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-0284c7" alt="License"></a>
+</p>
 
 > A vendor-neutral, human-readable format for describing the observable behavior of AI agents — what users say, what agents do, and how it should be evaluated. Like OpenAPI for HTTP APIs, ABS gives agent behavior a shared, tool-independent contract.
 

@@ -8,10 +8,13 @@
 <h3>Specify how your AI agents behave — then verify it.</h3>
 
 <p>
-  <a href="https://www.npmjs.com/package/abslang"><img src="https://img.shields.io/npm/v/abslang" alt="npm version"></a>
-  <a href="https://pypi.org/project/abslang/"><img src="https://img.shields.io/pypi/v/abslang" alt="PyPI version"></a>
+  <a href="https://www.npmjs.com/package/abslang"><img src="https://img.shields.io/npm/v/abslang?color=0284c7" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/abslang"><img src="https://img.shields.io/npm/dm/abslang?color=0284c7" alt="npm downloads"></a>
+  <a href="https://pypi.org/project/abslang/"><img src="https://img.shields.io/pypi/v/abslang?color=0284c7" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/abslang/"><img src="https://img.shields.io/pypi/dm/abslang?color=0284c7" alt="PyPI downloads"></a>
   <a href="https://github.com/fvinciarelli/abslang/actions/workflows/test.yml"><img src="https://github.com/fvinciarelli/abslang/actions/workflows/test.yml/badge.svg" alt="Tests"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License"></a>
+  <a href="https://github.com/fvinciarelli/abslang"><img src="https://img.shields.io/github/stars/fvinciarelli/abslang?style=flat" alt="GitHub stars"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-0284c7" alt="License"></a>
   <a href="https://github.com/sponsors/fvinciarelli"><img src="https://img.shields.io/badge/sponsor-%E2%9D%A4-ff69b4" alt="Sponsor"></a>
 </p>
 
