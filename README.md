@@ -358,6 +358,8 @@ abslang chat
 
 `abslang` calls your agent, captures the full trace, and hands it off to **evaluators** — pluggable checkers that verify specific things. An evaluator is a function that receives `{type, input, context, response, threshold}` and returns `{passed, score, reason}`.
 
+For a line-by-line walkthrough of the session above — how the parser reads it and how the runner applies each behavior in both dataset branches — see **[docs/example-walkthrough.md](./docs/example-walkthrough.md)**.
+
 Built-in evaluators run locally: `contains`, `regex`, `sequence`, `never`, reference metrics (`f1`, `bleu`, `rouge`), plus safety dimensions (`Violence`, `HateUnfairness`, `Sexual`, `SelfHarm`) that ship with curated rubrics — no criteria to write. LLM-based evaluators — `llm_judge`, `Groundedness`, `Relevance` — need an **adapter**, a small bridge to an evaluation service. Azure AI Foundry, AWS Bedrock, and Google Vertex AI ship out of the box; anyone can add their own by implementing the adapter contract. The evaluator **never calls your agent**; it only looks at the trace that was already captured. [Want to build one? Here's how →](./docs/adapter-guide.md)
 
 Switch evaluators — or the LLM behind them — by changing one flag. Your session file never changes:
@@ -441,6 +443,7 @@ Your session file never changes. Only the `--adapter` flag.
 | [docs/adapters/aws.md](./docs/adapters/aws.md) | AWS Bedrock adapter — setup and evaluators |
 | [docs/adapters/google.md](./docs/adapters/google.md) | Google Vertex AI adapter — setup and evaluators |
 | [docs/adapter-guide.md](./docs/adapter-guide.md) | How to build your own evaluator adapter |
+| [docs/example-walkthrough.md](./docs/example-walkthrough.md) | How the README session is parsed and executed, step by step |
 | [examples/](./examples/) | Runnable example sessions in `.yaml` |
 | [.plans/branching-optional-behaviors.md](./.plans/branching-optional-behaviors.md) | v0.2 design: optional behaviors, branching |
 
