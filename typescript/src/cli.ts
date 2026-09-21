@@ -1085,7 +1085,7 @@ function renderMd(text: string, opts: { renderMermaid?: boolean } = {}): string 
       rendered = chalk.bold.underline(rendered.replace(/^## /, ""));
     } else if (/^# /.test(rendered)) {
       rendered = chalk.bold.underline(rendered.replace(/^# /, ""));
-    } else if (/^(Qu[ée] constru[ií]|Qu[ée] construimos|C[óo]mo ejecutarlo|C[óo]mo se ejecuta|Columnas esperadas en [\w.]+|Diagrama de secuencia de esta sesi[óo]n)$/.test(rendered)) {
+    } else if (/^(Qu[ée] constru[ií]|Qu[ée] construimos|C[óo]mo ejecutarlo|C[óo]mo se ejecuta|Columnas esperadas en [\w.]+|Diagrama de secuencia de esta sesi[óo]n|What I built|What we built|How to run it|Expected columns in cases\.jsonl|Sequence diagram of this session)$/.test(rendered)) {
       rendered = chalk.bold.underline(rendered);
     }
 

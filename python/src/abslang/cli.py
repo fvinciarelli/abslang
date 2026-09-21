@@ -1047,7 +1047,7 @@ def chat_cmd(provider, api_key, model, base_url, max_tokens, temperature, omit_t
             elif _re.match(r"^# ", rendered):
                 rendered = click.style(rendered[2:], bold=True, underline=True)
             elif _re.match(
-                r"^(Qu[ée] constru[ií]|Qu[ée] construimos|C[óo]mo ejecutarlo|C[óo]mo se ejecuta|Columnas esperadas en [\w.]+|Diagrama de secuencia de esta sesi[óo]n)$",
+                r"^(Qu[ée] constru[ií]|Qu[ée] construimos|C[óo]mo ejecutarlo|C[óo]mo se ejecuta|Columnas esperadas en [\w.]+|Diagrama de secuencia de esta sesi[óo]n|What I built|What we built|How to run it|Expected columns in cases\.jsonl|Sequence diagram of this session)$",
                 rendered,
             ):
                 rendered = click.style(rendered, bold=True, underline=True)
