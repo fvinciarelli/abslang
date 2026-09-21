@@ -225,8 +225,18 @@ export function renderSequenceDiagram(source: string, width = 100): string | nul
       const pb = pos[row.b];
       const arrowLine = lifelines();
       const fill = row.dashed ? "-" : "─";
+      const emitBlock = (chunks: string[]) => {
+        // Label too long for the gap: wrapped block ABOVE the arrow,
+        // centered between the two lifelines, never overlapping them.
+        const mid = Math.floor((pa + pb) / 2);
+        for (const chunk of chunks) {
+          const l = new Array(W).fill(" ");
+          put(l, Math.max(0, mid - Math.floor(chunk.length / 2)), chunk);
+          out.push(line(l));
+        }
+      };
       if (row.a === row.b) {
-        for (const chunk of wrap(row.label, Math.max(10, Math.min(40, width - pa - 4)))) {
+        for (const chunk of wrap(row.label, Math.max(10, Math.min(48, width - pa - 4)))) {
           const l = lifelines();
           put(l, pa + 3, chunk);
           out.push(line(l));
@@ -237,18 +247,24 @@ export function renderSequenceDiagram(source: string, width = 100): string | nul
           arrowLine[pa + 2] = "▶";
         }
       } else if (pa < pb) {
-        for (const chunk of wrap(row.label, Math.max(10, Math.min(40, width - pa - 3)))) {
+        const gap = pb - pa - 2;
+        if (row.label.length <= gap) {
           const l = lifelines();
-          put(l, pa + 2, chunk);
+          put(l, pa + 2, row.label);
           out.push(line(l));
+        } else {
+          emitBlock(wrap(row.label, Math.max(12, Math.min(48, width - 4))));
         }
         for (let x = pa + 1; x < pb; x++) arrowLine[x] = fill;
         arrowLine[pb] = headChar(row.head, true);
       } else {
-        for (const chunk of wrap(row.label, Math.max(10, Math.min(40, pa - 2)))) {
+        const gap = pa - pb - 2;
+        if (row.label.length <= gap) {
           const l = lifelines();
-          put(l, Math.max(1, pa - 1 - chunk.length), chunk);
+          put(l, pa - 1 - row.label.length, row.label);
           out.push(line(l));
+        } else {
+          emitBlock(wrap(row.label, Math.max(12, Math.min(48, width - 4))));
         }
         for (let x = pb + 1; x < pa; x++) arrowLine[x] = fill;
         arrowLine[pb] = headChar(row.head, false);
@@ -262,13 +278,19 @@ export function renderSequenceDiagram(source: string, width = 100): string | nul
       const pb = pos[row.b];
       const low = Math.min(pa, pb);
       const high = Math.max(pa, pb);
-      const innerWidth = Math.max(4, high - low - 2, Math.min(row.text.length + 2, width - low - 2));
-      const midBox = lifelines();
-      midBox[low] = "│";
-      midBox[low + innerWidth + 1] = "│";
-      put(midBox, low + 1, " " + row.text.slice(0, Math.max(0, innerWidth - 2)) + " ");
+      const innerWidth = Math.min(
+        width - low - 2,
+        Math.max(4, high - low - 2, Math.min(row.text.length + 2, 48))
+      );
       out.push(line(boxRow(low, innerWidth, row.text, "┌", "┐")));
-      out.push(line(midBox));
+      for (const chunk of wrap(row.text, Math.max(1, innerWidth - 2))) {
+        const midBox = lifelines();
+        for (let x = low; x <= low + innerWidth + 1; x++) midBox[x] = " ";
+        midBox[low] = "│";
+        midBox[low + innerWidth + 1] = "│";
+        put(midBox, low + 1, " " + chunk);
+        out.push(line(midBox));
+      }
       out.push(line(boxRow(low, innerWidth, row.text, "└", "┘")));
       continue;
     }

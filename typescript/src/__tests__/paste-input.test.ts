@@ -20,6 +20,13 @@ describe("PasteAwareInput", () => {
     assert.equal(collector.feed("otra línea"), "otra línea");
   });
 
+  it("normalizes CR/CRLF to newlines", () => {
+    // Mirrors the CR normalization in paste_input.py and the raw editor.
+    assert.deepEqual(feedLines(["a\rb"]), ["a\nb"]);
+    assert.deepEqual(feedLines(["a\r\nb"]), ["a\nb"]);
+    assert.deepEqual(feedLines(["línea\r"]), ["línea"]);
+  });
+
   it("merges a single-line paste", () => {
     assert.deepEqual(feedLines([`${PASTE_START}hola${PASTE_END}`]), ["hola"]);
   });

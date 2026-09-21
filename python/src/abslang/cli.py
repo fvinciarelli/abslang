@@ -11,6 +11,7 @@ import asyncio
 import importlib
 import json
 import os
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -720,6 +721,152 @@ def report(file: str, output_format: str, failed: bool, detail: Optional[int]):
                 click.echo(f"  Row {actual}: {r.get('session', '')} {status}")
 
 
+# ── Code highlighting (zero dependencies, mirrors cli.ts) ──
+
+def _is_ascii_alpha(ch: str) -> bool:
+    return "a" <= ch <= "z" or "A" <= ch <= "Z"
+
+
+def _is_ascii_digit(ch: str) -> bool:
+    return "0" <= ch <= "9"
+
+
+def _highlight_code_line(lang: str, line: str) -> str:
+    """Colorize one code line (mirrors highlightCodeLine in cli.ts)."""
+    if lang in ("yaml", "yml"):
+        return _highlight_yaml_line(line)
+    if lang in ("json", "jsonl"):
+        return _highlight_json_line(line)
+    if lang in ("bash", "sh", "shell"):
+        return _highlight_bash_line(line)
+    return click.style(line, dim=True)
+
+
+def _highlight_yaml_line(line: str) -> str:
+    if re.match(r"^\s*#", line):
+        return click.style(line, fg="green", dim=True)
+    km = re.match(r"^(\s*-?\s*)([A-Za-z0-9_.]+)(\s*:\s*)(.*)$", line)
+    if km:
+        return (
+            km.group(1)
+            + click.style(km.group(2), fg="cyan")
+            + km.group(3)
+            + _highlight_yaml_value(km.group(4))
+        )
+    return _highlight_yaml_value(line)
+
+
+def _highlight_yaml_value(rest: str) -> str:
+    out: list[str] = []
+    i = 0
+    n = len(rest)
+    while i < n:
+        ch = rest[i]
+        if ch == "#" and (i == 0 or rest[i - 1] == " "):
+            out.append(click.style(rest[i:], fg="green", dim=True))
+            break
+        if ch in "'\"":
+            j = i + 1
+            while j < n and rest[j] != ch:
+                j += 1
+            j = min(n, j + 1)
+            out.append(click.style(rest[i:j], fg="yellow"))
+            i = j
+            continue
+        if ch == "{" and i + 1 < n and rest[i + 1] == "{":
+            j = rest.find("}}", i)
+            j = n if j == -1 else j + 2
+            out.append(click.style(rest[i:j], fg="cyan", bold=True))
+            i = j
+            continue
+        if _is_ascii_digit(ch):
+            j = i
+            while j < n and (_is_ascii_digit(rest[j]) or rest[j] == "."):
+                j += 1
+            out.append(click.style(rest[i:j], fg="magenta"))
+            i = j
+            continue
+        if _is_ascii_alpha(ch):
+            j = i
+            while j < n and (rest[j].isalnum() or rest[j] == "_"):
+                j += 1
+            word = rest[i:j]
+            out.append(
+                click.style(word, fg="magenta")
+                if word.lower() in ("true", "false", "null")
+                else word
+            )
+            i = j
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def _highlight_json_line(line: str) -> str:
+    out: list[str] = []
+    i = 0
+    n = len(line)
+    while i < n:
+        ch = line[i]
+        if ch == '"':
+            j = i + 1
+            while j < n and line[j] != '"':
+                if line[j] == "\\":
+                    j += 1
+                j += 1
+            j = min(n, j + 1)
+            k = j
+            while k < n and line[k] == " ":
+                k += 1
+            token = line[i:j]
+            out.append(
+                click.style(token, fg="cyan")
+                if line[k : k + 1] == ":"
+                else click.style(token, fg="yellow")
+            )
+            i = j
+            continue
+        if ch == "{" and i + 1 < n and line[i + 1] == "{":
+            j = line.find("}}", i)
+            j = n if j == -1 else j + 2
+            out.append(click.style(line[i:j], fg="cyan", bold=True))
+            i = j
+            continue
+        if _is_ascii_digit(ch) or (ch == "-" and i + 1 < n and _is_ascii_digit(line[i + 1])):
+            j = i + 1
+            while j < n and line[j] in "0123456789.eE+-":
+                j += 1
+            out.append(click.style(line[i:j], fg="magenta"))
+            i = j
+            continue
+        if _is_ascii_alpha(ch):
+            j = i
+            while j < n and (line[j].isalnum() or line[j] == "_"):
+                j += 1
+            word = line[i:j]
+            out.append(
+                click.style(word, fg="magenta")
+                if word.lower() in ("true", "false", "null")
+                else word
+            )
+            i = j
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def _highlight_bash_line(line: str) -> str:
+    if re.match(r"^\s*#", line):
+        return click.style(line, fg="green", dim=True)
+    return re.sub(
+        r"\$[A-Za-z_][A-Za-z0-9_]*",
+        lambda m: click.style(m.group(0), fg="cyan"),
+        line,
+    )
+
+
 # ═══════════════════════════════════════════════════════════════════
 #  chat
 # ═══════════════════════════════════════════════════════════════════
@@ -835,44 +982,55 @@ def chat_cmd(provider, api_key, model, base_url, max_tokens, temperature, omit_t
         """Basic terminal markdown renderer."""
         lines = text.split("\n")
         out: list[str] = []
-        in_code_block = False
+        code_buf: list[str] | None = None
+        code_lang = ""
         mermaid_buf: list[str] | None = None
+
+        def emit_code_block(buf: list[str], lang: str) -> None:
+            label = lang or "code"
+            cols = max(24, max((len(l) for l in buf), default=0) + 4)
+            pad = "─" * max(0, cols - 4 - len(label) - 1)
+            out.append(click.style(f"┌─ {label} {pad}", dim=True))
+            for l in buf:
+                out.append(click.style("│ ", dim=True) + _highlight_code_line(lang, l))
+            out.append(click.style("└" + "─" * (cols - 1), dim=True))
 
         import re as _re
 
         for line in lines:
             if line.startswith("```"):
+                if code_buf is not None:
+                    buf = code_buf
+                    lang = code_lang
+                    code_buf = None
+                    code_lang = ""
+                    emit_code_block(buf, lang)
+                    continue
                 if mermaid_buf is not None:
                     buf = mermaid_buf
                     mermaid_buf = None
+                    cols = shutil.get_terminal_size().columns
                     rendered = render_sequence_diagram(
                         "\n".join(buf),
-                        shutil.get_terminal_size().columns,
+                        cols if cols > 0 else 100,
                     )
                     if rendered is not None:
                         out.append(rendered)
                     else:
-                        out.append(click.style("┌─ code ──────────────────────", dim=True))
-                        for l in buf:
-                            out.append(click.style("│ " + l, dim=True))
-                        out.append(click.style("└──────────────────────────────", dim=True))
+                        emit_code_block(buf, "mermaid")
                     continue
-                if not in_code_block:
-                    lang = line[3:].strip().lower()
-                    if lang.startswith("mermaid") and render_mermaid:
-                        mermaid_buf = []
-                    else:
-                        in_code_block = True
-                        out.append(click.style("┌─ code ──────────────────────", dim=True))
+                lang = line[3:].strip().lower()
+                if lang.startswith("mermaid") and render_mermaid:
+                    mermaid_buf = []
                 else:
-                    in_code_block = False
-                    out.append(click.style("└──────────────────────────────", dim=True))
+                    code_buf = []
+                    code_lang = lang
+                continue
+            if code_buf is not None:
+                code_buf.append(line)
                 continue
             if mermaid_buf is not None:
                 mermaid_buf.append(line)
-                continue
-            if in_code_block:
-                out.append(click.style("│ " + line, dim=True))
                 continue
 
             rendered = line

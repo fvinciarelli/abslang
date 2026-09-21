@@ -109,4 +109,43 @@ describe("renderSequenceDiagram", () => {
     assert.ok(out);
     assert.ok(out.includes("│ A "));
   });
+
+  it("renders long labels as a centered block above the arrow without lifeline overlap", () => {
+    const out = renderSequenceDiagram(
+      `sequenceDiagram
+    participant user
+    participant assistant
+    assistant-->>user: "Entiendo que tu pedido #8291 llegó dañado"
+`,
+      40
+    );
+    assert.ok(out);
+    const lines = out.split("\n");
+    const arrowIdx = lines.findIndex((l) => l.includes("◀"));
+    assert.ok(arrowIdx > 3);
+    const block = lines.slice(3, arrowIdx);
+    assert.ok(block.length >= 2);
+    for (const l of block) assert.doesNotMatch(l, /│/);
+    const joined = block.join(" ").replace(/\s+/g, " ");
+    assert.ok(joined.includes("Entiendo que tu pedido"));
+    assert.ok(joined.includes("llegó dañado"));
+  });
+
+  it("wraps long notes inside the box instead of truncating them", () => {
+    const out = renderSequenceDiagram(
+      `sequenceDiagram
+    participant A
+    participant B
+    Note over A,B: un criterio de evaluacion bastante largo que ya no cabe en una sola linea de la nota
+`,
+      40
+    );
+    assert.ok(out);
+    const lines = out.split("\n");
+    const tops = lines.slice(3).filter((l) => l.includes("┌") && l.includes("┐"));
+    assert.equal(tops.length, 1);
+    const midRows = lines.filter((l) => /│[^│]*│/.test(l));
+    assert.ok(midRows.length >= 3); // at least two wrapped text rows + header
+    assert.ok(out.includes("linea de la nota"));
+  });
 });

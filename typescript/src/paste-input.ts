@@ -57,7 +57,9 @@ export class PasteAwareInput {
    * Returns the next complete message, or null when more lines are needed.
    */
   feed(rawLine: string): string | null {
-    let line = rawLine.replace(/\r$/, "");
+    // Clipboards may carry CR/CRLF line endings: normalize so pasted
+    // lines never overwrite each other on the terminal or in the message.
+    let line = rawLine.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n+$/, "");
 
     if (this.waitingEnter) {
       this.waitingEnter = false;
@@ -184,8 +186,11 @@ export class RawChatInput {
         return;
       }
       if (seq) {
-        this.buffer += seq;
-        if (active) process.stdout.write(seq);
+        // Clipboards may carry CR/CRLF line endings: normalize so pasted
+        // lines never overwrite each other on the terminal or in the buffer.
+        const normalized = seq.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+        this.buffer += normalized;
+        if (active) process.stdout.write(normalized);
       }
       return;
     }
@@ -272,7 +277,8 @@ export class RawChatInput {
       return;
     }
     if (!seq) return;
-    this.buffer += seq;
-    if (active) process.stdout.write(seq);
+    const normalized = seq.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    this.buffer += normalized;
+    if (active) process.stdout.write(normalized);
   }
 }

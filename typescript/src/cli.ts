@@ -897,48 +897,172 @@ jobs:
 
 // ── Terminal markdown renderer ──
 
+// ── Code highlighting (zero dependencies, mirrors cli.py) ──
+
+function highlightCodeLine(lang: string, line: string): string {
+  if (lang === "yaml" || lang === "yml") return highlightYamlLine(line);
+  if (lang === "json" || lang === "jsonl") return highlightJsonLine(line);
+  if (lang === "bash" || lang === "sh" || lang === "shell") return highlightBashLine(line);
+  return chalk.dim(line);
+}
+
+function highlightYamlLine(line: string): string {
+  if (/^\s*#/.test(line)) return chalk.green.dim(line);
+  const km = line.match(/^(\s*-?\s*)([A-Za-z0-9_.]+)(\s*:\s*)(.*)$/);
+  if (km) return km[1] + chalk.cyan(km[2]) + km[3] + highlightYamlValue(km[4]);
+  return highlightYamlValue(line);
+}
+
+function highlightYamlValue(rest: string): string {
+  let out = "";
+  let i = 0;
+  while (i < rest.length) {
+    const ch = rest[i];
+    if (ch === "#" && (i === 0 || rest[i - 1] === " ")) {
+      out += chalk.green.dim(rest.slice(i));
+      break;
+    }
+    if (ch === "'" || ch === '"') {
+      let j = i + 1;
+      while (j < rest.length && rest[j] !== ch) j++;
+      j = Math.min(rest.length, j + 1);
+      out += chalk.yellow(rest.slice(i, j));
+      i = j;
+      continue;
+    }
+    if (ch === "{" && rest[i + 1] === "{") {
+      let j = rest.indexOf("}}", i);
+      j = j === -1 ? rest.length : j + 2;
+      out += chalk.cyan.bold(rest.slice(i, j));
+      i = j;
+      continue;
+    }
+    if (/[0-9]/.test(ch)) {
+      let j = i;
+      while (j < rest.length && /[0-9.]/.test(rest[j])) j++;
+      out += chalk.magenta(rest.slice(i, j));
+      i = j;
+      continue;
+    }
+    if (/[A-Za-z]/.test(ch)) {
+      let j = i;
+      while (j < rest.length && /[A-Za-z_]/.test(rest[j])) j++;
+      const word = rest.slice(i, j);
+      out += /^(true|false|null)$/i.test(word) ? chalk.magenta(word) : word;
+      i = j;
+      continue;
+    }
+    out += ch;
+    i++;
+  }
+  return out;
+}
+
+function highlightJsonLine(line: string): string {
+  let out = "";
+  let i = 0;
+  while (i < line.length) {
+    const ch = line[i];
+    if (ch === '"') {
+      let j = i + 1;
+      while (j < line.length && line[j] !== '"') {
+        if (line[j] === "\\") j++;
+        j++;
+      }
+      j = Math.min(line.length, j + 1);
+      let k = j;
+      while (k < line.length && line[k] === " ") k++;
+      out += line[k] === ":" ? chalk.cyan(line.slice(i, j)) : chalk.yellow(line.slice(i, j));
+      i = j;
+      continue;
+    }
+    if (ch === "{" && line[i + 1] === "{") {
+      let j = line.indexOf("}}", i);
+      j = j === -1 ? line.length : j + 2;
+      out += chalk.cyan.bold(line.slice(i, j));
+      i = j;
+      continue;
+    }
+    if (/[0-9]/.test(ch) || (ch === "-" && /[0-9]/.test(line[i + 1] || ""))) {
+      let j = i + 1;
+      while (j < line.length && /[0-9.eE+-]/.test(line[j])) j++;
+      out += chalk.magenta(line.slice(i, j));
+      i = j;
+      continue;
+    }
+    if (/[A-Za-z]/.test(ch)) {
+      let j = i;
+      while (j < line.length && /[A-Za-z_]/.test(line[j])) j++;
+      const word = line.slice(i, j);
+      out += /^(true|false|null)$/i.test(word) ? chalk.magenta(word) : word;
+      i = j;
+      continue;
+    }
+    out += ch;
+    i++;
+  }
+  return out;
+}
+
+function highlightBashLine(line: string): string {
+  if (/^\s*#/.test(line)) return chalk.green.dim(line);
+  return line.replace(/\$[A-Za-z_][A-Za-z0-9_]*/g, (v) => chalk.cyan(v));
+}
+
 function renderMd(text: string, opts: { renderMermaid?: boolean } = {}): string {
   const lines = text.split("\n");
   const out: string[] = [];
-  let inCodeBlock = false;
+  let codeBuf: string[] | null = null;
+  let codeLang = "";
   let mermaidBuf: string[] | null = null;
+
+  const emitCodeBlock = (buf: string[], lang: string) => {
+    const label = lang || "code";
+    const cols = Math.max(24, Math.max(...buf.map((l) => l.length), 0) + 4);
+    const pad = "─".repeat(Math.max(0, cols - 4 - label.length - 1));
+    out.push(chalk.dim(`┌─ ${label} ` + pad));
+    for (const l of buf) out.push(chalk.dim("│ ") + highlightCodeLine(lang, l));
+    out.push(chalk.dim("└" + "─".repeat(cols - 1)));
+  };
 
   for (const line of lines) {
     // Code blocks
     if (line.startsWith("```")) {
+      if (codeBuf !== null) {
+        const buf = codeBuf;
+        const lang = codeLang;
+        codeBuf = null;
+        codeLang = "";
+        emitCodeBlock(buf, lang);
+        continue;
+      }
       if (mermaidBuf !== null) {
         const buf = mermaidBuf;
         mermaidBuf = null;
-        const rendered = renderSequenceDiagram(buf.join("\n"), process.stdout.columns ?? 100);
+        const cols = process.stdout.columns ?? 100;
+        const rendered = renderSequenceDiagram(buf.join("\n"), cols > 0 ? cols : 100);
         if (rendered) {
           out.push(rendered);
         } else {
-          out.push(chalk.dim("┌─ code ──────────────────────"));
-          for (const l of buf) out.push(chalk.dim("│ " + l));
-          out.push(chalk.dim("└──────────────────────────────"));
+          emitCodeBlock(buf, "mermaid");
         }
         continue;
       }
-      if (!inCodeBlock) {
-        const lang = line.slice(3).trim().toLowerCase();
-        if (lang.startsWith("mermaid") && opts.renderMermaid !== false) {
-          mermaidBuf = [];
-        } else {
-          inCodeBlock = true;
-          out.push(chalk.dim("┌─ code ──────────────────────"));
-        }
+      const lang = line.slice(3).trim().toLowerCase();
+      if (lang.startsWith("mermaid") && opts.renderMermaid !== false) {
+        mermaidBuf = [];
       } else {
-        inCodeBlock = false;
-        out.push(chalk.dim("└──────────────────────────────"));
+        codeBuf = [];
+        codeLang = lang;
       }
+      continue;
+    }
+    if (codeBuf !== null) {
+      codeBuf.push(line);
       continue;
     }
     if (mermaidBuf !== null) {
       mermaidBuf.push(line);
-      continue;
-    }
-    if (inCodeBlock) {
-      out.push(chalk.dim("│ " + line));
       continue;
     }
 

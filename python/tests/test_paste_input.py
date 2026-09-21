@@ -16,6 +16,13 @@ def test_typed_lines_pass_through():
     assert collector.feed("otra línea") == "otra línea"
 
 
+def test_cr_crlf_normalized_to_newlines():
+    # Mirrors the CR normalization in PasteAwareInput (TS) and the raw editor.
+    assert feed_lines(["a\rb"]) == ["a\nb"]
+    assert feed_lines(["a\r\nb"]) == ["a\nb"]
+    assert feed_lines(["línea\r"]) == ["línea"]
+
+
 def test_single_line_paste():
     assert feed_lines([f"{PASTE_START}hola{PASTE_END}"]) == ["hola"]
 

@@ -102,3 +102,46 @@ def test_renders_header_only_diagram():
     out = render_sequence_diagram("sequenceDiagram\n    participant A\n", 40)
     assert out is not None
     assert "│ A " in out
+
+
+def test_long_labels_render_as_centered_block_above_arrow():
+    out = render_sequence_diagram(
+        """sequenceDiagram
+    participant user
+    participant assistant
+    assistant-->>user: "Entiendo que tu pedido #8291 llegó dañado"
+""",
+        40,
+    )
+    assert out is not None
+    lines = out.split("\n")
+    arrow_idx = next(i for i, l in enumerate(lines) if "◀" in l)
+    assert arrow_idx > 3
+    block = lines[3:arrow_idx]
+    assert len(block) >= 2
+    for l in block:
+        assert "│" not in l
+    joined = " ".join(block)
+    import re as _re
+    joined = _re.sub(r"\s+", " ", joined)
+    assert "Entiendo que tu pedido" in joined
+    assert "llegó dañado" in joined
+
+
+def test_long_notes_wrap_inside_box_instead_of_truncating():
+    out = render_sequence_diagram(
+        """sequenceDiagram
+    participant A
+    participant B
+    Note over A,B: un criterio de evaluacion bastante largo que ya no cabe en una sola linea de la nota
+""",
+        40,
+    )
+    assert out is not None
+    lines = out.split("\n")
+    tops = [l for l in lines[3:] if "┌" in l and "┐" in l]
+    assert len(tops) == 1
+    mid_rows = [l for l in lines if "│" in l]
+    # cabecera de participantes (2 líneas con │) + filas de la nota (≥2)
+    assert len(mid_rows) >= 4
+    assert "linea de la nota" in out

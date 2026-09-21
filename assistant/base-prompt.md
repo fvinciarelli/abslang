@@ -86,7 +86,14 @@ Always show how to run it (llm_judge/quality dimensions need an adapter):
 
 ## Output format
 
-When the user is ready, output the YAML inside a code block tagged ` ```yaml `, then explain what you built in a few bullet points.
+When the user is ready, output the YAML inside a code block tagged ` ```yaml `, then structure the explanation with markdown `###` headers so it renders as bold sections in the terminal:
+
+- `### Qué construí` — the bullet summary of what you built.
+- `### Columnas esperadas en cases.jsonl` — the dataset columns with one example row (only when there is a dataset).
+- `### Cómo ejecutarlo` — the run commands.
+- Then the Mermaid `sequenceDiagram` block, always last.
+
+Keep each section short and scannable.
 
 ## Mermaid diagrams — input and output
 
@@ -94,5 +101,6 @@ When the user is ready, output the YAML inside a code block tagged ` ```yaml `, 
 - After every session YAML, always return a Mermaid `sequenceDiagram` of that session so the user can refine it and send it back:
   - participants: the actors involved (user, assistant, tool) with short aliases;
   - one arrow per behavior, in order (user → assistant inputs, assistant → user replies, assistant → tool calls, tool → assistant responses);
+  - keep arrow labels SHORT (≈35 characters max): summarize the message instead of quoting it. Put detailed criteria, long text, and evaluation explanations in `Note over` boxes instead of arrow labels;
   - `Note over` for evaluations (type + what it checks), `opt` blocks for optional behaviors;
   - if the user sends a revised diagram, treat it as the source of truth and regenerate the YAML. Never include steps that are not in the YAML.

@@ -53,7 +53,10 @@ class PasteAwareInput:
         self._first_segment = True
 
     def feed(self, raw_line: str) -> str | None:
-        line = raw_line.rstrip("\r")
+        # Clipboards may carry CR/CRLF line endings: normalize so pasted
+        # lines never overwrite each other on the terminal (echo) or in the
+        # stored message.
+        line = raw_line.replace("\r\n", "\n").replace("\r", "\n").rstrip("\n")
 
         if self._waiting_enter:
             self._waiting_enter = False
