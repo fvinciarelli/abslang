@@ -11,6 +11,7 @@ import asyncio
 import importlib
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -25,6 +26,7 @@ from .formatters.table import format_table, format_json_output, format_junit
 from .config import merge_config
 from .log import configure_logging, close_logging, new_run_id, RunLogger
 from .report import eval_to_dict, observed_to_dict
+from .mermaid_ascii import render_sequence_diagram
 
 SMOKE_SESSION = """session: Order status
 description: User asks about an order. Happy path.
@@ -725,7 +727,14 @@ def report(file: str, output_format: str, failed: bool, detail: Optional[int]):
 @main.command("chat")
 @click.option("--provider", help="openai, anthropic, or deepseek (auto-detects from env if not set)")
 @click.option("--api-key", help="API key (or set OPENAI_API_KEY / ANTHROPIC_API_KEY / DEEPSEEK_API_KEY)")
-def chat_cmd(provider: str | None, api_key: str | None):
+@click.option("--model", help="model name (overrides ABS_CHAT_MODEL)")
+@click.option("--base-url", help="API base URL (overrides ABS_CHAT_BASE_URL)")
+@click.option("--max-tokens", type=int, default=None, help="max output tokens (default: 4096)")
+@click.option("--temperature", type=float, default=None, help="sampling temperature (default: 0.3)")
+@click.option("--omit-temperature", is_flag=True, help="never send temperature (for models that reject it)")
+@click.option("--max-tokens-param", default=None, help="token-limit field name: max_tokens (default) or max_completion_tokens (gpt-5/o-series)")
+@click.option("--param", "extra_param_entries", multiple=True, help="extra request body parameter, repeatable (e.g. --param reasoning_effort=low)")
+def chat_cmd(provider, api_key, model, base_url, max_tokens, temperature, omit_temperature, max_tokens_param, extra_param_entries):
     """Start an ABS assistant chat session."""
     # Detect provider
     if not provider:
@@ -755,32 +764,112 @@ def chat_cmd(provider: str | None, api_key: str | None):
         click.echo(f"❌ Unknown provider: {provider}. Use openai, anthropic, or deepseek.", err=True)
         sys.exit(2)
     cfg = configs[provider]
+    model = model or cfg["model"]
+    base_url = base_url or cfg["base_url"]
 
-    from .assistant import chat, new_conversation, extract_yaml
+    # Validate flags (mirrors the TypeScript CLI)
+    if max_tokens is not None and max_tokens <= 0:
+        click.echo(f"❌ --max-tokens must be a positive number, got '{max_tokens}'.", err=True)
+        sys.exit(2)
+    import math
+    if temperature is not None and not math.isfinite(temperature):
+        click.echo(f"❌ --temperature must be a number, got '{temperature}'.", err=True)
+        sys.exit(2)
+    if max_tokens_param and max_tokens_param not in ("max_tokens", "max_completion_tokens"):
+        click.echo(f"❌ --max-tokens-param must be max_tokens or max_completion_tokens, got '{max_tokens_param}'.", err=True)
+        sys.exit(2)
+    extra_params = {}
+    for raw in extra_param_entries:
+        key2, eq, value = raw.partition("=")
+        if not eq or not key2.strip():
+            click.echo(f"❌ --param expects key=value, got '{raw}'.", err=True)
+            sys.exit(2)
+        param_key = key2.strip()
+        try:
+            extra_params[param_key] = json.loads(value)
+        except Exception:
+            extra_params[param_key] = value
+
+    # Line editing + native bracketed paste where GNU readline is available.
+    # Without it, input() still works and paste markers are normalized by
+    # PasteAwareInput below.
+    try:
+        import readline  # noqa: F401  (editing, history, native bracketed paste)
+    except ImportError:
+        pass
+
+    from .assistant import AssistantConfig, chat, new_conversation, extract_yaml, extract_mermaid
+    from .paste_input import PasteAwareInput, disable_bracketed_paste, enable_bracketed_paste
+
     messages = new_conversation()
     last_yaml: str | None = None
+    mermaid_lines: list[str] | None = None
+    multiline: list[str] | None = None
+    render_diagrams = True
+    collector = PasteAwareInput()
 
+    config = AssistantConfig(
+        api_key=key,
+        model=model,
+        base_url=base_url,
+        provider=provider,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        omit_temperature=omit_temperature,
+        max_tokens_param=max_tokens_param,
+        extra_params=extra_params,
+    )
+
+    click.echo(click.style(f"  Provider: {provider} · model: {model}\n", dim=True))
     click.echo("\n🤖 ABS Assistant — describe the agent behavior you want to test\n")
     click.echo("  I'll ask you guided questions to understand your flow and build the best possible test.")
     click.echo("  Some questions may feel extra — they're there to make sure we don't miss edge cases.\n")
-    click.echo("  Type /save <filename> to save (e.g. /save refunds → refunds.abs.yaml), /quit to exit.\n")
+    click.echo("  Type /mermaid to paste a Mermaid diagram, /render off to show diagrams as raw text, /save <filename> to save, /quit to exit.\n")
+    click.echo("  💡 Paste long text (even multi-line) and press Enter to send it as one message.")
+    click.echo("  End a line with \\ to keep typing on the next line (finish with an empty line).\n")
     click.echo("  ⚠️  Not all agents expose intermediate steps. The assistant will ask about this first.\n")
 
     import asyncio
 
-    def render_md(text: str) -> str:
+    def render_md(text: str, render_mermaid: bool = True) -> str:
         """Basic terminal markdown renderer."""
         lines = text.split("\n")
         out: list[str] = []
         in_code_block = False
+        mermaid_buf: list[str] | None = None
+
+        import re as _re
 
         for line in lines:
             if line.startswith("```"):
-                in_code_block = not in_code_block
-                if in_code_block:
-                    out.append(click.style("┌─ code ──────────────────────", dim=True))
+                if mermaid_buf is not None:
+                    buf = mermaid_buf
+                    mermaid_buf = None
+                    rendered = render_sequence_diagram(
+                        "\n".join(buf),
+                        shutil.get_terminal_size().columns,
+                    )
+                    if rendered is not None:
+                        out.append(rendered)
+                    else:
+                        out.append(click.style("┌─ code ──────────────────────", dim=True))
+                        for l in buf:
+                            out.append(click.style("│ " + l, dim=True))
+                        out.append(click.style("└──────────────────────────────", dim=True))
+                    continue
+                if not in_code_block:
+                    lang = line[3:].strip().lower()
+                    if lang.startswith("mermaid") and render_mermaid:
+                        mermaid_buf = []
+                    else:
+                        in_code_block = True
+                        out.append(click.style("┌─ code ──────────────────────", dim=True))
                 else:
+                    in_code_block = False
                     out.append(click.style("└──────────────────────────────", dim=True))
+                continue
+            if mermaid_buf is not None:
+                mermaid_buf.append(line)
                 continue
             if in_code_block:
                 out.append(click.style("│ " + line, dim=True))
@@ -789,7 +878,6 @@ def chat_cmd(provider: str | None, api_key: str | None):
             rendered = line
 
             # Headers
-            import re as _re
             if _re.match(r"^### ", rendered):
                 rendered = click.style(rendered[4:], bold=True, underline=True)
             elif _re.match(r"^## ", rendered):
@@ -832,21 +920,104 @@ def chat_cmd(provider: str | None, api_key: str | None):
             await asyncio.sleep(0.08)
         click.echo("\r", nl=False)
 
-    async def _chat_loop():
+    def _prompt() -> str:
+        if multiline is not None:
+            return click.style("… ", fg="green")
+        if mermaid_lines is not None:
+            return click.style("mermaid> ", fg="green")
+        return click.style("You: ", fg="green")
+
+    async def _send(content: str) -> None:
         nonlocal last_yaml
+        content = content.replace("\r\n", "\n").replace("\r", "\n")
+        messages.append({"role": "user", "content": content})
+        try:
+            task = asyncio.create_task(chat(messages, config))
+            spinner_task = asyncio.create_task(_spinner(task))
+            response = await task
+            await spinner_task
+
+            click.echo(click.style("Assistant: ", fg="blue"))
+            click.echo(render_md(response, render_mermaid=render_diagrams))
+            click.echo()
+            messages.append({"role": "assistant", "content": response})
+
+            yaml_content = extract_yaml(response)
+            if yaml_content:
+                try:
+                    from .parser import parse_yaml, expand_fragments
+                    docs = parse_yaml(yaml_content)
+                    expand_fragments(docs[0])
+                    last_yaml = yaml_content
+                    click.echo(click.style("  ✅ Valid YAML extracted. Use /save <name> (e.g. /save refunds) or /save path/name\n", dim=True))
+                except Exception as e:
+                    last_yaml = yaml_content
+                    click.echo(click.style(f"  ⚠️  YAML extracted but has issues: {e}", fg="yellow"))
+                    click.echo(click.style("  Use /save <path> to try anyway, or keep chatting to fix.\n", dim=True))
+
+            mermaid = extract_mermaid(response)
+            if mermaid:
+                note = "rendered above" if render_diagrams else "included"
+                click.echo(click.style(f"  📊 Mermaid diagram {note} — edit it and paste it back with /mermaid to refine.\n", dim=True))
+        except Exception as e:
+            click.echo(f"\nError: {e}\n", err=True)
+
+    async def _chat_loop():
+        nonlocal last_yaml, mermaid_lines, multiline
         loop = asyncio.get_event_loop()
         while True:
             try:
-                user_input = await loop.run_in_executor(None, input, click.style("You: ", fg="green"))
+                user_input = await loop.run_in_executor(None, input, _prompt())
             except (EOFError, KeyboardInterrupt):
                 click.echo("\nBye!")
                 break
 
-            trimmed = user_input.strip()
+            message = collector.feed(user_input.rstrip("\r"))
+            if message is None:
+                continue
+
+            # Manual multi-line mode (started with a trailing "\").
+            if multiline is not None:
+                if message.strip() == "":
+                    block = "\n".join(multiline)
+                    multiline = None
+                    click.echo(click.style(f"  → message captured ({len(block.splitlines())} lines)\n", dim=True))
+                    await _send(block)
+                else:
+                    multiline.extend(message.split("\n"))
+                continue
+
+            # Collecting a pasted Mermaid diagram: keep raw lines
+            # (indentation matters) until an empty line.
+            if mermaid_lines is not None:
+                if message.strip() == "":
+                    diagram = "\n".join(mermaid_lines)
+                    mermaid_lines = None
+                    click.echo(click.style(f"  → diagram captured ({len(diagram.splitlines())} lines)\n", dim=True))
+                    await _send("```mermaid\n" + diagram + "\n```")
+                else:
+                    mermaid_lines.extend(message.split("\n"))
+                continue
+
+            if not message.strip():
+                continue
+
+            trimmed = message.strip()
 
             if trimmed in ("/quit", "/q"):
                 click.echo("Bye!")
                 break
+
+            if trimmed in ("/mermaid", "/mmd"):
+                mermaid_lines = []
+                click.echo(click.style("  Paste the Mermaid diagram. Finish with an empty line.\n", dim=True))
+                continue
+
+            if trimmed in ("/render off", "/render on"):
+                nonlocal render_diagrams
+                render_diagrams = trimmed.endswith("on")
+                click.echo(click.style(f"  Mermaid rendering {'on' if render_diagrams else 'off'} (raw text).\n", dim=True))
+                continue
 
             if trimmed.startswith("/save"):
                 parts = trimmed.split(maxsplit=1)
@@ -893,35 +1064,18 @@ def chat_cmd(provider: str | None, api_key: str | None):
                     click.echo(f"⚠️  Saved without validation to {path}\n")
                 continue
 
-            messages.append({"role": "user", "content": trimmed})
+            if trimmed.endswith("\\") and len(trimmed) > 1:
+                multiline = [trimmed[:-1].rstrip()]
+                click.echo(click.style("  Continue typing; finish with an empty line.\n", dim=True))
+                continue
 
-            try:
-                task = asyncio.create_task(chat(messages, key, model=cfg["model"], base_url=cfg["base_url"]))
-                spinner_task = asyncio.create_task(_spinner(task))
-                response = await task
-                await spinner_task
+            await _send(message)
 
-                click.echo(click.style("Assistant: ", fg="blue"))
-                click.echo(render_md(response))
-                click.echo()
-                messages.append({"role": "assistant", "content": response})
-
-                yaml_content = extract_yaml(response)
-                if yaml_content:
-                    try:
-                        from .parser import parse_yaml, expand_fragments
-                        docs = parse_yaml(yaml_content)
-                        expand_fragments(docs[0])
-                        last_yaml = yaml_content
-                        click.echo(click.style("  ✅ Valid YAML extracted. Use /save <name> (e.g. /save refunds) or /save path/name\n", dim=True))
-                    except Exception as e:
-                        last_yaml = yaml_content
-                        click.echo(click.style(f"  ⚠️  YAML extracted but has issues: {e}", fg="yellow"))
-                        click.echo(click.style("  Use /save <path> to try anyway, or keep chatting to fix.\n", dim=True))
-            except Exception as e:
-                click.echo(f"\nError: {e}\n", err=True)
-
-    asyncio.run(_chat_loop())
+    enable_bracketed_paste()
+    try:
+        asyncio.run(_chat_loop())
+    finally:
+        disable_bracketed_paste()
 
 
 # ═══════════════════════════════════════════════════════════════════

@@ -121,7 +121,11 @@ abslang chat
   Some questions may feel extra — they're there to make sure we
   don't miss edge cases.
 
-  Type /save <path> to save the generated YAML, /quit to exit.
+  Type /mermaid to paste a Mermaid diagram, /render off to show
+  diagrams as raw text, /save <filename> to save, /quit to exit.
+  💡 Paste long text (even multi-line) and press Enter to send it as
+  one message. End a line with \ to keep typing on the next line
+  (finish with an empty line).
 
 You: A customer asks for a refund on a damaged item.
      The agent should verify the order, process the refund,
@@ -155,14 +159,47 @@ Paste a Mermaid diagram and the assistant converts it to ABS: flowchart nodes be
 
 After every session YAML, the assistant also returns a Mermaid `sequenceDiagram` of what it built, so you can edit the diagram and paste it back to refine the spec.
 
+### Rendered diagrams in the terminal
+
+The `sequenceDiagram` that the assistant returns after each YAML is rendered
+**directly in the console as ASCII art** (no extra dependencies):
+
+```
+┌───────┐ ┌──────┐
+│Usuario│ │Agente│
+└───┬───┘ └───┬──┘
+    │ Pide devolver un producto
+    │─────────▶
+    │ Pide el │
+    número de │
+    │   orden │
+    ◀─────────│
+```
+
+Type `/render off` to show the raw Mermaid source instead (useful to copy it), and `/render on` to render again. Other diagram types and malformed diagrams fall back to the raw source automatically.
+
 ### Commands inside chat
 
 | Command | What it does |
 |---------|-------------|
 | `/mermaid` | Collects a pasted Mermaid diagram (finish with an empty line) and converts it |
+| `/render on` / `/render off` | Toggles ASCII rendering of Mermaid diagrams in the terminal (on by default) |
 | `/save <path>` | Validates the YAML and writes it to disk |
 | `/force <path>` | Saves without validation (if you want to fix it manually) |
 | `/quit` or `/q` | Ends the session |
+| `\` at the end of a line | Keeps reading lines and sends them together as one message (finish with an empty line) |
+
+### Multi-line input
+
+Pasting long text with embedded line breaks sends it as **one message**: the
+chat enables bracketed paste, so the pasted block is captured and sent only
+when you press Enter — pasted lines are never dispatched as separate
+messages, and a `/save`-looking line inside a paste never runs as a command.
+On terminals without bracketed paste (or piped stdin), end a line with `\`
+to keep typing and finish with an empty line.
+
+The TypeScript and Python packages ship the same chat: same flags, same
+commands, same paste behavior.
 
 ### Provider support
 

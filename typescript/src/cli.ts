@@ -18,6 +18,7 @@ import { mergeConfig } from "./config";
 import { configureBuiltinJudge } from "./evaluators/builtin_judge";
 import { configureLogging, closeLogging, newRunId, RunLogger } from "./log";
 import { serializeEval, serializeObserved } from "./report";
+import { renderSequenceDiagram } from "./mermaid-ascii";
 
 const program = new Command();
 
@@ -896,20 +897,44 @@ jobs:
 
 // ── Terminal markdown renderer ──
 
-function renderMd(text: string): string {
+function renderMd(text: string, opts: { renderMermaid?: boolean } = {}): string {
   const lines = text.split("\n");
   const out: string[] = [];
   let inCodeBlock = false;
+  let mermaidBuf: string[] | null = null;
 
   for (const line of lines) {
     // Code blocks
     if (line.startsWith("```")) {
-      inCodeBlock = !inCodeBlock;
-      if (inCodeBlock) {
-        out.push(chalk.dim("┌─ code ──────────────────────"));
+      if (mermaidBuf !== null) {
+        const buf = mermaidBuf;
+        mermaidBuf = null;
+        const rendered = renderSequenceDiagram(buf.join("\n"), process.stdout.columns ?? 100);
+        if (rendered) {
+          out.push(rendered);
+        } else {
+          out.push(chalk.dim("┌─ code ──────────────────────"));
+          for (const l of buf) out.push(chalk.dim("│ " + l));
+          out.push(chalk.dim("└──────────────────────────────"));
+        }
+        continue;
+      }
+      if (!inCodeBlock) {
+        const lang = line.slice(3).trim().toLowerCase();
+        if (lang.startsWith("mermaid") && opts.renderMermaid !== false) {
+          mermaidBuf = [];
+        } else {
+          inCodeBlock = true;
+          out.push(chalk.dim("┌─ code ──────────────────────"));
+        }
       } else {
+        inCodeBlock = false;
         out.push(chalk.dim("└──────────────────────────────"));
       }
+      continue;
+    }
+    if (mermaidBuf !== null) {
+      mermaidBuf.push(line);
       continue;
     }
     if (inCodeBlock) {
@@ -1014,22 +1039,40 @@ program
     }
 
     const { chat, newConversation, extractYaml, extractMermaid } = await import("./assistant");
+    const { PasteAwareInput, RawChatInput, enableBracketedPaste, disableBracketedPaste } = await import("./paste-input");
     const messages = newConversation();
-    const readline = await import("readline");
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
+    const collector = new PasteAwareInput();
+
+    // TTY sessions use a raw-mode editor (Node readline swallows the
+    // bracketed-paste markers); piped input falls back to plain readline.
+    const isTTY = process.stdin.isTTY && process.stdout.isTTY;
+    const editor = isTTY ? new RawChatInput() : null;
+    const rl = isTTY
+      ? null
+      : (await import("readline")).createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+
+    enableBracketedPaste();
+    process.on("exit", () => {
+      editor?.stop();
+      disableBracketedPaste();
     });
 
     console.log(chalk.dim(`  Provider: ${provider} · model: ${model}\n`));
     console.log(chalk.bold("\n🤖 ABS Assistant — describe the agent behavior you want to test\n"));
     console.log(chalk.dim("  I'll ask you guided questions to understand your flow and build the best possible test."));
     console.log(chalk.dim("  Some questions may feel extra — they're there to make sure we don't miss edge cases.\n"));
-    console.log(chalk.dim("  Type /mermaid to paste a Mermaid diagram, /save <filename> to save, /quit to exit.\n"));
+    console.log(chalk.dim("  Type /mermaid to paste a Mermaid diagram, /render off to show diagrams as raw text, /save <filename> to save, /quit to exit.\n"));
+    console.log(chalk.dim("  💡 Paste long text (even multi-line) and press Enter to send it as one message."));
+    console.log(chalk.dim("  End a line with \\ to keep typing on the next line (finish with an empty line).\n"));
     console.log(chalk.dim("  ⚠️  Not all agents expose intermediate steps. The assistant will ask about this first.\n"));
 
     let lastYaml: string | null = null;
     let mermaidLines: string[] | null = null;
+    let multiline: string[] | null = null;
+    let renderDiagrams = true;
 
     const spinner = (running: boolean) => {
       if (!running) return;
@@ -1045,7 +1088,8 @@ program
     };
 
     const sendMessage = async (content: string) => {
-      messages.push({ role: "user", content });
+      const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      messages.push({ role: "user", content: normalized });
       try {
         const stop = spinner(true);
         const response = await chat(messages, {
@@ -1061,7 +1105,7 @@ program
         });
         stop?.();
         console.log(chalk.blue("Assistant: "));
-        console.log(renderMd(response));
+        console.log(renderMd(response, { renderMermaid: renderDiagrams }));
         console.log();
 
         messages.push({ role: "assistant", content: response });
@@ -1084,45 +1128,102 @@ program
 
         const mermaid = extractMermaid(response);
         if (mermaid) {
-          console.log(chalk.dim("  📊 Mermaid diagram included — edit it and paste it back with /mermaid to refine.\n"));
+          console.log(chalk.dim(`  📊 Mermaid diagram ${renderDiagrams ? "rendered above" : "included"} — edit it and paste it back with /mermaid to refine.\n`));
         }
       } catch (err: any) {
         console.error(chalk.red(`\nError: ${err.message}\n`));
       }
     };
 
-    const ask = () => {
-      rl.question(chalk.green(mermaidLines ? "mermaid> " : "You: "), async (input: string) => {
-        // Collecting a pasted diagram: keep raw lines (indentation matters) until an empty line.
-        if (mermaidLines) {
-          if (input.trim() === "") {
-            const diagram = mermaidLines.join("\n");
-            mermaidLines = null;
-            console.log(chalk.dim(`  → diagram captured (${diagram.split("\n").length} lines)\n`));
-            await sendMessage("```mermaid\n" + diagram + "\n```");
-          } else {
-            mermaidLines.push(input);
-          }
-          ask();
-          return;
-        }
-
-        const trimmed = input.trim();
-
-        if (trimmed === "/quit" || trimmed === "/q") {
+    const readLine = (prompt: string): Promise<string | null> => {
+      if (editor) {
+        editor.start();
+        return editor.requestLine(prompt, () => {
           console.log(chalk.dim("\nBye!\n"));
-          rl.close();
-          return;
-        }
+          editor.stop();
+          disableBracketedPaste();
+          process.exit(0);
+        });
+      }
+      return new Promise<string | null>((resolve) => {
+        rl!.question(prompt, resolve);
+        rl!.once("close", () => resolve(null));
+      });
+    };
 
-        if (trimmed === "/mermaid" || trimmed === "/mmd") {
-          mermaidLines = [];
-          console.log(chalk.dim("  Paste the Mermaid diagram. Finish with an empty line.\n"));
-          ask();
-          return;
-        }
+    const ask = async () => {
+      const prompt = chalk.green(multiline ? "… " : mermaidLines ? "mermaid> " : "You: ");
+      const input = await readLine(prompt);
+      if (input === null) {
+        console.log(chalk.dim("\nBye!\n"));
+        editor?.stop();
+        rl?.close();
+        return;
+      }
 
-        if (trimmed.startsWith("/save")) {
+      const message = collector.feed(input);
+      if (message === null) {
+        ask();
+        return;
+      }
+
+      // Manual multi-line mode (started with a trailing "\\").
+      if (multiline) {
+        if (message.trim() === "") {
+          const block = multiline.join("\n");
+          multiline = null;
+          console.log(chalk.dim(`  → message captured (${block.split("\n").length} lines)\n`));
+          await sendMessage(block);
+        } else {
+          multiline.push(...message.split("\n"));
+        }
+        ask();
+        return;
+      }
+
+      // Collecting a pasted diagram: keep raw lines (indentation matters) until an empty line.
+      if (mermaidLines) {
+        if (message.trim() === "") {
+          const diagram = mermaidLines.join("\n");
+          mermaidLines = null;
+          console.log(chalk.dim(`  → diagram captured (${diagram.split("\n").length} lines)\n`));
+          await sendMessage("```mermaid\n" + diagram + "\n```");
+        } else {
+          mermaidLines.push(...message.split("\n"));
+        }
+        ask();
+        return;
+      }
+
+      if (!message.trim()) {
+        ask();
+        return;
+      }
+
+      const trimmed = message.trim();
+
+      if (trimmed === "/quit" || trimmed === "/q") {
+        console.log(chalk.dim("\nBye!\n"));
+        editor?.stop();
+        rl?.close();
+        return;
+      }
+
+      if (trimmed === "/mermaid" || trimmed === "/mmd") {
+        mermaidLines = [];
+        console.log(chalk.dim("  Paste the Mermaid diagram. Finish with an empty line.\n"));
+        ask();
+        return;
+      }
+
+      if (trimmed === "/render off" || trimmed === "/render on") {
+        renderDiagrams = trimmed.endsWith("on");
+        console.log(chalk.dim(`  Mermaid rendering ${renderDiagrams ? "on" : "off"} (raw text).\n`));
+        ask();
+        return;
+      }
+
+      if (trimmed.startsWith("/save")) {
           let path = trimmed.split(/\s+/)[1];
           if (!lastYaml) {
             console.log(chalk.yellow("No YAML generated yet. Chat a bit first.\n"));
@@ -1177,14 +1278,15 @@ program
           return;
         }
 
-        if (!trimmed) {
+        if (trimmed.endsWith("\\") && trimmed.length > 1) {
+          multiline = [trimmed.slice(0, -1).trimEnd()];
+          console.log(chalk.dim("  Continue typing; finish with an empty line.\n"));
           ask();
           return;
         }
 
-        await sendMessage(trimmed);
+        await sendMessage(message);
         ask();
-      });
     };
 
     ask();
