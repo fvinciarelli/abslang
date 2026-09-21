@@ -1,6 +1,6 @@
 {
   "name": "abslang",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "Agent Behavior Specification \u2014 describe, run, and evaluate AI agent interactions from the command line",
   "main": "dist/index.js",
   "bin": {
