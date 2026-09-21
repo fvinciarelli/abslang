@@ -1017,12 +1017,20 @@ function renderMd(text: string, opts: { renderMermaid?: boolean } = {}): string 
   let mermaidBuf: string[] | null = null;
 
   const emitCodeBlock = (buf: string[], lang: string) => {
-    const label = lang || "code";
-    const cols = Math.max(24, Math.max(...buf.map((l) => l.length), 0) + 4);
-    const pad = "─".repeat(Math.max(0, cols - 4 - label.length - 1));
-    out.push(chalk.dim(`┌─ ${label} ` + pad));
-    for (const l of buf) out.push(chalk.dim("│ ") + highlightCodeLine(lang, l));
-    out.push(chalk.dim("└" + "─".repeat(cols - 1)));
+    // No borders: syntax-highlighted code with a 2-space indent (md-style).
+    let lines = buf;
+    if (lang === "json" || lang === "jsonl") {
+      const pretty: string[] = [];
+      for (const l of buf) {
+        try {
+          pretty.push(...JSON.stringify(JSON.parse(l), null, 2).split("\n"));
+        } catch {
+          pretty.push(l);
+        }
+      }
+      lines = pretty;
+    }
+    for (const l of lines) out.push("  " + highlightCodeLine(lang, l));
   };
 
   for (const line of lines) {
@@ -1068,13 +1076,16 @@ function renderMd(text: string, opts: { renderMermaid?: boolean } = {}): string 
 
     let rendered = line;
 
-    // Headers
+    // Headers — markdown ### and the standard section titles the
+    // assistant is instructed to use (fallback when it skips the ###).
     if (/^### /.test(rendered)) {
       rendered = chalk.bold.underline(rendered.replace(/^### /, ""));
     } else if (/^## /.test(rendered)) {
       rendered = chalk.bold.underline(rendered.replace(/^## /, ""));
     } else if (/^# /.test(rendered)) {
       rendered = chalk.bold.underline(rendered.replace(/^# /, ""));
+    } else if (/^(Qu[ée] constru[ií]|Qu[ée] construimos|C[óo]mo ejecutarlo|C[óo]mo se ejecuta|Columnas esperadas en [\w.]+|Diagrama de secuencia de esta sesi[óo]n)$/.test(rendered)) {
+      rendered = chalk.bold.underline(rendered);
     }
 
     // Bold

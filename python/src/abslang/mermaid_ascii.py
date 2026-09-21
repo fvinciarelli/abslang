@@ -39,6 +39,7 @@ _PARTICIPANT = re.compile(rf"^\s*(?:participant|actor)\s+({_ID})$")
 _TITLE = re.compile(r"^\s*title\s*:?\s*(.+)$")
 _BLOCK_OPEN = re.compile(r"^(opt|alt|loop|par|rect|critical|box)\b\s*(.*)$", re.IGNORECASE)
 _BLOCK_ELSE = re.compile(r"^(else|and)\b\s*(.*)$", re.IGNORECASE)
+_re_br = re.compile(r"<br\s*/?>", re.IGNORECASE)  # HTML breaks the assistant sometimes emits
 
 
 def _clamp(v: int, lo: int, hi: int) -> int:
@@ -114,7 +115,7 @@ def render_sequence_diagram(source: str, width: int = 100) -> str | None:
             continue
         m = _TITLE.match(line)
         if m:
-            title = m.group(1).strip()
+            title = _re_br.sub(" ", m.group(1).strip())
             continue
         m = _MSG.match(line)
         if m:
@@ -126,7 +127,7 @@ def render_sequence_diagram(source: str, width: int = 100) -> str | None:
                     "kind": "message",
                     "a": idx(a),
                     "b": idx(b),
-                    "label": (label or "").strip(),
+                    "label": _re_br.sub(" ", (label or "").strip()),
                     "dashed": dashed,
                     "head": head,
                 })
@@ -135,7 +136,7 @@ def render_sequence_diagram(source: str, width: int = 100) -> str | None:
         if m:
             _, a, b, text = m.groups()
             ai = idx(a)
-            rows.append({"kind": "note", "a": ai, "b": idx(b) if b else ai, "text": (text or "").strip()})
+            rows.append({"kind": "note", "a": ai, "b": idx(b) if b else ai, "text": _re_br.sub(" ", (text or "").strip())})
             continue
         if re.match(r"^end\s*$", line, re.IGNORECASE):
             rows.append({"kind": "block-end"})

@@ -102,5 +102,6 @@ Keep each section short and scannable.
   - participants: the actors involved (user, assistant, tool) with short aliases;
   - one arrow per behavior, in order (user → assistant inputs, assistant → user replies, assistant → tool calls, tool → assistant responses);
   - keep arrow labels SHORT (≈35 characters max): summarize the message instead of quoting it. Put detailed criteria, long text, and evaluation explanations in `Note over` boxes instead of arrow labels;
+  - NEVER use HTML inside the diagram (no `<br/>` or tags) — labels and notes are plain text;
   - `Note over` for evaluations (type + what it checks), `opt` blocks for optional behaviors;
   - if the user sends a revised diagram, treat it as the source of truth and regenerate the YAML. Never include steps that are not in the YAML.

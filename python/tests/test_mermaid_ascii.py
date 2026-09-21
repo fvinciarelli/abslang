@@ -104,6 +104,23 @@ def test_renders_header_only_diagram():
     assert "│ A " in out
 
 
+def test_strips_html_breaks():
+    out = render_sequence_diagram(
+        """sequenceDiagram
+    participant A
+    participant B
+    A->>B: pide el dato<br/>y espera
+    Note over A,B: llm_judge — clasifica<br/>intención, cita #8291
+""",
+        40,
+    )
+    assert out is not None
+    assert "<br" not in out
+    assert "pide el dato y espera" in out
+    assert "clasifica intención," in out
+    assert "cita #8291" in out
+
+
 def test_long_labels_render_as_centered_block_above_arrow():
     out = render_sequence_diagram(
         """sequenceDiagram

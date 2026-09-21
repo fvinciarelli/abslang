@@ -110,6 +110,23 @@ describe("renderSequenceDiagram", () => {
     assert.ok(out.includes("│ A "));
   });
 
+  it("strips HTML breaks the assistant sometimes emits", () => {
+    const out = renderSequenceDiagram(
+      `sequenceDiagram
+    participant A
+    participant B
+    A->>B: pide el dato<br/>y espera
+    Note over A,B: llm_judge — clasifica<br/>intención, cita #8291
+`,
+      40
+    );
+    assert.ok(out);
+    assert.ok(!out.includes("<br"));
+    assert.ok(out.includes("pide el dato y espera"));
+    assert.ok(out.includes("clasifica intención,"));
+    assert.ok(out.includes("cita #8291"));
+  });
+
   it("renders long labels as a centered block above the arrow without lifeline overlap", () => {
     const out = renderSequenceDiagram(
       `sequenceDiagram

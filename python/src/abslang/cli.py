@@ -987,13 +987,18 @@ def chat_cmd(provider, api_key, model, base_url, max_tokens, temperature, omit_t
         mermaid_buf: list[str] | None = None
 
         def emit_code_block(buf: list[str], lang: str) -> None:
-            label = lang or "code"
-            cols = max(24, max((len(l) for l in buf), default=0) + 4)
-            pad = "─" * max(0, cols - 4 - len(label) - 1)
-            out.append(click.style(f"┌─ {label} {pad}", dim=True))
-            for l in buf:
-                out.append(click.style("│ ", dim=True) + _highlight_code_line(lang, l))
-            out.append(click.style("└" + "─" * (cols - 1), dim=True))
+            # No borders: syntax-highlighted code with a 2-space indent (md-style).
+            lines = buf
+            if lang in ("json", "jsonl"):
+                pretty: list[str] = []
+                for l in buf:
+                    try:
+                        pretty.extend(json.dumps(json.loads(l), indent=2, ensure_ascii=False).split("\n"))
+                    except Exception:
+                        pretty.append(l)
+                lines = pretty
+            for l in lines:
+                out.append("  " + _highlight_code_line(lang, l))
 
         import re as _re
 
@@ -1035,13 +1040,19 @@ def chat_cmd(provider, api_key, model, base_url, max_tokens, temperature, omit_t
 
             rendered = line
 
-            # Headers
+            # Headers — markdown ### and the standard section titles the
+            # assistant is instructed to use (fallback when it skips the ###).
             if _re.match(r"^### ", rendered):
                 rendered = click.style(rendered[4:], bold=True, underline=True)
             elif _re.match(r"^## ", rendered):
                 rendered = click.style(rendered[3:], bold=True, underline=True)
             elif _re.match(r"^# ", rendered):
                 rendered = click.style(rendered[2:], bold=True, underline=True)
+            elif _re.match(
+                r"^(Qu[ée] constru[ií]|Qu[ée] construimos|C[óo]mo ejecutarlo|C[óo]mo se ejecuta|Columnas esperadas en [\w.]+|Diagrama de secuencia de esta sesi[óo]n)$",
+                rendered,
+            ):
+                rendered = click.style(rendered, bold=True, underline=True)
 
             # Bold
             rendered = _re.sub(

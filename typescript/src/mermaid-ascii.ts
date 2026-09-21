@@ -104,7 +104,7 @@ export function renderSequenceDiagram(source: string, width = 100): string | nul
     }
     m = line.match(TITLE);
     if (m) {
-      title = m[1].trim();
+      title = m[1].trim().replace(/<br\s*\/?>/gi, " ");
       continue;
     }
     m = line.match(MSG);
@@ -116,7 +116,7 @@ export function renderSequenceDiagram(source: string, width = 100): string | nul
           kind: "message",
           a: idx(a),
           b: idx(b),
-          label: (label || "").trim(),
+          label: (label || "").trim().replace(/<br\s*\/?>/gi, " "),
           dashed: style.dashed,
           head: style.head,
         });
@@ -127,7 +127,7 @@ export function renderSequenceDiagram(source: string, width = 100): string | nul
     if (m) {
       const [, , a, b, text] = m;
       const ai = idx(a);
-      rows.push({ kind: "note", a: ai, b: b ? idx(b) : ai, text: (text || "").trim() });
+      rows.push({ kind: "note", a: ai, b: b ? idx(b) : ai, text: (text || "").trim().replace(/<br\s*\/?>/gi, " ") });
       continue;
     }
     if (/^end\s*$/i.test(line)) {
