@@ -836,10 +836,136 @@ async def evaluate_with_adapter(
 
 # ── v0.2 — when expression evaluator ──
 
-import re
+
+def _scan_when_operand(expression: str, i: int) -> tuple[str, int]:
+    """Return the atomic operand starting at ``i`` (for unary-negation wrapping)."""
+    while i < len(expression) and expression[i] in " \t":
+        i += 1
+    if i >= len(expression):
+        return "", i
+    ch = expression[i]
+    if ch == "(":
+        depth = 0
+        j = i
+        while j < len(expression):
+            if expression[j] == "(":
+                depth += 1
+            elif expression[j] == ")":
+                depth -= 1
+                if depth == 0:
+                    return expression[i : j + 1], j + 1
+            j += 1
+        return expression[i:], len(expression)
+    if ch in "'\"":
+        quote = ch
+        j = i + 1
+        while j < len(expression) and expression[j] != quote:
+            if expression[j] == "\\" and j + 1 < len(expression):
+                j += 1
+            j += 1
+        if j < len(expression):
+            j += 1
+        return expression[i:j], j
+    j = i
+    while j < len(expression) and (expression[j].isalnum() or expression[j] in "._"):
+        j += 1
+    return expression[i:j], j
+
+
+def _normalize_when(expression: str) -> str:
+    """Translate a ``when`` expression to Python-native syntax.
+
+    Canonical ABS operators are ``&&``, ``||``, ``!`` (C-style). The word
+    synonyms ``and``/``or``/``not`` (any case) are accepted for portability,
+    plus ``===``/``!==`` and ``true``/``false`` in any case. Quoted string
+    literals are left untouched. Unary negation binds to the immediately
+    following value, mirroring JS semantics: ``!{{x}}`` or ``!({{x}} == 1)``.
+
+    Mirrors ``normalizeWhenExpression`` in typescript/src/evaluators/builtin.ts.
+    """
+    out: list[str] = []
+    i = 0
+    n = len(expression)
+    while i < n:
+        ch = expression[i]
+        # String literals: copy verbatim — never touch their contents.
+        if ch in "'\"":
+            quote = ch
+            j = i + 1
+            while j < n and expression[j] != quote:
+                if expression[j] == "\\" and j + 1 < n:
+                    j += 1
+                j += 1
+            if j < n:
+                j += 1
+            out.append(expression[i:j])
+            i = j
+            continue
+        # Words: and/or/not synonyms and boolean literals (case-insensitive).
+        if ch.isalpha() or ch == "_":
+            j = i
+            while j < n and (expression[j].isalnum() or expression[j] == "_"):
+                j += 1
+            word = expression[i:j]
+            lower = word.lower()
+            if lower == "and":
+                out.append("and")
+                i = j
+                continue
+            if lower == "or":
+                out.append("or")
+                i = j
+                continue
+            if lower == "not":
+                operand, i = _scan_when_operand(expression, j)
+                out.append(f"not ({operand})")
+                continue
+            if lower == "true":
+                out.append("True")
+                i = j
+                continue
+            if lower == "false":
+                out.append("False")
+                i = j
+                continue
+            out.append(word)
+            i = j
+            continue
+        # Operators (longest first: !== contains !=, === contains ==).
+        if expression.startswith("!==", i):
+            out.append("!=")
+            i += 3
+            continue
+        if expression.startswith("===", i):
+            out.append("==")
+            i += 3
+            continue
+        if expression.startswith("&&", i):
+            out.append("and")
+            i += 2
+            continue
+        if expression.startswith("||", i):
+            out.append("or")
+            i += 2
+            continue
+        if ch == "!" and not expression.startswith("!=", i):
+            operand, i = _scan_when_operand(expression, i + 1)
+            out.append(f"not ({operand})")
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
 
 def eval_when(expression: str | None, row_vars: dict[str, Any]) -> bool:
-    """Evaluate a when expression against dataset row variables."""
+    """Evaluate a ``when`` expression against dataset row variables.
+
+    Accepted operators: ``&&``, ``||``, ``!`` (canonical) and the word
+    synonyms ``and``/``or``/``not`` in any case; comparisons ``==``, ``!=``,
+    ``<``, ``>``, ``<=``, ``>=`` (``===``/``!==`` also accepted); booleans
+    ``true``/``false`` in any case; ``{{column}}`` references. Mirrors
+    ``evalWhen`` in typescript/src/evaluators/builtin.ts.
+    """
     if not expression:
         return True
 
@@ -853,8 +979,7 @@ def eval_when(expression: str | None, row_vars: dict[str, Any]) -> bool:
         return "undefined"
 
     resolved = re.sub(r"\{\{([\w.]+)\}\}", _replacer, expression)
-    # Normalize JS-style booleans for Python eval
-    resolved = resolved.replace("true", "True").replace("false", "False")
+    resolved = _normalize_when(resolved)
 
     try:
         return bool(eval(resolved, {"__builtins__": {}}, {}))

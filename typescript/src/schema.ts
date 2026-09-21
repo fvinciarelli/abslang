@@ -281,7 +281,7 @@ export const SCHEMA_V01 = {
         },
         "when": {
           "type": "string",
-          "description": "Dataset expression. The evaluation only runs when this evaluates to true. v0.2+."
+          "description": "Dataset expression. The evaluation only runs when this evaluates to true. Operators: && || ! (canonical; the word synonyms and/or/not in any case are also accepted), comparisons == != < > <= >= (=== and !== also accepted), booleans true/false in any case, and {{column}} references. Unary negation binds to the immediately following value (use parentheses to negate a comparison). If the expression cannot be evaluated, the evaluation does not run. v0.2+."
         },
         "dataset": {},
         "prompt": {

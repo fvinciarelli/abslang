@@ -829,6 +829,50 @@ function evaluateComposition(
 
 // ── v0.2 — when expression evaluator ──
 
+/**
+ * Translate word synonyms (and/or/not, any case) and boolean literals in any
+ * case to JS-native syntax. Quoted string literals are left untouched.
+ * Mirrors `_normalize_when` in python/src/abslang/evaluators/__init__.py.
+ */
+function normalizeWhenExpression(expression: string): string {
+  let out = "";
+  let i = 0;
+  while (i < expression.length) {
+    const ch = expression[i];
+    // String literals: copy verbatim — never touch their contents.
+    if (ch === "'" || ch === '"') {
+      const quote = ch;
+      let j = i + 1;
+      while (j < expression.length && expression[j] !== quote) {
+        if (expression[j] === "\\" && j + 1 < expression.length) j++; // skip escapes
+        j++;
+      }
+      if (j < expression.length) j++; // closing quote
+      out += expression.slice(i, j);
+      i = j;
+      continue;
+    }
+    // Words: and/or/not synonyms and boolean literals (case-insensitive).
+    if (/[A-Za-z_]/.test(ch)) {
+      let j = i;
+      while (j < expression.length && /[A-Za-z0-9_]/.test(expression[j])) j++;
+      const word = expression.slice(i, j);
+      const lower = word.toLowerCase();
+      if (lower === "and") out += "&&";
+      else if (lower === "or") out += "||";
+      else if (lower === "not") out += "!";
+      else if (lower === "true") out += "true";
+      else if (lower === "false") out += "false";
+      else out += word;
+      i = j;
+      continue;
+    }
+    out += ch;
+    i++;
+  }
+  return out;
+}
+
 export function evalWhen(expression: string | undefined, rowVars: Record<string, any>): boolean {
   if (!expression) return true; // no when = always applies
 
@@ -841,6 +885,9 @@ export function evalWhen(expression: string | undefined, rowVars: Record<string,
     }
     return "undefined";
   });
+
+  // Normalize operator synonyms to canonical JS syntax (SPECIFICATION.md §7.4)
+  resolved = normalizeWhenExpression(resolved);
 
   // Simple boolean eval — supports ==, !=, true, false, quoted strings
   try {

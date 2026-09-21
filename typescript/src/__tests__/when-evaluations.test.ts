@@ -90,6 +90,39 @@ evaluations:
   return { session, dataset };
 }
 
+function writeAndFixture(hasOrderId: boolean, expectAsk: boolean): { session: string; dataset: string } {
+  const dir = mkdtempSync(join(tmpdir(), "abs-when-and-"));
+  const dataset = join(dir, "cases.jsonl");
+  writeFileSync(
+    dataset,
+    JSON.stringify({ userQuery: "El estado de la orden #8291", hasOrderId, expectAsk }) + "\n"
+  );
+
+  const session = join(dir, "when-and.abs.yaml");
+  writeFileSync(
+    session,
+    `session: When gating with &&
+abs_version: "0.2"
+dataset:
+  id: cases
+  path: ${dataset}
+behaviors:
+  - actor: user
+    action: says
+    content: "{{cases.userQuery}}"
+  - actor: assistant
+    action: asks
+    content: "${AGENT_ASKS}"
+evaluations:
+  - type: never
+    match: { actor: assistant, action: asks }
+    when: "{{cases.hasOrderId}} == true && {{cases.expectAsk}} == true"
+`
+  );
+
+  return { session, dataset };
+}
+
 function mockAgentAsks() {
   return startServer((_req, res) => {
     sendJson(res, { choices: [{ message: { role: "assistant", content: AGENT_ASKS } }] });
@@ -122,6 +155,77 @@ describe("when-gated evaluations through the CLI", () => {
       const never = out.results[0].chain_evaluations.find((e: any) => e.type === "never");
       assert.equal(never.passed, true);
       assert.match(never.reason, /when condition not met/);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it("evaluates && conditions — both true runs the evaluation", async () => {
+    const srv = await mockAgentAsks();
+    try {
+      const { session } = writeAndFixture(true, true);
+      const out = await runCli(session, srv.url);
+
+      assert.equal(out.passed, false);
+      const never = out.results[0].chain_evaluations.find((e: any) => e.type === "never");
+      assert.equal(never.passed, false);
+      assert.doesNotMatch(never.reason, /when condition not met/);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it("evaluates && conditions — one side false skips the evaluation", async () => {
+    const srv = await mockAgentAsks();
+    try {
+      const { session } = writeAndFixture(false, true);
+      const out = await runCli(session, srv.url);
+
+      assert.equal(out.passed, true);
+      const never = out.results[0].chain_evaluations.find((e: any) => e.type === "never");
+      assert.equal(never.passed, true);
+      assert.match(never.reason, /when condition not met/);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it("evaluates || and word synonyms — never runs when either side is true", async () => {
+    const srv = await mockAgentAsks();
+    try {
+      const dir = mkdtempSync(join(tmpdir(), "abs-when-or-"));
+      const dataset = join(dir, "cases.jsonl");
+      writeFileSync(
+        dataset,
+        JSON.stringify({ userQuery: "El estado de la orden #8291", hasOrderId: false, expectAsk: true }) + "\n"
+      );
+      const session = join(dir, "when-or.abs.yaml");
+      writeFileSync(
+        session,
+        `session: When gating with ||
+abs_version: "0.2"
+dataset:
+  id: cases
+  path: ${dataset}
+behaviors:
+  - actor: user
+    action: says
+    content: "{{cases.userQuery}}"
+  - actor: assistant
+    action: asks
+    content: "${AGENT_ASKS}"
+evaluations:
+  - type: never
+    match: { actor: assistant, action: asks }
+    when: "{{cases.hasOrderId}} == true OR {{cases.expectAsk}} == true"
+`
+      );
+      const out = await runCli(session, srv.url);
+
+      assert.equal(out.passed, false);
+      const never = out.results[0].chain_evaluations.find((e: any) => e.type === "never");
+      assert.equal(never.passed, false);
+      assert.doesNotMatch(never.reason, /when condition not met/);
     } finally {
       await srv.close();
     }

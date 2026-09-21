@@ -34,6 +34,39 @@ describe("evalWhen", () => {
     assert.equal(evalWhen("{{x}} != true", { x: false }), true);
     assert.equal(evalWhen('{{x}} !== "hello"', { x: "world" }), true);
   });
+
+  it("supports && and || operators", () => {
+    assert.equal(evalWhen('{{x}} == "a" && {{y}} == true', { x: "a", y: true }), true);
+    assert.equal(evalWhen('{{x}} == "b" || {{y}} == true', { x: "b", y: true }), true);
+    assert.equal(evalWhen('{{x}} == "c" && {{y}} == true', { x: "b", y: true }), false);
+  });
+
+  it("accepts and/or/not word synonyms in any case", () => {
+    assert.equal(evalWhen('{{x}} == "a" AND {{y}} == true', { x: "a", y: true }), true);
+    assert.equal(evalWhen('{{x}} == "b" or {{y}} == true', { x: "b", y: true }), true);
+    assert.equal(evalWhen("not {{flag}}", { flag: false }), true);
+    assert.equal(evalWhen("NOT {{flag}}", { flag: true }), false);
+    assert.equal(evalWhen("!{{flag}}", { flag: true }), false);
+  });
+
+  it("normalizes strict equality and boolean case", () => {
+    assert.equal(evalWhen('{{x}} === "a"', { x: "a" }), true);
+    assert.equal(evalWhen("{{x}} !== 'a'", { x: "b" }), true);
+    assert.equal(evalWhen("{{x}} == TRUE", { x: true }), true);
+    assert.equal(evalWhen("{{x}} == FALSE", { x: false }), true);
+  });
+
+  it("does not touch operator words inside quoted strings", () => {
+    assert.equal(evalWhen('{{x}} == "rock and roll"', { x: "rock and roll" }), true);
+    assert.equal(evalWhen("{{x}} == 'true'", { x: "true" }), true);
+  });
+
+  it("negation binds to the next value; use parens for comparisons", () => {
+    assert.equal(evalWhen("!({{x}} == 'a')", { x: "a" }), false);
+    assert.equal(evalWhen("not ({{x}} == 'a')", { x: "a" }), false);
+    // Same as (!'a') == 'a' → false — JS semantics, mirrored by Python
+    assert.equal(evalWhen("!{{x}} == 'a'", { x: "a" }), false);
+  });
 });
 
 // ── expected evaluator ──

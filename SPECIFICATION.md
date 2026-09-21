@@ -144,6 +144,17 @@ evaluations:
 
 If `when` is present, the evaluation only runs when the expression evaluates to true. If `when` is absent, the evaluation always expects the behavior to have matched (equivalent to making it required).
 
+**`when` expression syntax** — a single boolean expression over dataset columns:
+
+- `{{column}}` references, resolved against the dataset row (strings must be quoted in the expression).
+- Comparisons: `==`, `!=`, `<`, `>`, `<=`, `>=`. Strict equality (`===` / `!==`) is also accepted and behaves as `==` / `!=`.
+- Boolean logic: `&&`, `||`, `!` — the **canonical operators**. The word synonyms `and`, `or`, `not` (any case) are accepted for portability, so `{{a}} && {{b}}` and `{{a}} and {{b}}` are equivalent.
+- Boolean literals `true` / `false` (any case).
+- Quoted strings (`'...'` or `"..."`) and numbers. Operator words inside quoted strings are literal data: `{{x}} == "rock and roll"` compares against the whole string.
+- Unary negation (`!` / `not`) binds to the immediately following value. Write `!{{cases.flag}}` to negate a column, or `!({{cases.a}} == 1)` to negate a comparison.
+
+If the expression cannot be parsed or evaluated (unknown column, syntax error), `when` is treated as false and the evaluation does not run.
+
 If `after` is present, the behavior must have matched AND its match must occur after the step identified by the selector.
 
 If `reason` is present, it is used as the failure message. If absent, the runner reports the behavior ID.

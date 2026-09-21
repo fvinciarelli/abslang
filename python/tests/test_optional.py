@@ -29,6 +29,34 @@ class TestEvalWhen:
         assert eval_when("{{x}} != true", {"x": False}) is True
         assert eval_when("{{x}} != 'hello'", {"x": "world"}) is True
 
+    def test_and_or_operators(self):
+        assert eval_when("{{x}} == 'a' && {{y}} == true", {"x": "a", "y": True}) is True
+        assert eval_when("{{x}} == 'b' || {{y}} == true", {"x": "b", "y": True}) is True
+        assert eval_when("{{x}} == 'c' && {{y}} == true", {"x": "b", "y": True}) is False
+
+    def test_word_synonyms_any_case(self):
+        assert eval_when("{{x}} == 'a' AND {{y}} == true", {"x": "a", "y": True}) is True
+        assert eval_when("{{x}} == 'b' or {{y}} == true", {"x": "b", "y": True}) is True
+        assert eval_when("not {{flag}}", {"flag": False}) is True
+        assert eval_when("NOT {{flag}}", {"flag": True}) is False
+        assert eval_when("!{{flag}}", {"flag": True}) is False
+
+    def test_strict_equality_and_boolean_case(self):
+        assert eval_when("{{x}} === 'a'", {"x": "a"}) is True
+        assert eval_when("{{x}} !== 'a'", {"x": "b"}) is True
+        assert eval_when("{{x}} == TRUE", {"x": True}) is True
+        assert eval_when("{{x}} == FALSE", {"x": False}) is True
+
+    def test_quoted_strings_untouched(self):
+        assert eval_when("{{x}} == 'rock and roll'", {"x": "rock and roll"}) is True
+        assert eval_when("{{x}} == 'true'", {"x": "true"}) is True
+
+    def test_negation_binds_to_next_value(self):
+        assert eval_when("!({{x}} == 'a')", {"x": "a"}) is False
+        assert eval_when("not ({{x}} == 'a')", {"x": "a"}) is False
+        # Igual que (not 'a') == 'a' → False — semántica JS, espejo de TS
+        assert eval_when("!{{x}} == 'a'", {"x": "a"}) is False
+
 
 # ── expected evaluator ──
 

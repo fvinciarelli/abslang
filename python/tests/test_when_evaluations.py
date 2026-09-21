@@ -65,6 +65,38 @@ evaluations:
     return session
 
 
+def _write_and_fixture(has_order_id: bool, expect_ask: bool) -> Path:
+    directory = Path(tempfile.mkdtemp(prefix="abs-when-and-"))
+    dataset = directory / "cases.jsonl"
+    dataset.write_text(
+        json.dumps(
+            {"userQuery": "El estado de la orden #8291", "hasOrderId": has_order_id, "expectAsk": expect_ask}
+        )
+        + "\n"
+    )
+    session = directory / "when-and.abs.yaml"
+    session.write_text(
+        f"""session: When gating with &&
+abs_version: "0.2"
+dataset:
+  id: cases
+  path: {dataset}
+behaviors:
+  - actor: user
+    action: says
+    content: "{{{{cases.userQuery}}}}"
+  - actor: assistant
+    action: asks
+    content: "{AGENT_ASKS}"
+evaluations:
+  - type: never
+    match: {{ actor: assistant, action: asks }}
+    when: "{{{{cases.hasOrderId}}}} == true && {{{{cases.expectAsk}}}} == true"
+"""
+    )
+    return session
+
+
 def _mock_agent(record, handler, index):
     send_json(handler, {"choices": [{"message": {"role": "assistant", "content": AGENT_ASKS}}]})
 
@@ -91,3 +123,63 @@ class TestWhenGatingThroughCli:
         never = next(e for e in out["results"][0]["chain_evaluations"] if e["type"] == "never")
         assert never["passed"] is True
         assert "when condition not met" in never["reason"]
+
+    def test_evaluates_and_condition_both_true_runs_evaluation(self, server_factory):
+        _, url = server_factory(_mock_agent, "/chat")
+        session = _write_and_fixture(True, True)
+
+        out = _run_cli(session, url)
+
+        assert out["passed"] is False
+        never = next(e for e in out["results"][0]["chain_evaluations"] if e["type"] == "never")
+        assert never["passed"] is False
+        assert "when condition not met" not in never["reason"]
+
+    def test_evaluates_and_condition_one_side_false_skips(self, server_factory):
+        _, url = server_factory(_mock_agent, "/chat")
+        session = _write_and_fixture(False, True)
+
+        out = _run_cli(session, url)
+
+        assert out["passed"] is True
+        never = next(e for e in out["results"][0]["chain_evaluations"] if e["type"] == "never")
+        assert never["passed"] is True
+        assert "when condition not met" in never["reason"]
+
+    def test_evaluates_or_word_synonym_either_side_true_runs(self, server_factory):
+        _, url = server_factory(_mock_agent, "/chat")
+        directory = Path(tempfile.mkdtemp(prefix="abs-when-or-"))
+        dataset = directory / "cases.jsonl"
+        dataset.write_text(
+            json.dumps(
+                {"userQuery": "El estado de la orden #8291", "hasOrderId": False, "expectAsk": True}
+            )
+            + "\n"
+        )
+        session = directory / "when-or.abs.yaml"
+        session.write_text(
+            f"""session: When gating with ||
+abs_version: "0.2"
+dataset:
+  id: cases
+  path: {dataset}
+behaviors:
+  - actor: user
+    action: says
+    content: "{{{{cases.userQuery}}}}"
+  - actor: assistant
+    action: asks
+    content: "{AGENT_ASKS}"
+evaluations:
+  - type: never
+    match: {{ actor: assistant, action: asks }}
+    when: "{{{{cases.hasOrderId}}}} == true OR {{{{cases.expectAsk}}}} == true"
+"""
+        )
+
+        out = _run_cli(session, url)
+
+        assert out["passed"] is False
+        never = next(e for e in out["results"][0]["chain_evaluations"] if e["type"] == "never")
+        assert never["passed"] is False
+        assert "when condition not met" not in never["reason"]
