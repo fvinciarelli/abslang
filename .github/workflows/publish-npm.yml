@@ -33,19 +33,26 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      # npm can accept a publish while degraded and never persist the version.
-      # Fail loudly instead of reporting a green run with nothing published.
+      # npm can accept a publish while degraded and never persist the version,
+      # and the registry CDN can lag several minutes before a new version is
+      # visible. Fail loudly instead of reporting a green run with nothing
+      # published — but give the CDN time and check the packument as fallback.
       - name: Verify the version is live on npm
         run: |
           PKG_VERSION=$(node -p "require('./package.json').version")
-          for attempt in $(seq 1 12); do
+          for attempt in $(seq 1 28); do
             code=$(curl -s -o /dev/null -w "%{http_code}" "https://registry.npmjs.org/abslang/$PKG_VERSION?ts=$(date +%s%N)")
             if [ "$code" = "200" ]; then
               echo "✅ abslang@$PKG_VERSION is live on npm"
               exit 0
             fi
-            echo "⏳ abslang@$PKG_VERSION not live yet (attempt $attempt/12, HTTP $code)"
+            # Fallback: the packument sometimes updates before the version doc.
+            if curl -s "https://registry.npmjs.org/abslang?ts=$(date +%s%N)" | grep -q "\"$PKG_VERSION\""; then
+              echo "✅ abslang@$PKG_VERSION visible in the packument"
+              exit 0
+            fi
+            echo "⏳ abslang@$PKG_VERSION not live yet (attempt $attempt/28, HTTP $code)"
             sleep 15
           done
-          echo "❌ abslang@$PKG_VERSION was published but is NOT visible on npm after 3 minutes"
+          echo "❌ abslang@$PKG_VERSION was published but is NOT visible on npm after 7 minutes"
           exit 1
