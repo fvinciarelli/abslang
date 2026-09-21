@@ -25,7 +25,7 @@ const program = new Command();
 program
   .name("abs")
   .description("ABS — Agent Behavior Specification CLI")
-  .version("0.5.3");
+  .version("0.5.4");
 
 // ── init ──
 
@@ -241,7 +241,7 @@ program
       format: options.logFormat,
       file: options.logFile,
       includeContent: options.logContent !== false,
-      meta: { abslang: "0.5.3", agent: cfg.agent_url, agent_format: cfg.agent_format },
+      meta: { abslang: "0.5.4", agent: cfg.agent_url, agent_format: cfg.agent_format },
     });
     const runLogger = new RunLogger({ runId: newRunId() });
 
