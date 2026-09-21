@@ -180,13 +180,6 @@ export function renderSequenceDiagram(source: string, width = 100): string | nul
     while (ch.length < start + t.length) ch.push(" ");
     for (let i = 0; i < t.length; i++) ch[Math.max(0, start) + i] = t[i];
   };
-  const boxRow = (left: number, innerWidth: number, text: string, open: string, close: string) => {
-    const ch = lifelines();
-    ch[left] = open;
-    for (let x = left + 1; x <= left + innerWidth; x++) ch[x] = "─";
-    ch[left + innerWidth + 1] = close;
-    return ch;
-  };
 
   const wrap = (text: string, maxLen: number): string[] => {
     const words = text.split(/\s+/).filter(Boolean);
@@ -212,11 +205,13 @@ export function renderSequenceDiagram(source: string, width = 100): string | nul
   const out: string[] = [];
   if (title) out.push(title.slice(0, width));
 
-  // ── Participant header ──
-  const top = widths.map((w) => "┌" + "─".repeat(w) + "┐");
-  const mid = widths.map((w, i) => "│" + center(participants[i].label.slice(0, w), w) + "│");
-  const bot = widths.map((w) => "└" + "─".repeat(Math.floor(w / 2)) + "┬" + "─".repeat(w - 1 - Math.floor(w / 2)) + "┘");
-  out.push(top.join(" "), mid.join(" "), bot.join(" "));
+  // ── Participant header — clean: names over lifelines, no boxes ──
+  const names = lifelines();
+  participants.forEach((p, i) => {
+    put(names, pos[i] - Math.floor(p.label.length / 2), p.label.slice(0, widths[i]));
+  });
+  out.push(line(names));
+  out.push(line(lifelines()));
 
   // ── Rows ──
   for (const row of rows) {
@@ -227,11 +222,12 @@ export function renderSequenceDiagram(source: string, width = 100): string | nul
       const fill = row.dashed ? "-" : "─";
       const emitBlock = (chunks: string[]) => {
         // Label too long for the gap: wrapped block ABOVE the arrow,
-        // centered between the two lifelines, never overlapping them.
-        const mid = Math.floor((pa + pb) / 2);
+        // aligned to the source lifeline, never overlapping lifelines.
         for (const chunk of chunks) {
-          const l = new Array(W).fill(" ");
-          put(l, Math.max(0, mid - Math.floor(chunk.length / 2)), chunk);
+          const l = lifelines();
+          const start = pa < pb ? pa + 2 : Math.max(0, pa - 1 - chunk.length);
+          for (let x = start; x < start + chunk.length && x < W; x++) l[x] = " ";
+          put(l, start, chunk);
           out.push(line(l));
         }
       };
@@ -274,53 +270,27 @@ export function renderSequenceDiagram(source: string, width = 100): string | nul
     }
 
     if (row.kind === "note") {
+      // No boxes: a dim dot-line between the lifelines, wrapped.
       const pa = pos[row.a];
       const pb = pos[row.b];
       const low = Math.min(pa, pb);
-      const high = Math.max(pa, pb);
-      const innerWidth = Math.min(
-        width - low - 2,
-        Math.max(4, high - low - 2, Math.min(row.text.length + 2, 48))
-      );
-      out.push(line(boxRow(low, innerWidth, row.text, "┌", "┐")));
-      for (const chunk of wrap(row.text, Math.max(1, innerWidth - 2))) {
-        const midBox = lifelines();
-        for (let x = low; x <= low + innerWidth + 1; x++) midBox[x] = " ";
-        midBox[low] = "│";
-        midBox[low + innerWidth + 1] = "│";
-        put(midBox, low + 1, " " + chunk);
-        out.push(line(midBox));
-      }
-      out.push(line(boxRow(low, innerWidth, row.text, "└", "┘")));
+      const start = low + 2;
+      const maxLen = Math.max(10, Math.min(48, width - start - 1));
+      const chunks = wrap(row.text, maxLen);
+      chunks.forEach((chunk, ci) => {
+        const l = lifelines();
+        const text = (ci === 0 ? "· " : "  ") + chunk;
+        for (let x = start; x < start + text.length && x < W; x++) l[x] = " ";
+        put(l, start, text);
+        out.push(line(l));
+      });
       continue;
     }
 
+    if (row.kind === "block-end") continue;
     const firstPos = pos[0];
-    const lastPos = pos[pos.length - 1];
     const ch = lifelines();
-    if (row.kind === "block-open") {
-      ch[firstPos] = "┌";
-      ch[lastPos] = "┐";
-      const avail = Math.max(0, lastPos - firstPos - 2);
-      let t = row.label;
-      if (t.length > avail - 1) t = t.slice(0, Math.max(0, avail - 1)) + "…";
-      ch[firstPos + 1] = "─";
-      put(ch, firstPos + 2, t);
-      for (let x = firstPos + 2 + t.length; x < lastPos; x++) ch[x] = "─";
-    } else if (row.kind === "block-else") {
-      ch[firstPos] = "├";
-      ch[lastPos] = "┤";
-      const avail = Math.max(0, lastPos - firstPos - 2);
-      let t = row.label;
-      if (t.length > avail - 1) t = t.slice(0, Math.max(0, avail - 1)) + "…";
-      ch[firstPos + 1] = "─";
-      put(ch, firstPos + 2, t);
-      for (let x = firstPos + 2 + t.length; x < lastPos; x++) ch[x] = "─";
-    } else {
-      ch[firstPos] = "└";
-      ch[lastPos] = "┘";
-      for (let x = firstPos + 1; x < lastPos; x++) ch[x] = "─";
-    }
+    put(ch, firstPos + 2, "· " + row.label);
     out.push(line(ch));
   }
 

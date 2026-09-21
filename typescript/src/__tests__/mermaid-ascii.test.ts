@@ -19,9 +19,8 @@ describe("renderSequenceDiagram", () => {
     assert.equal(
       renderSequenceDiagram(DIALOG, 40),
       [
-        "┌────┐ ┌─────────┐",
-        "│user│ │assistant│",
-        "└──┬─┘ └────┬────┘",
+        " user   assistant",
+        "   │        │",
         "   │ hola   │",
         "   │────────▶",
         "   │ saludo │",
@@ -30,7 +29,7 @@ describe("renderSequenceDiagram", () => {
     );
   });
 
-  it("supports participant aliases and notes between participants", () => {
+  it("supports participant aliases and notes as dot lines", () => {
     const out = renderSequenceDiagram(
       `sequenceDiagram
     participant C as Cliente
@@ -40,10 +39,10 @@ describe("renderSequenceDiagram", () => {
       40
     );
     assert.ok(out);
-    assert.ok(out.includes("│Cliente│"));
-    assert.ok(out.includes("│Sistema│"));
-    assert.ok(out.includes("verificación"));
-    assert.ok(out.includes("┌") && out.includes("┐"));
+    assert.ok(out.includes("Cliente"));
+    assert.ok(out.includes("Sistema"));
+    assert.ok(out.includes("· verificación"));
+    assert.ok(!out.includes("┌") && !out.includes("┐"));
   });
 
   it("creates implicit participants from arrows and renders blocks and self-messages", () => {
@@ -58,11 +57,10 @@ describe("renderSequenceDiagram", () => {
       40
     );
     assert.ok(out);
-    assert.ok(out.includes("│ A ") && out.includes("│ B "));
-    assert.ok(out.includes("┌─opt:"));
-    assert.ok(out.includes("└─"));
+    assert.ok(out.includes("uno") && out.includes("dos"));
+    assert.ok(out.includes("· opt: [opcional]"));
     assert.ok(out.includes("─▶"));
-    assert.ok(out.includes("uno") && out.includes("dos") && out.includes("self"));
+    assert.ok(out.includes("self"));
   });
 
   it("supports dashed, cross, async and headless arrows", () => {
@@ -107,7 +105,8 @@ describe("renderSequenceDiagram", () => {
   it("renders a header-only diagram", () => {
     const out = renderSequenceDiagram("sequenceDiagram\n    participant A\n", 40);
     assert.ok(out);
-    assert.ok(out.includes("│ A "));
+    assert.ok(out.includes("A"));
+    assert.ok(out.includes("│"));
   });
 
   it("strips HTML breaks the assistant sometimes emits", () => {
@@ -127,7 +126,7 @@ describe("renderSequenceDiagram", () => {
     assert.ok(out.includes("cita #8291"));
   });
 
-  it("renders long labels as a centered block above the arrow without lifeline overlap", () => {
+  it("renders long labels as a block above the arrow aligned to the source lifeline", () => {
     const out = renderSequenceDiagram(
       `sequenceDiagram
     participant user
@@ -139,16 +138,15 @@ describe("renderSequenceDiagram", () => {
     assert.ok(out);
     const lines = out.split("\n");
     const arrowIdx = lines.findIndex((l) => l.includes("◀"));
-    assert.ok(arrowIdx > 3);
-    const block = lines.slice(3, arrowIdx);
+    assert.ok(arrowIdx > 2);
+    const block = lines.slice(2, arrowIdx);
     assert.ok(block.length >= 2);
-    for (const l of block) assert.doesNotMatch(l, /│/);
-    const joined = block.join(" ").replace(/\s+/g, " ");
+    const joined = block.join(" ").replace(/│/g, " ").replace(/\s+/g, " ");
     assert.ok(joined.includes("Entiendo que tu pedido"));
     assert.ok(joined.includes("llegó dañado"));
   });
 
-  it("wraps long notes inside the box instead of truncating them", () => {
+  it("renders long notes as wrapped dot lines without boxes", () => {
     const out = renderSequenceDiagram(
       `sequenceDiagram
     participant A
@@ -158,11 +156,8 @@ describe("renderSequenceDiagram", () => {
       40
     );
     assert.ok(out);
-    const lines = out.split("\n");
-    const tops = lines.slice(3).filter((l) => l.includes("┌") && l.includes("┐"));
-    assert.equal(tops.length, 1);
-    const midRows = lines.filter((l) => /│[^│]*│/.test(l));
-    assert.ok(midRows.length >= 3); // at least two wrapped text rows + header
+    assert.ok(!out.includes("┌") && !out.includes("┐"));
+    assert.ok(out.includes("· un criterio de evaluacion"));
     assert.ok(out.includes("linea de la nota"));
   });
 });

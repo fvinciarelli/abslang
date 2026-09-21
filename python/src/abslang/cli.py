@@ -969,12 +969,9 @@ def chat_cmd(provider, api_key, model, base_url, max_tokens, temperature, omit_t
 
     click.echo(click.style(f"  Provider: {provider} · model: {model}\n", dim=True))
     click.echo("\n🤖 ABS Assistant — describe the agent behavior you want to test\n")
-    click.echo("  I'll ask you guided questions to understand your flow and build the best possible test.")
-    click.echo("  Some questions may feel extra — they're there to make sure we don't miss edge cases.\n")
-    click.echo("  Type /mermaid to paste a Mermaid diagram, /render off to show diagrams as raw text, /save <filename> to save, /quit to exit.\n")
-    click.echo("  💡 Paste long text (even multi-line) and press Enter to send it as one message.")
-    click.echo("  End a line with \\ to keep typing on the next line (finish with an empty line).\n")
-    click.echo("  ⚠️  Not all agents expose intermediate steps. The assistant will ask about this first.\n")
+    click.echo(click.style("  /mermaid paste a diagram · /render off raw text · /save <path> save · /quit exit", dim=True))
+    click.echo(click.style("  💡 Paste multi-line text and press Enter to send it as ONE message (end a line with \\ to continue)", dim=True))
+    click.echo(click.style("  ⚠️  Not all agents expose intermediate steps — the assistant will ask first.\n", dim=True))
 
     import asyncio
 
@@ -997,6 +994,7 @@ def chat_cmd(provider, api_key, model, base_url, max_tokens, temperature, omit_t
                     except Exception:
                         pretty.append(l)
                 lines = pretty
+            out.append(click.style("· " + (lang or "text"), dim=True))
             for l in lines:
                 out.append("  " + _highlight_code_line(lang, l))
 
@@ -1091,10 +1089,10 @@ def chat_cmd(provider, api_key, model, base_url, max_tokens, temperature, omit_t
 
     def _prompt() -> str:
         if multiline is not None:
-            return click.style("… ", fg="green")
+            return click.style("…\n", fg="green")
         if mermaid_lines is not None:
-            return click.style("mermaid> ", fg="green")
-        return click.style("You: ", fg="green")
+            return click.style("mermaid>\n", fg="green")
+        return click.style("You:\n", fg="green")
 
     async def _send(content: str) -> None:
         nonlocal last_yaml
@@ -1106,11 +1104,12 @@ def chat_cmd(provider, api_key, model, base_url, max_tokens, temperature, omit_t
             response = await task
             await spinner_task
 
-            click.echo(click.style("Assistant: ", fg="blue"))
+            click.echo(click.style("Assistant:\n", fg="blue"))
             click.echo(render_md(response, render_mermaid=render_diagrams))
             click.echo()
             messages.append({"role": "assistant", "content": response})
 
+            yaml_note = ""
             yaml_content = extract_yaml(response)
             if yaml_content:
                 try:
@@ -1118,16 +1117,17 @@ def chat_cmd(provider, api_key, model, base_url, max_tokens, temperature, omit_t
                     docs = parse_yaml(yaml_content)
                     expand_fragments(docs[0])
                     last_yaml = yaml_content
-                    click.echo(click.style("  ✅ Valid YAML extracted. Use /save <name> (e.g. /save refunds) or /save path/name\n", dim=True))
+                    yaml_note = "✅ Valid YAML"
                 except Exception as e:
                     last_yaml = yaml_content
                     click.echo(click.style(f"  ⚠️  YAML extracted but has issues: {e}", fg="yellow"))
                     click.echo(click.style("  Use /save <path> to try anyway, or keep chatting to fix.\n", dim=True))
 
             mermaid = extract_mermaid(response)
-            if mermaid:
-                note = "rendered above" if render_diagrams else "included"
-                click.echo(click.style(f"  📊 Mermaid diagram {note} — edit it and paste it back with /mermaid to refine.\n", dim=True))
+            mermaid_note = "📊 diagram rendered" if mermaid and render_diagrams else ("📊 diagram included" if mermaid else "")
+            notes = [n for n in (yaml_note, mermaid_note) if n]
+            if notes:
+                click.echo(click.style(f"  {' · '.join(notes)} — /save <name> to save it\n", dim=True))
         except Exception as e:
             click.echo(f"\nError: {e}\n", err=True)
 

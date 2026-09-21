@@ -168,11 +168,12 @@ export class RawChatInput {
     return new Promise((resolve) => {
       if (this.pending.length > 0) {
         // A line was submitted while the assistant was answering.
-        process.stdout.write(prompt + "\n");
-        resolve(this.pending.shift()!);
+        const line = this.pending.shift()!;
+        process.stdout.write(prompt + "\n" + line + "\n");
+        resolve(line);
         return;
       }
-      process.stdout.write(prompt + this.buffer);
+      process.stdout.write(prompt + "\n" + this.buffer);
       this.resolveFn = resolve;
     });
   }

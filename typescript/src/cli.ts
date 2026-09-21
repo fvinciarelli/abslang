@@ -1030,6 +1030,7 @@ function renderMd(text: string, opts: { renderMermaid?: boolean } = {}): string 
       }
       lines = pretty;
     }
+    out.push(chalk.dim("· " + (lang || "text")));
     for (const l of lines) out.push("  " + highlightCodeLine(lang, l));
   };
 
@@ -1197,12 +1198,9 @@ program
 
     console.log(chalk.dim(`  Provider: ${provider} · model: ${model}\n`));
     console.log(chalk.bold("\n🤖 ABS Assistant — describe the agent behavior you want to test\n"));
-    console.log(chalk.dim("  I'll ask you guided questions to understand your flow and build the best possible test."));
-    console.log(chalk.dim("  Some questions may feel extra — they're there to make sure we don't miss edge cases.\n"));
-    console.log(chalk.dim("  Type /mermaid to paste a Mermaid diagram, /render off to show diagrams as raw text, /save <filename> to save, /quit to exit.\n"));
-    console.log(chalk.dim("  💡 Paste long text (even multi-line) and press Enter to send it as one message."));
-    console.log(chalk.dim("  End a line with \\ to keep typing on the next line (finish with an empty line).\n"));
-    console.log(chalk.dim("  ⚠️  Not all agents expose intermediate steps. The assistant will ask about this first.\n"));
+    console.log(chalk.dim("  /mermaid paste a diagram · /render off raw text · /save <path> save · /quit exit"));
+    console.log(chalk.dim("  💡 Paste multi-line text and press Enter to send it as ONE message (end a line with \\ to continue)"));
+    console.log(chalk.dim("  ⚠️  Not all agents expose intermediate steps — the assistant will ask first.\n"));
 
     let lastYaml: string | null = null;
     let mermaidLines: string[] | null = null;
@@ -1239,13 +1237,14 @@ program
           extraParams,
         });
         stop?.();
-        console.log(chalk.blue("Assistant: "));
+        console.log(chalk.blue("Assistant:\n"));
         console.log(renderMd(response, { renderMermaid: renderDiagrams }));
         console.log();
 
         messages.push({ role: "assistant", content: response });
 
         const yaml = extractYaml(response);
+        let yamlNote = "";
         if (yaml) {
           // Validate extracted YAML
           try {
@@ -1253,7 +1252,7 @@ program
             const docs = parseYaml(yaml);
             expandFragments(docs[0]);
             lastYaml = yaml;
-            console.log(chalk.dim("  ✅ Valid YAML extracted. Use /save <name> (e.g. /save refunds) or /save path/name\n"));
+            yamlNote = "✅ Valid YAML";
           } catch (err: any) {
             lastYaml = yaml; // still save it so user can /force
             console.log(chalk.yellow(`  ⚠️  YAML extracted but has issues: ${err.message}`));
@@ -1262,8 +1261,10 @@ program
         }
 
         const mermaid = extractMermaid(response);
-        if (mermaid) {
-          console.log(chalk.dim(`  📊 Mermaid diagram ${renderDiagrams ? "rendered above" : "included"} — edit it and paste it back with /mermaid to refine.\n`));
+        const mermaidNote = mermaid ? (renderDiagrams ? "📊 diagram rendered" : "📊 diagram included") : "";
+        const notes = [yamlNote, mermaidNote].filter(Boolean);
+        if (notes.length) {
+          console.log(chalk.dim(`  ${notes.join(" · ")} — /save <name> to save it\n`));
         }
       } catch (err: any) {
         console.error(chalk.red(`\nError: ${err.message}\n`));

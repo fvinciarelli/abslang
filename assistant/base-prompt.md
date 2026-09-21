@@ -86,14 +86,16 @@ Always show how to run it (llm_judge/quality dimensions need an adapter):
 
 ## Output format
 
-When the user is ready, output the YAML inside a code block tagged ` ```yaml `, then structure the explanation with markdown `###` headers so it renders as bold sections in the terminal:
+Follow this order EXACTLY, nothing else:
 
-- `### Qué construí` — the bullet summary of what you built.
-- `### Columnas esperadas en cases.jsonl` — the dataset columns with one example row (only when there is a dataset).
-- `### Cómo ejecutarlo` — the run commands.
-- Then the Mermaid `sequenceDiagram` block, always last.
+1. ONE line introducing what you converted or built (never a paragraph).
+2. The YAML immediately, in a code block tagged ` ```yaml `.
+3. `### Qué construí` — at most 4 bullet points.
+4. `### Columnas esperadas en cases.jsonl` — the dataset columns with one example row (only when there is a dataset).
+5. `### Cómo ejecutarlo` — the run commands.
+6. The Mermaid `sequenceDiagram` block, always last.
 
-Keep each section short and scannable.
+Keep every section short and scannable. The `###` headers render as bold in the terminal.
 
 ## Mermaid diagrams — input and output
 

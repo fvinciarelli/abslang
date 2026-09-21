@@ -13,9 +13,8 @@ DIALOG = """sequenceDiagram
 def test_renders_two_participant_dialogue():
     assert render_sequence_diagram(DIALOG, 40) == "\n".join(
         [
-            "┌────┐ ┌─────────┐",
-            "│user│ │assistant│",
-            "└──┬─┘ └────┬────┘",
+            " user   assistant",
+            "   │        │",
             "   │ hola   │",
             "   │────────▶",
             "   │ saludo │",
@@ -24,7 +23,7 @@ def test_renders_two_participant_dialogue():
     )
 
 
-def test_aliases_and_notes_between_participants():
+def test_aliases_and_notes_as_dot_lines():
     out = render_sequence_diagram(
         """sequenceDiagram
     participant C as Cliente
@@ -34,10 +33,10 @@ def test_aliases_and_notes_between_participants():
         40,
     )
     assert out is not None
-    assert "│Cliente│" in out
-    assert "│Sistema│" in out
-    assert "verificación" in out
-    assert "┌" in out and "┐" in out
+    assert "Cliente" in out
+    assert "Sistema" in out
+    assert "· verificación" in out
+    assert "┌" not in out and "┐" not in out
 
 
 def test_implicit_participants_blocks_and_self_messages():
@@ -52,11 +51,10 @@ def test_implicit_participants_blocks_and_self_messages():
         40,
     )
     assert out is not None
-    assert "│ A " in out and "│ B " in out
-    assert "┌─opt:" in out
-    assert "└─" in out
+    assert "uno" in out and "dos" in out
+    assert "· opt: [opcional]" in out
     assert "─▶" in out
-    assert "uno" in out and "dos" in out and "self" in out
+    assert "self" in out
 
 
 def test_dashed_cross_async_and_headless_arrows():
@@ -101,7 +99,8 @@ def test_returns_none_for_unsupported_input():
 def test_renders_header_only_diagram():
     out = render_sequence_diagram("sequenceDiagram\n    participant A\n", 40)
     assert out is not None
-    assert "│ A " in out
+    assert "A" in out
+    assert "│" in out
 
 
 def test_strips_html_breaks():
@@ -121,7 +120,7 @@ def test_strips_html_breaks():
     assert "cita #8291" in out
 
 
-def test_long_labels_render_as_centered_block_above_arrow():
+def test_long_labels_render_as_block_aligned_to_source_lifeline():
     out = render_sequence_diagram(
         """sequenceDiagram
     participant user
@@ -133,19 +132,17 @@ def test_long_labels_render_as_centered_block_above_arrow():
     assert out is not None
     lines = out.split("\n")
     arrow_idx = next(i for i, l in enumerate(lines) if "◀" in l)
-    assert arrow_idx > 3
-    block = lines[3:arrow_idx]
+    assert arrow_idx > 2
+    block = lines[2:arrow_idx]
     assert len(block) >= 2
-    for l in block:
-        assert "│" not in l
-    joined = " ".join(block)
     import re as _re
-    joined = _re.sub(r"\s+", " ", joined)
+
+    joined = _re.sub(r"\s+", " ", " ".join(block).replace("│", " "))
     assert "Entiendo que tu pedido" in joined
     assert "llegó dañado" in joined
 
 
-def test_long_notes_wrap_inside_box_instead_of_truncating():
+def test_long_notes_render_as_wrapped_dot_lines_without_boxes():
     out = render_sequence_diagram(
         """sequenceDiagram
     participant A
@@ -155,10 +152,6 @@ def test_long_notes_wrap_inside_box_instead_of_truncating():
         40,
     )
     assert out is not None
-    lines = out.split("\n")
-    tops = [l for l in lines[3:] if "┌" in l and "┐" in l]
-    assert len(tops) == 1
-    mid_rows = [l for l in lines if "│" in l]
-    # cabecera de participantes (2 líneas con │) + filas de la nota (≥2)
-    assert len(mid_rows) >= 4
+    assert "┌" not in out and "┐" not in out
+    assert "· un criterio de evaluacion" in out
     assert "linea de la nota" in out

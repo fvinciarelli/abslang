@@ -46,11 +46,6 @@ def _clamp(v: int, lo: int, hi: int) -> int:
     return max(lo, min(hi, v))
 
 
-def _center(s: str, w: int) -> str:
-    pad = max(0, w - len(s))
-    return " " * (pad // 2) + s + " " * (pad - pad // 2)
-
-
 def _head_char(head: str, rightward: bool) -> str:
     if head == "arrow":
         return "▶" if rightward else "◀"
@@ -189,25 +184,16 @@ def render_sequence_diagram(source: str, width: int = 100) -> str | None:
         for i, c in enumerate(t):
             ch[max(0, start) + i] = c
 
-    def box_row(left: int, inner_width: int, open_: str, close: str) -> list[str]:
-        ch = lifelines()
-        while len(ch) <= left + inner_width + 1:
-            ch.append(" ")
-        ch[left] = open_
-        for x in range(left + 1, left + inner_width + 1):
-            ch[x] = "─"
-        ch[left + inner_width + 1] = close
-        return ch
-
     out: list[str] = []
     if title:
         out.append(title[:width])
 
-    # ── Participant header ──
-    top = ["┌" + "─" * w + "┐" for w in widths]
-    mid = ["│" + _center(participants[i][1][:w], w) + "│" for i, w in enumerate(widths)]
-    bot = ["└" + "─" * (w // 2) + "┬" + "─" * (w - 1 - w // 2) + "┘" for w in widths]
-    out.extend([" ".join(top), " ".join(mid), " ".join(bot)])
+    # ── Participant header — clean: names over lifelines, no boxes ──
+    names = lifelines()
+    for i, p in enumerate(participants):
+        put(names, pos[i] - len(p[1]) // 2, p[1][: widths[i]])
+    out.append(line(names))
+    out.append(line(lifelines()))
 
     # ── Rows ──
     for row in rows:
@@ -219,11 +205,13 @@ def render_sequence_diagram(source: str, width: int = 100) -> str | None:
 
             def emit_block(chunks: list[str]) -> None:
                 # Label too long for the gap: wrapped block ABOVE the arrow,
-                # centered between the two lifelines, never overlapping them.
-                mid = (pa + pb) // 2
+                # aligned to the source lifeline, never overlapping lifelines.
                 for chunk in chunks:
-                    l = [" "] * W
-                    put(l, max(0, mid - len(chunk) // 2), chunk)
+                    l = lifelines()
+                    start = pa + 2 if pa < pb else max(0, pa - 1 - len(chunk))
+                    for x in range(start, min(start + len(chunk), W)):
+                        l[x] = " "
+                    put(l, start, chunk)
                     out.append(line(l))
 
             if row["a"] == row["b"]:
@@ -261,55 +249,26 @@ def render_sequence_diagram(source: str, width: int = 100) -> str | None:
             continue
 
         if kind == "note":
+            # No boxes: a dim dot-line between the lifelines, wrapped.
             pa, pb = pos[row["a"]], pos[row["b"]]
-            low, high = min(pa, pb), max(pa, pb)
-            inner = min(
-                width - low - 2,
-                max(4, high - low - 2, min(len(row["text"]) + 2, 48)),
-            )
-            out.append(line(box_row(low, inner, "┌", "┐")))
-            for chunk in _wrap(row["text"], max(1, inner - 2)):
-                mid_box = lifelines()
-                while len(mid_box) <= low + inner + 1:
-                    mid_box.append(" ")
-                for x in range(low, low + inner + 2):
-                    mid_box[x] = " "
-                mid_box[low] = "│"
-                mid_box[low + inner + 1] = "│"
-                put(mid_box, low + 1, " " + chunk)
-                out.append(line(mid_box))
-            out.append(line(box_row(low, inner, "└", "┘")))
+            low = min(pa, pb)
+            start = low + 2
+            max_len = max(10, min(48, width - start - 1))
+            chunks = _wrap(row["text"], max_len)
+            for ci, chunk in enumerate(chunks):
+                l = lifelines()
+                text = ("· " if ci == 0 else "  ") + chunk
+                for x in range(start, min(start + len(text), W)):
+                    l[x] = " "
+                put(l, start, text)
+                out.append(line(l))
             continue
 
-        first_pos, last_pos = pos[0], pos[-1]
+        if kind == "block-end":
+            continue
+        first_pos = pos[0]
         ch = lifelines()
-        if kind == "block-open":
-            ch[first_pos] = "┌"
-            ch[last_pos] = "┐"
-            avail = max(0, last_pos - first_pos - 2)
-            t = row["label"]
-            if len(t) > avail - 1:
-                t = t[: max(0, avail - 1)] + "…"
-            ch[first_pos + 1] = "─"
-            put(ch, first_pos + 2, t)
-            for x in range(first_pos + 2 + len(t), last_pos):
-                ch[x] = "─"
-        elif kind == "block-else":
-            ch[first_pos] = "├"
-            ch[last_pos] = "┤"
-            avail = max(0, last_pos - first_pos - 2)
-            t = row["label"]
-            if len(t) > avail - 1:
-                t = t[: max(0, avail - 1)] + "…"
-            ch[first_pos + 1] = "─"
-            put(ch, first_pos + 2, t)
-            for x in range(first_pos + 2 + len(t), last_pos):
-                ch[x] = "─"
-        else:
-            ch[first_pos] = "└"
-            ch[last_pos] = "┘"
-            for x in range(first_pos + 1, last_pos):
-                ch[x] = "─"
+        put(ch, first_pos + 2, "· " + row["label"])
         out.append(line(ch))
 
     return "\n".join(out)
