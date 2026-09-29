@@ -150,11 +150,25 @@ Every flag can also be set via environment variable:
 | `ABS_AGENT_MODEL` | `--agent-model` |
 | `ABS_AGENT_FORWARD_AUTH` | `--agent-forward-auth` |
 | `ABS_AGENT_AUTHORIZATION` | `--agent-authorization` |
+| `ABS_AGENT_REFRESH_URL` | `--agent-refresh-url` |
+| `ABS_AGENT_REFRESH_TOKEN` | `--agent-refresh-token` |
+| `ABS_AGENT_CLIENT_ID` | `--agent-client-id` |
+| `ABS_DATASET` | `--dataset` |
+| `ABS_FILTER` | `--filter` |
 | `ABS_JUDGE_PROVIDER` | — (forces `openai`, `anthropic`, or `gemini`) |
 | `ABS_JUDGE_MODEL` | `--judge-model` |
 | `ABS_JUDGE_BASE_URL` | `--judge-base-url` |
 | `ABS_JUDGE_API_KEY` | `--judge-api-key` |
 | `ABS_JUDGE_API_KEY_HEADER` | `--judge-api-key-header` |
+| `ABS_FORMAT` | `--format` |
+| `ABS_CI` | `--ci` |
+| `ABS_TIMEOUT` | `--timeout` |
+| `ABS_OUTPUT` | `--output` |
+| `ABS_PARALLEL` | `--parallel` |
+| `ABS_LOG_FORMAT` | `--log-format` |
+| `ABS_LOG_LEVEL` | `--log-level` |
+| `ABS_LOG_FILE` | `--log-file` |
+| `ABS_NO_LOG_CONTENT` | `--no-log-content` |
 | `ABS_VAR_orderId` | `--var orderId=...` |
 
 ---
@@ -240,23 +254,65 @@ abslang report report.json --detail 3       # Show full trace for case #3
 
 ## Config file
 
-`abs.config.yaml` stores project-level settings:
+Every option can be set three ways: as a CLI flag, as an `ABS_*` environment
+variable, or in a config file. Precedence:
 
-```yaml
-agent:
-  url: http://localhost:8080/chat
-  format: openai
-  auth: none
-
-adapters:
-  llm_judge: aievaluator
-
-defaults:
-  dataset: datasets/
-  timeout: 120
+```
+CLI flag  >  environment variable  >  config file  >  built-in default
 ```
 
-Precedence: `CLI flag > environment variable > config file > built-in default`.
+By default ABS loads `abs.config.yaml` (searched from the current directory
+upward), or an explicit file with `--config-file path.yaml` (YAML or JSON).
+Unknown sections/keys are reported as warnings so typos don't silently get
+ignored.
+
+```yaml
+# abs.config.yaml — every key maps to a CLI flag / ABS_* env var
+agent:
+  url: http://localhost:8080/chat   # --agent / ABS_AGENT_URL
+  format: openai                    # --agent-format / ABS_AGENT_FORMAT
+  auth: none                        # --agent-auth / ABS_AGENT_AUTH
+  token: sk-...                     # --agent-token / ABS_AGENT_TOKEN
+  model: gpt-4o                     # --agent-model / ABS_AGENT_MODEL
+  forward_auth: true                # --agent-forward-auth / ABS_AGENT_FORWARD_AUTH
+  authorization: "Bearer eyJ..."    # --agent-authorization / ABS_AGENT_AUTHORIZATION
+  refresh_url: ...                  # --agent-refresh-url / ABS_AGENT_REFRESH_URL
+  refresh_token: ...                # --agent-refresh-token / ABS_AGENT_REFRESH_TOKEN
+  client_id: ...                    # --agent-client-id / ABS_AGENT_CLIENT_ID
+
+adapters:
+  llm_judge: aievaluator            # --adapter llm_judge=aievaluator
+
+judge:
+  base_url: ...                     # --judge-base-url / ABS_JUDGE_BASE_URL
+  api_key: ...                      # --judge-api-key / ABS_JUDGE_API_KEY
+  api_key_header: ...               # --judge-api-key-header / ABS_JUDGE_API_KEY_HEADER
+  model: ...                        # --judge-model / ABS_JUDGE_MODEL
+
+defaults:
+  dataset: datasets/                # --dataset / ABS_DATASET
+  filter: key:value                 # --filter / ABS_FILTER
+  timeout: 120                      # --timeout / ABS_TIMEOUT
+  parallel: 4                       # --parallel / ABS_PARALLEL
+  output: report.json               # --output / ABS_OUTPUT
+  vars:                             # fixed bindings (ABS_VAR_* / --var override)
+    orderId: "12345"
+
+run:
+  format: table                     # --format / ABS_FORMAT (table | json | junit)
+  ci: true                          # --ci / ABS_CI
+
+logging:
+  format: pretty                    # --log-format / ABS_LOG_FORMAT
+  level: info                       # --log-level / ABS_LOG_LEVEL
+  file: run.log.jsonl               # --log-file / ABS_LOG_FILE
+  no_content: true                  # --no-log-content / ABS_NO_LOG_CONTENT
+
+report:
+  format: table                     # --format / ABS_FORMAT
+  failed: false                     # --failed / ABS_FAILED
+  detail: 3                         # --detail / ABS_DETAIL
+```
 
 ---
 

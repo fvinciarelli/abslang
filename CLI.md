@@ -342,11 +342,25 @@ Every flag can also be set via environment variable:
 | `ABS_AGENT_MODEL` | `--agent-model` |
 | `ABS_AGENT_FORWARD_AUTH` | `--agent-forward-auth` |
 | `ABS_AGENT_AUTHORIZATION` | `--agent-authorization` |
+| `ABS_AGENT_REFRESH_URL` | `--agent-refresh-url` |
+| `ABS_AGENT_REFRESH_TOKEN` | `--agent-refresh-token` |
+| `ABS_AGENT_CLIENT_ID` | `--agent-client-id` |
+| `ABS_DATASET` | `--dataset` |
+| `ABS_FILTER` | `--filter` |
 | `ABS_JUDGE_PROVIDER` | — (forces `openai`, `anthropic`, or `gemini`) |
 | `ABS_JUDGE_MODEL` | `--judge-model` |
 | `ABS_JUDGE_BASE_URL` | `--judge-base-url` |
 | `ABS_JUDGE_API_KEY` | `--judge-api-key` |
 | `ABS_JUDGE_API_KEY_HEADER` | `--judge-api-key-header` |
+| `ABS_FORMAT` | `--format` |
+| `ABS_CI` | `--ci` |
+| `ABS_TIMEOUT` | `--timeout` |
+| `ABS_OUTPUT` | `--output` |
+| `ABS_PARALLEL` | `--parallel` |
+| `ABS_LOG_FORMAT` | `--log-format` |
+| `ABS_LOG_LEVEL` | `--log-level` |
+| `ABS_LOG_FILE` | `--log-file` |
+| `ABS_NO_LOG_CONTENT` | `--no-log-content` |
 | `ABS_VAR_orderId` | `--var orderId=...` |
 
 ### Structured logs and progress

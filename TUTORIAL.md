@@ -373,27 +373,51 @@ Generates a complete workflow file that installs `abslang`, runs your sessions, 
 
 #### The config file — don't retype flags
 
-`abs.config.yaml` stores project settings so you don't retype them:
+`abs.config.yaml` stores project settings so you don't retype them. Every
+option can be set three ways, highest priority first:
+
+```
+CLI flag  >  ABS_* env var  >  config file  >  built-in default
+```
 
 ```yaml
+# abs.config.yaml — every key maps to a CLI flag / ABS_* env var
 agent:
-  url: http://localhost:8080/chat
-  format: openai
-  auth: none
+  url: http://localhost:8080/chat   # --agent / ABS_AGENT_URL
+  format: openai                    # --agent-format / ABS_AGENT_FORMAT
+  auth: none                        # --agent-auth / ABS_AGENT_AUTH
+  token: sk-...                     # --agent-token / ABS_AGENT_TOKEN
+  model: gpt-4o                     # --agent-model / ABS_AGENT_MODEL
 
 adapters:
-  llm_judge: aievaluator
+  llm_judge: aievaluator            # --adapter llm_judge=aievaluator
+
+judge:
+  model: gpt-4o-mini                # --judge-model / ABS_JUDGE_MODEL
 
 defaults:
-  dataset: datasets/
-  timeout: 120
+  dataset: datasets/                # --dataset / ABS_DATASET
+  filter: key:value                 # --filter / ABS_FILTER
+  timeout: 120                      # --timeout / ABS_TIMEOUT
+  parallel: 4                       # --parallel / ABS_PARALLEL
+  output: report.json               # --output / ABS_OUTPUT
+  vars:                             # fixed bindings (ABS_VAR_* / --var override)
+    orderId: "12345"
+
+run:
+  format: table                     # --format / ABS_FORMAT (table | json | junit)
+  ci: true                          # --ci / ABS_CI
+
+logging:
+  format: pretty                    # --log-format / ABS_LOG_FORMAT
+  level: info                       # --log-level / ABS_LOG_LEVEL
+  file: run.log.jsonl               # --log-file / ABS_LOG_FILE
+  no_content: true                  # --no-log-content / ABS_NO_LOG_CONTENT
 ```
 
-Everything in the config can be overridden by CLI flags. CLI flags can be overridden by environment variables. The precedence is:
-
-```
-CLI flag  >  environment variable  >  config file  >  built-in default
-```
+ABS loads `abs.config.yaml` (searched from the current directory upward), or
+an explicit file with `--config-file path.yaml` (YAML or JSON). Unknown
+sections/keys are reported as warnings so typos don't silently get ignored.
 
 #### Test with the mock agent — no real agent needed
 

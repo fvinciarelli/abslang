@@ -449,7 +449,7 @@ ABS evaluates observable behavior and is agnostic about what sits behind the end
 
 ### Authentication
 
-Agents are rarely wide open. The Runner supports the four most common auth methods, passed via CLI flags or environment variables:
+Agents are rarely wide open. The Runner supports the four most common auth methods, passed via CLI flags, environment variables, or the config file (`agent:` section of `abs.config.yaml`):
 
 | Method | Flag | What it does |
 |--------|------|-------------|
