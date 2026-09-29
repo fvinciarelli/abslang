@@ -356,6 +356,8 @@ def init():
               help="Write machine-readable JSONL events to a file")
 @click.option("--no-log-content", "no_log_content", is_flag=True, envvar="ABS_NO_LOG_CONTENT",
               help="Omit trace content and reasons from logs (privacy)")
+@click.option("--pretty-trace", "pretty_trace", is_flag=True,
+              help="Live colored boxes of the conversation on stderr (spike; TTY only)")
 @click.pass_context
 def run_cmd(
     ctx,
@@ -387,6 +389,7 @@ def run_cmd(
     log_level: str,
     log_file: Optional[str],
     no_log_content: bool,
+    pretty_trace: bool,
 ):
     """Execute ABS sessions against an agent.
 
@@ -411,10 +414,14 @@ def run_cmd(
     # Configure evaluator adapters (CLI --adapter + config adapters:)
     _setup_adapters(adapters, config.get("adapters"))
 
+    # --pretty-trace takes over stderr (spike): the regular log goes silent,
+    # events still reach the live renderer and the --log-file JSONL.
+    pretty = pretty_trace and log_format == "pretty" and sys.stderr.isatty()
+
     # Structured logging: stderr (+ optional JSONL file), never stdout.
     configure_logging(
         level=log_level,
-        format=log_format,
+        format="silent" if pretty else log_format,
         file=log_file,
         include_content=not no_log_content,
         abslang=__version__,
@@ -460,6 +467,28 @@ def run_cmd(
     except Exception as e:
         click.echo(f"❌ {e}", err=True)
         sys.exit(2)
+
+    # Live pretty trace (spike): one colored box per conversation step.
+    live = None
+    live_on_event = None
+    if pretty:
+        from rich.console import Console
+        from rich.live import Live
+        from .live_trace import LiveTraceRenderer
+
+        renderer = LiveTraceRenderer(use_color=not ci)
+        live = Live(
+            renderer.render(),
+            console=Console(stderr=True),
+            refresh_per_second=8,
+        )
+        live.start()
+
+        def _live_event(record):
+            renderer.handle(record)
+            live.update(renderer.render())
+
+        live_on_event = _live_event
 
     # Load dataset — from session's dataset: block, or --dataset flag
     dataset: list[dict[str, Any]] | None = None
@@ -512,6 +541,7 @@ def run_cmd(
                 session=sess.session,
                 row=row_index if dataset is not None else None,
                 row_vars=row_vars if row_vars is not None else (vars_dict or None),
+                on_event=live_on_event,
             )
             result = await run(sess_copy, agent_config, vars_dict, session_logger)
             return {"result": result, "row_vars": vars_dict, "row_index": row_index}
@@ -538,7 +568,11 @@ def run_cmd(
             for sess in sessions:
                 all_results.append(await run_one(sess, {}))
 
-    _run_async(_run_all())
+    try:
+        _run_async(_run_all())
+    finally:
+        if live is not None:
+            live.stop()
 
     # Aggregate
     rows_total = len(all_results)

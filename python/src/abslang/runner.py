@@ -528,6 +528,34 @@ _AGENT_ADAPTERS = {
 
 # ── Runner ──
 
+def _emit_trace_step(
+    logger: RunLogger,
+    actor: str,
+    action: str,
+    content: Any = None,
+    target: str | None = None,
+    with_: Any = None,
+    step: int | None = None,
+) -> None:
+    """Notify live subscribers (--pretty-trace) of a conversation step.
+
+    No-op unless the logger has a listener; content is omitted when content
+    logging is disabled (privacy).
+    """
+    if getattr(logger, "on_event", None) is None:
+        return
+    ok = logger.content_enabled()
+    logger.event(
+        "trace.step",
+        step=step,
+        actor=actor,
+        action=action,
+        content=content if ok else None,
+        target=target,
+        with_=with_ if ok else None,
+    )
+
+
 async def run(
     session: NormalizedSession,
     agent_config: AgentConfig,
@@ -613,6 +641,11 @@ async def run(
                 content=behavior.content,
                 with_=behavior.with_,
             ))
+            _emit_trace_step(
+                logger, "user", behavior.action,
+                content=behavior.content, target=behavior.target,
+                with_=behavior.with_, step=step_num,
+            )
 
             # The agent reply starts after the user step: matching restarts here.
             turn_start = len(trace)
@@ -633,6 +666,10 @@ async def run(
                 trace.append(ObservedStep(
                     actor="error", action="responds", content=f"Agent error: {e}",
                 ))
+                _emit_trace_step(
+                    logger, "error", "responds", content=f"Agent error: {e}",
+                    step=step_num,
+                )
                 continue
             logger.event(
                 "agent.response", step=step_num, new_messages=len(new_msgs),
@@ -652,12 +689,20 @@ async def run(
                             with_=args if isinstance(args, dict) else None,
                             tool_call_id=tc.get("id"),
                         ))
+                        _emit_trace_step(
+                            logger, "assistant", "calls",
+                            target=tc["function"]["name"],
+                            with_=args if isinstance(args, dict) else None,
+                        )
                 elif msg.role == "assistant":
                     trace.append(ObservedStep(
                         actor="assistant",
                         action="responds",
                         content=msg.content,
                     ))
+                    _emit_trace_step(
+                        logger, "assistant", "responds", content=msg.content,
+                    )
 
             logger.event(
                 "behavior.match", step=step_num, behavior_id=behavior.id,
@@ -703,6 +748,11 @@ async def run(
                 id=behavior.id, target=behavior.target,
                 content=behavior.content, tool_call_id=tool_call_id,
             ))
+            _emit_trace_step(
+                logger, "tool", "responds",
+                content=behavior.content, target=behavior.target,
+                step=step_num,
+            )
             turn_consumed += 1
 
             agent_started = time.perf_counter()

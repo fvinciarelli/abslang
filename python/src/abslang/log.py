@@ -69,6 +69,10 @@ def configure_logging(
         include_content=include_content,
         meta=dict(meta),
     )
+    if str(format).lower() == "silent":
+        # Events still reach on_event listeners and the JSONL file, but nothing
+        # is printed to stderr (e.g. --pretty-trace owns the terminal).
+        _config.format = "silent"
 
 
 def close_logging() -> None:
@@ -98,9 +102,15 @@ def new_run_id() -> str:
 class RunLogger:
     """Logger bound to one run (session + optional dataset row)."""
 
-    def __init__(self, run_id: str | None = None, **context: Any) -> None:
+    def __init__(
+        self,
+        run_id: str | None = None,
+        on_event: Any = None,
+        **context: Any,
+    ) -> None:
         self.run_id = run_id or new_run_id()
         self.context = {k: v for k, v in context.items() if v is not None}
+        self.on_event = on_event
         self._started = time.perf_counter()
 
     def content_enabled(self) -> bool:
@@ -127,6 +137,11 @@ class RunLogger:
         record.update(self.context)
         record.update({k: v for k, v in fields.items() if v is not None})
 
+        # Live subscribers (e.g. --pretty-trace) receive the full record,
+        # before any pretty-printing/truncation.
+        if self.on_event is not None:
+            self.on_event(record)
+
         line = json.dumps(record, default=str, ensure_ascii=False)
         if _config.file is not None:
             _config.file.write(line + "\n")
@@ -134,7 +149,7 @@ class RunLogger:
 
         if _config.format == "jsonl":
             print(line, file=sys.stderr)
-        else:
+        elif _config.format == "pretty":
             print(self._format_pretty(record, set(_config.meta)), file=sys.stderr)
 
     @staticmethod
