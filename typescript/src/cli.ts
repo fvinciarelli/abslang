@@ -25,7 +25,7 @@ const program = new Command();
 program
   .name("abs")
   .description("ABS — Agent Behavior Specification CLI")
-  .version("0.5.5")
+  .version("0.6.0")
   .option(
     "--config-file <path>",
     "Load settings from this YAML/JSON file (default: abs.config.yaml, searched from cwd upward)"
@@ -309,7 +309,7 @@ program
       format: logFormat,
       file: logFile,
       includeContent: !noLogContent,
-      meta: { abslang: "0.5.5", agent: agentUrl, agent_format: agentFormat },
+      meta: { abslang: "0.6.0", agent: agentUrl, agent_format: agentFormat },
     });
     const runLogger = new RunLogger({ runId: newRunId() });
 
