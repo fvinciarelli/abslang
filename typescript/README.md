@@ -33,6 +33,24 @@ abslang init
 
 Creates `abs.config.yaml`, `sessions/order-status.abs.yaml`, and `sessions/order-status.jsonl` (3 rows).
 
+### Config file
+
+Every option can be set three ways, highest priority first:
+
+```
+CLI flag  >  ABS_* env var  >  config file  >  built-in default
+```
+
+`abslang` loads `abs.config.yaml` (searched from the current directory
+upward), or an explicit file with `--config-file path.yaml` (YAML or JSON).
+Unknown sections/keys are reported as warnings so typos don't silently get
+ignored. Sections: `agent` (url, format, auth, token, model, forward_auth,
+authorization, refresh_url, refresh_token, client_id), `adapters`, `judge`
+(base_url, api_key, api_key_header, model), `defaults` (dataset, filter,
+timeout, parallel, output, vars), `run` (format, ci), `logging` (format,
+level, file, no_content), and `report` (format, failed, detail). Each key
+maps to the corresponding `--flag` / `ABS_*` env var.
+
 ### `abslang run`
 
 Execute ABS sessions against an agent.

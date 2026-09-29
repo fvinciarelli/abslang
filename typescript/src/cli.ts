@@ -14,7 +14,7 @@ import {
 import { run, AgentConfig, RunResult } from "./runner";
 import { registerAdapter } from "./evaluators";
 import { formatTable, formatJson, formatJunit } from "./formatters/table";
-import { mergeConfig } from "./config";
+import { loadCliConfig, validateConfig, pickValue, pickFlag, ABSConfig } from "./config";
 import { configureBuiltinJudge } from "./evaluators/builtin_judge";
 import { configureLogging, closeLogging, newRunId, RunLogger } from "./log";
 import { serializeEval, serializeObserved } from "./report";
@@ -25,7 +25,11 @@ const program = new Command();
 program
   .name("abs")
   .description("ABS — Agent Behavior Specification CLI")
-  .version("0.5.5");
+  .version("0.5.5")
+  .option(
+    "--config-file <path>",
+    "Load settings from this YAML/JSON file (default: abs.config.yaml, searched from cwd upward)"
+  );
 
 // ── init ──
 
@@ -87,19 +91,46 @@ program
       writeFileSync(
         configPath,
         `# ABS project configuration
+# Precedence: CLI flag > ABS_* env var > this file > built-in default
 agent:
   url: http://localhost:8080/chat
   format: openai          # openai | responses | claude | gemini
   auth: none              # none | api_key | bearer | oauth2
   # model: gpt-4o         # required by the Responses API
+  # token: sk-...         # API key / token
   # forward_auth: true    # forward the caller's Authorization header upstream
   # authorization: "Bearer eyJ..."  # or pass the header value explicitly
+  # refresh_url: ...      # OAuth2 token refresh URL
+  # refresh_token: ...    # OAuth2 refresh token
+  # client_id: ...        # OAuth2 client ID
 
 adapters:
   llm_judge: aievaluator
 
+judge:
+  # base_url: ...        # built-in judge base URL
+  # api_key: ...         # built-in judge API key
+  # api_key_header: ...  # header for the API key
+  # model: ...           # judge model / deployment name
+
 defaults:
   timeout: 300
+  # dataset: datasets/   # dataset file (.json/.jsonl)
+  # filter: key:value    # filter dataset rows
+  # parallel: 4          # run N dataset rows in parallel
+  # output: report.json  # write report to file
+  # vars:
+  #   orderId: "12345"  # fixed variable bindings
+
+run:
+  # format: table        # table | json | junit
+  # ci: true
+
+logging:
+  # format: pretty       # pretty | jsonl
+  # level: info          # error | warn | info | debug
+  # file: run.log.jsonl
+  # no_content: true     # omit trace content from logs
 `
       );
       console.log(chalk.green("✅ Created abs.config.yaml"));
@@ -160,11 +191,11 @@ program
   .option("--dataset <path>", "Dataset file or directory")
   .option("--var <binding>", "Single variable binding (repeatable)", collectVar, {} as Record<string, string>)
   .option("--filter <kv>", "Filter dataset rows by key:value")
-  .option("--agent-format <format>", "openai, responses, claude, or gemini", "openai")
-  .option("--agent-auth <auth>", "none, api_key, bearer, or oauth2", "none")
+  .option("--agent-format <format>", "openai, responses, claude, or gemini")
+  .option("--agent-auth <auth>", "none, api_key, bearer, or oauth2")
   .option("--agent-token <token>", "Token or API key")
   .option("--agent-model <model>", "Model name for protocols that require it (Responses API)")
-  .option("--agent-forward-auth", "Forward the caller's Authorization header to the agent", false)
+  .option("--agent-forward-auth", "Forward the caller's Authorization header to the agent")
   .option("--agent-authorization <value>", "Raw Authorization header value to forward (e.g. 'Bearer eyJ...')")
   .option("--agent-refresh-url <url>", "OAuth2 token refresh URL")
   .option("--agent-refresh-token <token>", "OAuth2 refresh token")
@@ -174,13 +205,13 @@ program
   .option("--judge-api-key <key>", "Built-in judge: API key (overrides ABS_JUDGE_API_KEY / OPENAI_API_KEY)")
   .option("--judge-api-key-header <header>", "Built-in judge: header for the API key (default: Authorization; use api-key for Azure)")
   .option("--judge-model <model>", "Built-in judge: model or Azure deployment name")
-  .option("--format <format>", "table, json, or junit", "table")
-  .option("--ci", "CI mode (no colors, no prompts)", false)
-  .option("--timeout <n>", "Timeout per session run in seconds", "300")
+  .option("--format <format>", "table, json, or junit")
+  .option("--ci", "CI mode (no colors, no prompts)")
+  .option("--timeout <n>", "Timeout per session run in seconds")
   .option("--output <path>", "Write report to file")
-  .option("--parallel <n>", "Run N dataset rows in parallel", "1")
-  .option("--log-format <format>", "pretty (human) or jsonl (one event per line)", "pretty")
-  .option("--log-level <level>", "error, warn, info, or debug", "info")
+  .option("--parallel <n>", "Run N dataset rows in parallel")
+  .option("--log-format <format>", "pretty (human) or jsonl (one event per line)")
+  .option("--log-level <level>", "error, warn, info, or debug")
   .option("--log-file <path>", "Write machine-readable JSONL events to a file")
   .option("--no-log-content", "Omit trace content and reasons from logs (privacy)")
   .action(async (session, options) => {
@@ -190,71 +221,112 @@ program
       process.exit(2);
     }
 
-    const agentUrl = options.agent || process.env.ABS_AGENT_URL;
+    // Config file: explicit --config-file or discovered abs.config.yaml.
+    let cfg: ABSConfig = {};
+    try {
+      cfg = loadCliConfig(program.opts().configFile as string | undefined);
+    } catch (err: any) {
+      console.error(chalk.red(`❌ ${err.message}`));
+      process.exit(2);
+    }
+    for (const warning of validateConfig(cfg)) {
+      console.error(chalk.yellow(`⚠️  ${warning}`));
+    }
 
-    // Load config file and merge with CLI options (CLI wins)
-    const cfg = mergeConfig({
-      agent_url: agentUrl,
-      agent_format: options.agentFormat,
-      agent_auth: options.agentAuth,
-      agent_token: options.agentToken,
-      agent_model: options.agentModel,
-      agent_forward_auth: options.agentForwardAuth,
-      agent_authorization: options.agentAuthorization,
-      dataset: options.dataset,
-      adapters: options.adapter,
-    });
+    // Precedence for every option: CLI flag > ABS_* env var > config file > default.
+    const agentUrl = pickValue(options.agent, process.env.ABS_AGENT_URL, cfg.agent?.url, undefined);
+    const agentFormat = pickValue(options.agentFormat, process.env.ABS_AGENT_FORMAT, cfg.agent?.format, "openai");
+    const agentAuth = pickValue(options.agentAuth, process.env.ABS_AGENT_AUTH, cfg.agent?.auth, "none");
+    const agentToken = pickValue(options.agentToken, process.env.ABS_AGENT_TOKEN, cfg.agent?.token, undefined);
+    const agentModel = pickValue(options.agentModel, process.env.ABS_AGENT_MODEL, cfg.agent?.model, undefined);
+    const agentForwardAuth = pickFlag(options.agentForwardAuth, process.env.ABS_AGENT_FORWARD_AUTH, cfg.agent?.forward_auth, false);
+    const agentAuthorization = pickValue(options.agentAuthorization, process.env.ABS_AGENT_AUTHORIZATION, cfg.agent?.authorization, undefined);
+    const agentRefreshUrl = pickValue(options.agentRefreshUrl, process.env.ABS_AGENT_REFRESH_URL, cfg.agent?.refresh_url, undefined);
+    const agentRefreshToken = pickValue(options.agentRefreshToken, process.env.ABS_AGENT_REFRESH_TOKEN, cfg.agent?.refresh_token, undefined);
+    const agentClientId = pickValue(options.agentClientId, process.env.ABS_AGENT_CLIENT_ID, cfg.agent?.client_id, undefined);
+    const judgeBaseUrl = pickValue(options.judgeBaseUrl, process.env.ABS_JUDGE_BASE_URL, cfg.judge?.base_url, undefined);
+    const judgeApiKey = pickValue(options.judgeApiKey, process.env.ABS_JUDGE_API_KEY, cfg.judge?.api_key, undefined);
+    const judgeApiKeyHeader = pickValue(options.judgeApiKeyHeader, process.env.ABS_JUDGE_API_KEY_HEADER, cfg.judge?.api_key_header, undefined);
+    const judgeModel = pickValue(options.judgeModel, process.env.ABS_JUDGE_MODEL, cfg.judge?.model, undefined);
+    const outputFormat = pickValue(options.format, process.env.ABS_FORMAT, cfg.run?.format, "table");
+    const ci = pickFlag(options.ci, process.env.ABS_CI, cfg.run?.ci, false);
+    const timeoutStr = pickValue(
+      options.timeout,
+      process.env.ABS_TIMEOUT,
+      cfg.defaults?.timeout !== undefined ? String(cfg.defaults.timeout) : undefined,
+      "300"
+    );
+    const outputFile = pickValue(options.output, process.env.ABS_OUTPUT, cfg.defaults?.output, undefined);
+    const parallelStr = pickValue(
+      options.parallel,
+      process.env.ABS_PARALLEL,
+      cfg.defaults?.parallel !== undefined ? String(cfg.defaults.parallel) : undefined,
+      "1"
+    );
+    const logFormat = pickValue(options.logFormat, process.env.ABS_LOG_FORMAT, cfg.logging?.format, "pretty");
+    const logLevel = pickValue(options.logLevel, process.env.ABS_LOG_LEVEL, cfg.logging?.level, "info");
+    const logFile = pickValue(options.logFile, process.env.ABS_LOG_FILE, cfg.logging?.file, undefined);
+    const datasetPath = pickValue(options.dataset, process.env.ABS_DATASET, cfg.defaults?.dataset, undefined);
+    const filterKv = pickValue(options.filter, process.env.ABS_FILTER, cfg.defaults?.filter, undefined);
+    // --no-log-content is a negative flag: CLI > ABS_NO_LOG_CONTENT > config > false
+    const noLogContent =
+      options.logContent === false ||
+      pickFlag(undefined, process.env.ABS_NO_LOG_CONTENT, cfg.logging?.no_content, false);
 
-    if (!cfg.agent_url) {
-      console.error(chalk.red("❌ Provide --agent or set ABS_AGENT_URL."));
+    if (!agentUrl) {
+      console.error(chalk.red("❌ Provide --agent, set ABS_AGENT_URL, or configure agent.url in abs.config.yaml."));
       process.exit(2);
     }
 
     // Configure evaluator adapters (CLI --adapter + abs.config.yaml adapters:)
     setupAdapters(options.adapter ?? {}, cfg.adapters);
 
-    // Configure built-in LLM judge (CLI flags override env vars)
+    // Configure built-in LLM judge (CLI flags override env vars and config)
     configureBuiltinJudge({
-      baseUrl: options.judgeBaseUrl,
-      apiKey: options.judgeApiKey,
-      apiKeyHeader: options.judgeApiKeyHeader,
-      model: options.judgeModel,
+      baseUrl: judgeBaseUrl,
+      apiKey: judgeApiKey,
+      apiKeyHeader: judgeApiKeyHeader,
+      model: judgeModel,
     });
 
     const agentConfig: AgentConfig = {
-      url: cfg.agent_url,
-      format: cfg.agent_format,
-      auth: cfg.agent_auth,
-      token: cfg.agent_token,
-      model: cfg.agent_model,
-      forwardAuth: cfg.agent_forward_auth,
-      authorization: cfg.agent_authorization,
-      refreshUrl: options.agentRefreshUrl,
-      refreshToken: options.agentRefreshToken,
-      clientId: options.agentClientId,
-      timeout: parseInt(options.timeout) || 300,
+      url: agentUrl,
+      format: agentFormat as AgentConfig["format"],
+      auth: agentAuth as AgentConfig["auth"],
+      token: agentToken,
+      model: agentModel,
+      forwardAuth: agentForwardAuth,
+      authorization: agentAuthorization,
+      refreshUrl: agentRefreshUrl,
+      refreshToken: agentRefreshToken,
+      clientId: agentClientId,
+      timeout: parseInt(timeoutStr || "300") || 300,
     };
 
     // Structured logging: stderr (+ optional JSONL file), never stdout.
     configureLogging({
-      level: options.logLevel,
-      format: options.logFormat,
-      file: options.logFile,
-      includeContent: options.logContent !== false,
-      meta: { abslang: "0.5.5", agent: cfg.agent_url, agent_format: cfg.agent_format },
+      level: logLevel,
+      format: logFormat,
+      file: logFile,
+      includeContent: !noLogContent,
+      meta: { abslang: "0.5.5", agent: agentUrl, agent_format: agentFormat },
     });
     const runLogger = new RunLogger({ runId: newRunId() });
 
+    // Runtime vars: config file < ABS_VAR_* env vars < CLI --var
     const runtimeVars: Record<string, any> = {};
-    if (options.var) {
-      for (const [k, v] of Object.entries(options.var as Record<string, string>)) {
-        runtimeVars[k] = v;
-      }
+    const cfgVars = cfg.defaults?.vars ?? {};
+    for (const [k, v] of Object.entries(cfgVars)) {
+      if (v !== undefined && v !== null) runtimeVars[k] = v;
     }
-    // Also pick up ABS_VAR_* env vars
     for (const [key, value] of Object.entries(process.env)) {
       if (key.startsWith("ABS_VAR_") && value) {
         runtimeVars[key.replace("ABS_VAR_", "")] = value;
+      }
+    }
+    if (options.var) {
+      for (const [k, v] of Object.entries(options.var as Record<string, string>)) {
+        runtimeVars[k] = v;
       }
     }
 
@@ -287,9 +359,9 @@ program
         console.error(chalk.red(`❌ Cannot load dataset '${inFileDataset.path}': ${err.message}`));
         process.exit(2);
       }
-    } else if (cfg.dataset || options.dataset) {
+    } else if (datasetPath) {
       try {
-        dataset = loadDataset(cfg.dataset || options.dataset);
+        dataset = loadDataset(datasetPath);
       } catch (err: any) {
         console.error(chalk.red(`❌ Cannot load dataset: ${err.message}`));
         process.exit(2);
@@ -297,14 +369,14 @@ program
     }
 
     // Apply filter
-    if (dataset && options.filter) {
-      const [fk, fv] = options.filter.split(":");
+    if (dataset && filterKv) {
+      const [fk, fv] = filterKv.split(":");
       dataset = dataset.filter((row) => String(row[fk]) === fv);
     }
 
     // Run
     const allResults: (RunResult & { rowVars?: Record<string, any> })[] = [];
-    const parallel = parseInt(options.parallel || "1");
+    const parallel = parseInt(parallelStr || "1");
 
     runLogger.event("run.start", "info", {
       sessions: sessions.length,
@@ -371,7 +443,7 @@ program
 
     // Format output
     let output: string;
-    if (options.format === "json") {
+    if (outputFormat === "json") {
       output = JSON.stringify(
         {
           run_id: runLogger.runId,
@@ -408,7 +480,7 @@ program
         null,
         2
       );
-    } else if (options.format === "junit") {
+    } else if (outputFormat === "junit") {
       // Merge all results into one testsuite
       const allEvals = allResults.flatMap((r) => {
         const stepEvals = r.steps.flatMap((s) =>
@@ -449,7 +521,7 @@ program
         lines.push("│  ABS — Results                                               │");
         lines.push("├──────────────────────────────────────────────────────────────┤");
         lines.push(`│  Session:  ${allResults[0].session.padEnd(52)}│`);
-        lines.push(`│  Agent:    ${cfg.agent_url.padEnd(52)}│`);
+        lines.push(`│  Agent:    ${agentUrl.padEnd(52)}│`);
         lines.push(`│  Dataset:  ${String(rowsTotal).padEnd(52)} rows│`);
         const status = overallPassed ? chalk.green("✅ PASSED") : chalk.red("❌ FAILED");
         lines.push(`│  Result:   ${status.padEnd(62)}│`);
@@ -514,10 +586,10 @@ program
       rows_passed: rowsPassed,
       duration_ms: runLogger.elapsedMs(),
     });
-    if (options.output) {
-      writeFileSync(options.output, output);
-      runLogger.event("report.written", "info", { path: options.output, format: options.format });
-      console.log(`Report written to ${options.output}`);
+    if (outputFile) {
+      writeFileSync(outputFile, output);
+      runLogger.event("report.written", "info", { path: outputFile, format: outputFormat });
+      console.log(`Report written to ${outputFile}`);
     } else {
       console.log(output);
     }
@@ -532,14 +604,34 @@ program
   .command("report")
   .description("View results from a previous run")
   .argument("[file]", "JSON report file")
-  .option("--format <format>", "table, json, or junit", "table")
-  .option("--failed", "Show only failed cases", false)
+  .option("--format <format>", "table, json, or junit")
+  .option("--failed", "Show only failed cases")
   .option("--detail <n>", "Show full trace for a specific row")
   .action(async (file, options) => {
     if (!file) {
       console.error(chalk.red("❌ Provide a report file."));
       process.exit(2);
     }
+
+    // Config file: explicit --config-file or discovered abs.config.yaml.
+    let cfg: ABSConfig = {};
+    try {
+      cfg = loadCliConfig(program.opts().configFile as string | undefined);
+    } catch (err: any) {
+      console.error(chalk.red(`❌ ${err.message}`));
+      process.exit(2);
+    }
+    for (const warning of validateConfig(cfg)) {
+      console.error(chalk.yellow(`⚠️  ${warning}`));
+    }
+    const outputFormat = pickValue(options.format, process.env.ABS_FORMAT, cfg.report?.format, "table");
+    const showFailed = pickFlag(options.failed, process.env.ABS_FAILED, cfg.report?.failed, false);
+    const detail = pickValue(
+      options.detail,
+      process.env.ABS_DETAIL,
+      cfg.report?.detail !== undefined ? String(cfg.report.detail) : undefined,
+      undefined
+    );
 
     let data: any;
     try {
@@ -553,10 +645,10 @@ program
     const results: any[] = data.results ?? [data];
 
     // --detail: show full trace for a specific row (1-indexed)
-    if (options.detail) {
-      const idx = parseInt(options.detail) - 1;
+    if (detail) {
+      const idx = parseInt(detail) - 1;
       if (idx < 0 || idx >= results.length) {
-        console.error(chalk.red(`❌ Row ${options.detail} not found. Report has ${results.length} rows.`));
+        console.error(chalk.red(`❌ Row ${detail} not found. Report has ${results.length} rows.`));
         process.exit(2);
       }
       const row = results[idx];
@@ -574,15 +666,15 @@ program
       return;
     }
 
-    if (options.format === "json") {
-      if (options.failed) {
+    if (outputFormat === "json") {
+      if (showFailed) {
         const failed = results.filter((r: any) => !r.passed);
         console.log(JSON.stringify({ ...data, results: failed }, null, 2));
       } else {
         console.log(JSON.stringify(data, null, 2));
       }
-    } else if (options.format === "junit") {
-      const filtered = options.failed ? results.filter((r: any) => !r.passed) : results;
+    } else if (outputFormat === "junit") {
+      const filtered = showFailed ? results.filter((r: any) => !r.passed) : results;
       console.log(formatJunit({ ...data, results: filtered }));
     } else {
       // Table format — show aggregated view for multi-row, or single-row view
@@ -601,7 +693,7 @@ program
         }));
       } else {
         // Multi-row: show summary + failed rows
-        const rows = options.failed ? results.filter((r: any) => !r.passed) : results;
+        const rows = showFailed ? results.filter((r: any) => !r.passed) : results;
         const passed = results.filter((r: any) => r.passed).length;
         const lines: string[] = [];
         lines.push("┌──────────────────────────────────────────────────────────────┐");
@@ -631,7 +723,7 @@ program
 
         lines.push("└──────┴──────────────────────────────┴──────────┴─────────────┘");
 
-        if (!options.failed && !data.passed) {
+        if (!showFailed && !data.passed) {
           const failedRows = results.filter((r: any) => !r.passed);
           lines.push("");
           lines.push(chalk.red(`❌ ${failedRows.length} rows failed:`) + "\n");

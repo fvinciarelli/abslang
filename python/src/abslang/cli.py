@@ -24,7 +24,7 @@ from .parser import parse, parse_multi, load_dataset, resolve_variables, Normali
 from .runner import run, AgentConfig, RunResult
 from .evaluators.builtin_judge import configure_builtin_judge
 from .formatters.table import format_table, format_json_output, format_junit
-from .config import merge_config
+from .config import load_config, discover_config, validate_config, flatten_config
 from .log import configure_logging, close_logging, new_run_id, RunLogger
 from .report import eval_to_dict, observed_to_dict
 from .mermaid_ascii import render_sequence_diagram
@@ -180,7 +180,11 @@ def _setup_adapters(cli_adapters: tuple[str, ...], config_adapters: dict | None)
 
 @click.group()
 @click.version_option(version=__version__, prog_name="ABS CLI")
-def main():
+@click.option("--config-file", "config_file", default=None,
+              help="Load settings from this YAML/JSON file "
+                   "(default: abs.config.yaml, searched from cwd upward)")
+@click.pass_context
+def main(ctx, config_file):
     """ABS — Agent Behavior Specification CLI.
 
     Describe, run, and evaluate AI agent interactions from the command line.
@@ -190,8 +194,32 @@ def main():
         abs init
         abs run sessions/ --agent $AGENT_URL
         abs report report.json
+
+    \b
+    Every option can be set three ways, highest priority first:
+        CLI flag  >  ABS_* env var  >  config file  >  built-in default
     """
-    pass
+    config: dict[str, Any] = {}
+    if config_file:
+        try:
+            config = load_config(config_file)
+        except (FileNotFoundError, ValueError) as e:
+            raise click.ClickException(str(e))
+    else:
+        try:
+            config = discover_config() or {}
+        except (FileNotFoundError, ValueError) as e:
+            raise click.ClickException(str(e))
+
+    for warning in validate_config(config):
+        click.echo(f"⚠️  {warning}", err=True)
+
+    # Hand the flattened config to Click: values apply only when neither the
+    # CLI flag nor the env var was given. CLI > env > file > default.
+    # (Click 8.1 expects default_map keyed by command name.)
+    flat = flatten_config(config)
+    ctx.default_map = {"run": flat, "report": flat}
+    ctx.obj = {"config": config}
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -208,19 +236,46 @@ def init():
     if not config_path.exists():
         config_path.write_text(
             "# ABS project configuration\n"
+            "# Precedence: CLI flag > ABS_* env var > this file > built-in default\n"
             "agent:\n"
             "  url: http://localhost:8080/chat\n"
             "  format: openai          # openai | responses | claude | gemini\n"
             "  auth: none              # none | api_key | bearer | oauth2\n"
             "  # model: gpt-4o         # required by the Responses API\n"
+            "  # token: sk-...         # API key / token\n"
             "  # forward_auth: true    # forward the caller's Authorization header upstream\n"
             "  # authorization: \"Bearer eyJ...\"  # or pass the header value explicitly\n"
+            "  # refresh_url: ...      # OAuth2 token refresh URL\n"
+            "  # refresh_token: ...    # OAuth2 refresh token\n"
+            "  # client_id: ...        # OAuth2 client ID\n"
             "\n"
             "adapters:\n"
             "  llm_judge: aievaluator\n"
             "\n"
+            "judge:\n"
+            "  # base_url: ...        # built-in judge base URL\n"
+            "  # api_key: ...         # built-in judge API key\n"
+            "  # api_key_header: ...  # header for the API key\n"
+            "  # model: ...           # judge model / deployment name\n"
+            "\n"
             "defaults:\n"
             "  timeout: 300\n"
+            "  # dataset: datasets/   # dataset file (.json/.jsonl)\n"
+            "  # filter: key:value    # filter dataset rows\n"
+            "  # parallel: 4          # run N dataset rows in parallel\n"
+            "  # output: report.json  # write report to file\n"
+            "  # vars:\n"
+            "  #   orderId: \"12345\"  # fixed variable bindings\n"
+            "\n"
+            "run:\n"
+            "  # format: table        # table | json | junit\n"
+            "  # ci: true\n"
+            "\n"
+            "logging:\n"
+            "  # format: pretty       # pretty | jsonl\n"
+            "  # level: info          # error | warn | info | debug\n"
+            "  # file: run.log.jsonl\n"
+            "  # no_content: true     # omit trace content from logs\n"
         )
         click.echo("✅ Created abs.config.yaml")
     else:
@@ -269,38 +324,41 @@ def init():
 
 @main.command(name="run")
 @click.argument("session", required=True)
-@click.option("--agent", help="Agent endpoint URL", default=None)
-@click.option("--dataset", "dataset_path", help="Dataset file (.json or .jsonl)", default=None)
+@click.option("--agent", help="Agent endpoint URL", default=None, envvar="ABS_AGENT_URL")
+@click.option("--dataset", "dataset_path", help="Dataset file (.json or .jsonl)", default=None, envvar="ABS_DATASET")
 @click.option("--var", "variables", multiple=True, help="Single variable binding (repeatable: --var key=value)")
-@click.option("--filter", "filter_kv", help="Filter dataset rows by key:value")
-@click.option("--agent-format", help="openai, responses, claude, or gemini", default="openai")
-@click.option("--agent-auth", help="none, api_key, bearer, or oauth2", default="none")
-@click.option("--agent-token", help="Token or API key", default=None)
-@click.option("--agent-model", help="Model name for protocols that require it (Responses API)", default=None)
-@click.option("--agent-forward-auth", is_flag=True, help="Forward the caller's Authorization header to the agent")
-@click.option("--agent-authorization", help="Raw Authorization header value to forward (e.g. 'Bearer eyJ...')", default=None)
-@click.option("--agent-refresh-url", help="OAuth2 token refresh URL", default=None)
-@click.option("--agent-refresh-token", help="OAuth2 refresh token", default=None)
-@click.option("--agent-client-id", help="OAuth2 client ID", default=None)
+@click.option("--filter", "filter_kv", help="Filter dataset rows by key:value", envvar="ABS_FILTER")
+@click.option("--agent-format", help="openai, responses, claude, or gemini", default="openai", envvar="ABS_AGENT_FORMAT")
+@click.option("--agent-auth", help="none, api_key, bearer, or oauth2", default="none", envvar="ABS_AGENT_AUTH")
+@click.option("--agent-token", help="Token or API key", default=None, envvar="ABS_AGENT_TOKEN")
+@click.option("--agent-model", help="Model name for protocols that require it (Responses API)", default=None, envvar="ABS_AGENT_MODEL")
+@click.option("--agent-forward-auth", is_flag=True, envvar="ABS_AGENT_FORWARD_AUTH",
+              help="Forward the caller's Authorization header to the agent")
+@click.option("--agent-authorization", help="Raw Authorization header value to forward (e.g. 'Bearer eyJ...')", default=None, envvar="ABS_AGENT_AUTHORIZATION")
+@click.option("--agent-refresh-url", help="OAuth2 token refresh URL", default=None, envvar="ABS_AGENT_REFRESH_URL")
+@click.option("--agent-refresh-token", help="OAuth2 refresh token", default=None, envvar="ABS_AGENT_REFRESH_TOKEN")
+@click.option("--agent-client-id", help="OAuth2 client ID", default=None, envvar="ABS_AGENT_CLIENT_ID")
 @click.option("--adapter", "adapters", multiple=True, help="Evaluator adapter binding (--adapter llm_judge=aievaluator)")
-@click.option("--judge-base-url", help="Built-in judge: OpenAI-compatible base URL (e.g. Azure/Foundry, Ollama)", default=None)
-@click.option("--judge-api-key", help="Built-in judge: API key (overrides ABS_JUDGE_API_KEY / OPENAI_API_KEY)", default=None)
-@click.option("--judge-api-key-header", help="Built-in judge: header for the API key (default: Authorization; use api-key for Azure)", default=None)
-@click.option("--judge-model", help="Built-in judge: model or Azure deployment name", default=None)
-@click.option("--format", "output_format", help="table, json, or junit", default="table")
-@click.option("--ci", is_flag=True, help="CI mode (no colors, no prompts)")
-@click.option("--timeout", type=int, default=300, help="Timeout per session run in seconds")
-@click.option("--output", "output_file", help="Write report to file")
-@click.option("--parallel", type=int, default=1, help="Run N dataset rows in parallel")
+@click.option("--judge-base-url", help="Built-in judge: OpenAI-compatible base URL (e.g. Azure/Foundry, Ollama)", default=None, envvar="ABS_JUDGE_BASE_URL")
+@click.option("--judge-api-key", help="Built-in judge: API key (overrides OPENAI_API_KEY / ANTHROPIC_API_KEY)", default=None, envvar="ABS_JUDGE_API_KEY")
+@click.option("--judge-api-key-header", help="Built-in judge: header for the API key (default: Authorization; use api-key for Azure)", default=None, envvar="ABS_JUDGE_API_KEY_HEADER")
+@click.option("--judge-model", help="Built-in judge: model or Azure deployment name", default=None, envvar="ABS_JUDGE_MODEL")
+@click.option("--format", "output_format", help="table, json, or junit", default="table", envvar="ABS_FORMAT")
+@click.option("--ci", is_flag=True, envvar="ABS_CI", help="CI mode (no colors, no prompts)")
+@click.option("--timeout", type=int, default=300, envvar="ABS_TIMEOUT", help="Timeout per session run in seconds")
+@click.option("--output", "output_file", help="Write report to file", envvar="ABS_OUTPUT")
+@click.option("--parallel", type=int, default=1, envvar="ABS_PARALLEL", help="Run N dataset rows in parallel")
 @click.option("--log-format", "log_format", type=click.Choice(["pretty", "jsonl"]), default="pretty",
-              help="Progress/log format: pretty (human) or jsonl (one event per line)")
+              envvar="ABS_LOG_FORMAT", help="Progress/log format: pretty (human) or jsonl (one event per line)")
 @click.option("--log-level", "log_level", type=click.Choice(["error", "warn", "info", "debug"]), default="info",
-              help="Minimum log level")
-@click.option("--log-file", "log_file", default=None,
+              envvar="ABS_LOG_LEVEL", help="Minimum log level")
+@click.option("--log-file", "log_file", default=None, envvar="ABS_LOG_FILE",
               help="Write machine-readable JSONL events to a file")
-@click.option("--no-log-content", "no_log_content", is_flag=True,
+@click.option("--no-log-content", "no_log_content", is_flag=True, envvar="ABS_NO_LOG_CONTENT",
               help="Omit trace content and reasons from logs (privacy)")
+@click.pass_context
 def run_cmd(
+    ctx,
     session: str,
     agent: Optional[str],
     dataset_path: Optional[str],
@@ -339,29 +397,19 @@ def run_cmd(
         abs run sessions/order-status.abs.yaml --agent $URL --var orderId=12345
         abs run sessions/ --agent $URL --dataset datasets/
     """
-    agent_url = agent or os.environ.get("ABS_AGENT_URL")
-    
-    # Load config file and merge with CLI options (CLI wins)
-    cfg = merge_config({
-        "agent_url": agent_url,
-        "agent_format": agent_format,
-        "agent_auth": agent_auth,
-        "agent_token": agent_token,
-        "agent_model": agent_model,
-        "agent_forward_auth": agent_forward_auth,
-        "agent_authorization": agent_authorization,
-    })
-    agent_url = cfg["agent_url"]
-    agent_format = cfg["agent_format"]
-    agent_auth = cfg["agent_auth"]
-    agent_token = cfg["agent_token"]
-    
+    config: dict[str, Any] = (ctx.obj or {}).get("config") or {}
+
+    # Click already resolved agent from CLI flag > ABS_AGENT_URL > config file.
+    agent_url = agent
     if not agent_url:
-        click.echo("❌ Provide --agent or set ABS_AGENT_URL.", err=True)
+        click.echo(
+            "❌ Provide --agent, set ABS_AGENT_URL, or configure agent.url in abs.config.yaml.",
+            err=True,
+        )
         sys.exit(2)
 
-    # Configure evaluator adapters (CLI --adapter + abs.config.yaml adapters:)
-    _setup_adapters(adapters, cfg.get("adapters"))
+    # Configure evaluator adapters (CLI --adapter + config adapters:)
+    _setup_adapters(adapters, config.get("adapters"))
 
     # Structured logging: stderr (+ optional JSONL file), never stdout.
     configure_logging(
@@ -387,21 +435,24 @@ def run_cmd(
         url=agent_url,
         format=agent_format,
         auth=agent_auth,
-        token=agent_token or os.environ.get("ABS_AGENT_TOKEN"),
-        model=cfg.get("agent_model"),
-        forward_auth=cfg.get("agent_forward_auth", False),
-        authorization=cfg.get("agent_authorization"),
+        token=agent_token,
+        model=agent_model,
+        forward_auth=agent_forward_auth,
+        authorization=agent_authorization,
         refresh_url=agent_refresh_url,
         refresh_token=agent_refresh_token,
         client_id=agent_client_id,
         timeout=timeout,
     )
 
-    # Parse runtime vars
-    runtime_vars = _parse_var_bindings(variables)
+    # Runtime vars: config file < ABS_VAR_* env vars < CLI --var
+    _defaults = config.get("defaults")
+    config_vars = _defaults.get("vars") if isinstance(_defaults, dict) else None
+    runtime_vars: dict[str, Any] = {str(k): v for k, v in (config_vars or {}).items() if v is not None}
     for key, value in os.environ.items():
         if key.startswith("ABS_VAR_") and value:
             runtime_vars[key.replace("ABS_VAR_", "")] = value
+    runtime_vars.update(_parse_var_bindings(variables))
 
     # Parse session(s)
     try:
@@ -441,7 +492,7 @@ def run_cmd(
         "run.start",
         sessions=len(sessions),
         dataset_rows=len(dataset) if dataset else None,
-        adapters=list(adapters) if adapters else (cfg.get("adapters") or None),
+        adapters=list(adapters) if adapters else (config.get("adapters") or None),
     )
 
     async def _run_all():
@@ -631,9 +682,9 @@ def run_cmd(
 
 @main.command()
 @click.argument("file", required=True)
-@click.option("--format", "output_format", help="table, json, or junit", default="table")
-@click.option("--failed", is_flag=True, help="Show only failed cases")
-@click.option("--detail", type=int, help="Show full trace for a specific row")
+@click.option("--format", "output_format", help="table, json, or junit", default="table", envvar="ABS_FORMAT")
+@click.option("--failed", is_flag=True, envvar="ABS_FAILED", help="Show only failed cases")
+@click.option("--detail", type=int, envvar="ABS_DETAIL", help="Show full trace for a specific row")
 def report(file: str, output_format: str, failed: bool, detail: Optional[int]):
     """View results from a previous run."""
     try:
