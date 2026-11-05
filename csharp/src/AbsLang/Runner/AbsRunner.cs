@@ -97,12 +97,13 @@ public sealed class AbsRunner
         foreach (var behavior in session.Behaviors)
         {
             stepNumber++;
+            var stepStarted = Stopwatch.GetTimestamp();
 
             // v0.2: skip behaviors whose dependency did not match.
             if (behavior.Requires != null && skippedIds.Contains(behavior.Requires))
             {
                 if (behavior.Id != null) skippedIds.Add(behavior.Id);
-                logger.Event("behavior.skipped", ("step", stepNumber), ("behavior_id", behavior.Id), ("reason", "requires"));
+                logger.Event("behavior.skipped", ("step", stepNumber), ("behavior_id", behavior.Id), ("reason", "requires"), ("duration_ms", ElapsedMilliseconds(stepStarted)));
                 stepResults.Add(new StepResult
                 {
                     Step = stepNumber,
@@ -135,13 +136,14 @@ public sealed class AbsRunner
 
                 AgentResponse response;
                 logger.Event("agent.request", ("step", stepNumber), ("messages", messages.Count));
+                var agentStarted = Stopwatch.GetTimestamp();
                 try
                 {
                     response = await SendAsync(messages, agent, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception error)
                 {
-                    logger.Event("agent.error", ("step", stepNumber), ("error", error.Message));
+                    logger.Event("agent.error", ("step", stepNumber), ("error", error.Message), ("duration_ms", ElapsedMilliseconds(agentStarted)));
                     stepResults.Add(new StepResult
                     {
                         Step = stepNumber,
@@ -157,7 +159,7 @@ public sealed class AbsRunner
                     continue;
                 }
 
-                logger.Event("agent.response", ("step", stepNumber), ("new_messages", response.Messages.Count));
+                logger.Event("agent.response", ("step", stepNumber), ("new_messages", response.Messages.Count), ("duration_ms", ElapsedMilliseconds(agentStarted)));
 
                 foreach (var message in response.Messages)
                 {
@@ -201,7 +203,7 @@ public sealed class AbsRunner
                     }
                 }
 
-                logger.Event("behavior.match", ("step", stepNumber), ("behavior_id", behavior.Id), ("matched", true), ("sent", true));
+                logger.Event("behavior.match", ("step", stepNumber), ("behavior_id", behavior.Id), ("matched", true), ("sent", true), ("duration_ms", ElapsedMilliseconds(stepStarted)));
                 stepResults.Add(new StepResult
                 {
                     Step = stepNumber,
@@ -240,13 +242,14 @@ public sealed class AbsRunner
 
                 AgentResponse response;
                 logger.Event("agent.request", ("step", stepNumber), ("messages", messages.Count));
+                var toolAgentStarted = Stopwatch.GetTimestamp();
                 try
                 {
                     response = await SendAsync(messages, agent, cancellationToken).ConfigureAwait(false);
                 }
                 catch (Exception error)
                 {
-                    logger.Event("agent.error", ("step", stepNumber), ("error", error.Message));
+                    logger.Event("agent.error", ("step", stepNumber), ("error", error.Message), ("duration_ms", ElapsedMilliseconds(toolAgentStarted)));
                     stepResults.Add(new StepResult
                     {
                         Step = stepNumber,
@@ -285,7 +288,7 @@ public sealed class AbsRunner
                     }
                 }
 
-                logger.Event("behavior.match", ("step", stepNumber), ("behavior_id", behavior.Id), ("matched", true));
+                logger.Event("behavior.match", ("step", stepNumber), ("behavior_id", behavior.Id), ("matched", true), ("duration_ms", ElapsedMilliseconds(stepStarted)));
                 stepResults.Add(new StepResult
                 {
                     Step = stepNumber,
@@ -304,7 +307,7 @@ public sealed class AbsRunner
             if (behavior.Optional && !matched)
             {
                 if (behavior.Id != null) skippedIds.Add(behavior.Id);
-                logger.Event("behavior.skipped", ("step", stepNumber), ("behavior_id", behavior.Id), ("reason", "optional"));
+                logger.Event("behavior.skipped", ("step", stepNumber), ("behavior_id", behavior.Id), ("reason", "optional"), ("duration_ms", ElapsedMilliseconds(stepStarted)));
                 stepResults.Add(new StepResult
                 {
                     Step = stepNumber,
@@ -328,7 +331,7 @@ public sealed class AbsRunner
                 }
             }
 
-            logger.Event("behavior.match", ("step", stepNumber), ("behavior_id", behavior.Id), ("matched", matched));
+            logger.Event("behavior.match", ("step", stepNumber), ("behavior_id", behavior.Id), ("matched", matched), ("duration_ms", ElapsedMilliseconds(stepStarted)));
 
             var evaluations = new List<EvalResult>();
             if (behavior.Evaluations != null)
@@ -394,7 +397,7 @@ public sealed class AbsRunner
             EvaluationsPassed = allEvaluations.Count(evaluation => evaluation.Passed || evaluation.Inconclusive),
         };
 
-        logger.Event("session.end", ("passed", result.Passed), ("steps_total", result.StepsTotal), ("evaluations_total", result.EvaluationsTotal));
+        logger.Event("session.end", ("passed", result.Passed), ("steps_total", result.StepsTotal), ("evaluations_total", result.EvaluationsTotal), ("duration_ms", logger.ElapsedMs()));
         return result;
     }
 
