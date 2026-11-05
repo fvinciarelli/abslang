@@ -130,7 +130,10 @@ public sealed class RunLogger
 
     public void Event(string name, IReadOnlyDictionary<string, object?>? fields = null)
     {
-        var record = new Dictionary<string, object?>(_meta, StringComparer.Ordinal);
+        var record = new Dictionary<string, object?>(_meta, StringComparer.Ordinal)
+        {
+            ["ts"] = DateTime.UtcNow.ToString("o"),
+        };
         if (fields != null)
         {
             foreach (var pair in fields) record[pair.Key] = pair.Value;
