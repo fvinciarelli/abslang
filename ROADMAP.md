@@ -52,8 +52,10 @@
 - Deterministic evaluators, `expected`/`when`, `f1`/`bleu`/`rouge`, composition, LLM judge (quality + safety), adapter registry and `azure`/`aievaluator` adapters.
 - Satellite NuGet packages: `AbsLang.Adapters.Aws` and `AbsLang.Adapters.Google`.
 - Config (`abs.config.yaml`), structured logging (pretty/JSONL/silent) and table/JSON/JUnit reports.
-- 131 C# tests + E2E against the Python mock agent.
-- NuGet publishing workflow (`nuget-v*` tags) ready; pending the nuget.org trusted-publishing policy and the first public release.
+- Observability: `duration_ms` on agent/step/evaluation/session events, `ts` on every `RunLogger.Sink` event, per-evaluation `DurationMs`.
+- Runnable example: `csharp/samples/AbsLang.Sample`.
+- 132 C# tests + E2E against the Python mock agent.
+- Published on NuGet: `AbsLang` 0.6.0 and 0.6.1 (plus `0.6.0-preview.1`), and the same versions for both satellite packages. Publishing uses Trusted Publishing (OIDC) via `nuget-v*` tags.
 - CLI (`dotnet tool`) and `chat` are intentionally deferred.
 
 ## Remaining open design questions

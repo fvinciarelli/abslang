@@ -328,7 +328,7 @@ Pretty awesome, no?
 
 ## And can I actually test this?
 
-Yes. We built `abslang` — a CLI that compiles `.abs.yaml` artifacts and executes them against your agent. Available for both ecosystems:
+Yes. We built `abslang` — a CLI that compiles `.abs.yaml` artifacts and executes them against your agent — plus a .NET library with the same parser, runner and evaluators.
 
 ```bash
 # TypeScript / Node.js
@@ -336,9 +336,30 @@ npm install -g abslang
 
 # Python
 pip install abslang
+
+# C# / .NET
+dotnet add package AbsLang
 ```
 
-Run your first spec in 30 seconds:
+The .NET library supports `openai`, `responses`, `claude` and `gemini` agent
+protocols, tool round-trips, optional behaviors, LLM judges, cloud adapters,
+reference metrics and structured events for telemetry:
+
+```csharp
+using AbsLang;
+
+var session = AbsParser.Parse("sessions/order-status.abs.yaml");
+var result = await new AbsRunner().RunAsync(
+    session,
+    new AgentConfig { Url = "http://localhost:8080/chat" });
+
+Console.WriteLine(AbsReports.FormatTable(result));
+```
+
+See [csharp/README.md](./csharp/README.md) for the full .NET guide, cloud
+adapters and the Datadog/timing example.
+
+With the CLI (npm or pip), run your first spec in 30 seconds:
 
 ```bash
 abslang init
@@ -485,6 +506,7 @@ v0.2 introduces **optional behaviors** — agent-driven branching without separa
 - **Structured logs.** `--log-format jsonl`, `--log-level`, and `--log-file` emit a stable event stream (run → session → step → evaluation) on stderr for CI and dashboards. See [CLI.md](./CLI.md#structured-logs-and-progress).
 - **Azure adapter on npm.** `--adapter azure` now works in the TypeScript CLI by rendering the official Azure prompt templates locally against your Azure OpenAI deployment — no Python SDK, no Foundry project. See [docs/adapters/azure.md](./docs/adapters/azure.md#typescript-npm).
 - **Deterministic first.** Declare expected behavior (`optional` + `expected` + `when` + a dataset) and ABS checks it deterministically; use `llm_judge` for what genuinely can't be declared. See the [manifesto](./MANIFESTO.md).
+- **C# / .NET on NuGet.** `AbsLang` (core), `AbsLang.Adapters.Aws` and `AbsLang.Adapters.Google` ship the same parser, runner, evaluators and adapters, plus `RunLogger` events with `duration_ms` for Datadog/OpenTelemetry. See [csharp/README.md](./csharp/README.md).
 
 ## Status of the standard
 
@@ -497,7 +519,7 @@ Reference metrics (`f1`, `bleu`, `rouge`) with `ground_truth` · per-rule `adapt
 Closed in v0.1:
 Scope · Session · Behavior · Actor · Action · Target · Content · Variables · Evaluations (step-level + chain-level) · Vocabulary · Sequencing · Fragments · Tool Interaction · JSON Schema · alternate flows as separate Sessions.
 
-Implementations: TypeScript · Python · UI authoring tool (React) · Website (Next.js). See ROADMAP.md for open design questions.
+Implementations: TypeScript · Python · .NET (C#) · UI authoring tool (React) · Website (Next.js). See ROADMAP.md for open design questions.
 
 ## Support this project
 

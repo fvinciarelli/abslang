@@ -4,12 +4,15 @@ export const frontmatter = { title: 'Installation', description: 'Set up the ABS
 
 <DocsLayout frontmatter={frontmatter}>
 
-The ABS CLI provides commands to initialize, run, and report on ABS sessions.
+ABS is available as a CLI (npm/Python) and as a .NET library. The CLI provides
+commands to initialize, run, and report on ABS sessions; the .NET library embeds
+the same parser, runner and evaluators directly in your C# application.
 
 ## Prerequisites
 
-- **Node.js 18+** or **Python 3.11+**
-- A package manager: npm, yarn, pnpm, or pip
+- **Node.js 18+** or **Python 3.11+** for the CLI
+- **.NET 10 SDK** for the C# library
+- A package manager: npm, yarn, pnpm, pip, or NuGet
 
 ## Install via npm
 
@@ -29,6 +32,37 @@ abslang --version
 ```bash
 pip install abslang
 ```
+
+## Install the .NET library
+
+```bash
+dotnet add package AbsLang
+```
+
+Optional cloud adapters:
+
+```bash
+dotnet add package AbsLang.Adapters.Aws
+dotnet add package AbsLang.Adapters.Google
+```
+
+```csharp
+using AbsLang;
+
+var session = AbsParser.Parse("sessions/order-status.abs.yaml");
+var result = await new AbsRunner().RunAsync(
+    session,
+    new AgentConfig { Url = "http://localhost:8080/chat" });
+
+Console.WriteLine(AbsReports.FormatTable(result));
+```
+
+The .NET package supports `openai`, `responses`, `claude` and `gemini` agent
+protocols, tool round-trips, optional behaviors, LLM judges, cloud adapters,
+reference metrics, and structured `RunLogger` events (including `duration_ms`)
+for Datadog/OpenTelemetry. See the
+[C# guide](https://github.com/fvinciarelli/abslang/tree/main/csharp) for the full
+API. The CLI and `chat` remain available only through npm and pip.
 
 ## Initialize a new project
 
