@@ -74,7 +74,7 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           PACKAGES="abslang abslang.adapters.aws abslang.adapters.google"
-          for attempt in $(seq 1 30); do
+          for attempt in $(seq 1 60); do
             missing=0
             for pkg in $PACKAGES; do
               code=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -88,8 +88,8 @@ jobs:
               echo "✅ AbsLang $VERSION and satellite packages are live on NuGet"
               exit 0
             fi
-            echo "attempt $attempt/30"
+            echo "attempt $attempt/60"
             sleep 15
           done
-          echo "❌ Published but not visible after 7.5 minutes"
+          echo "❌ Published but not visible after 15 minutes"
           exit 1
