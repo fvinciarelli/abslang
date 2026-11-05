@@ -870,12 +870,24 @@ export async function run(
         action: behavior.action,
         matched: true,
       });
+      const observedTool: ObservedStep = {
+        actor: "tool",
+        action: "responds",
+        target: behavior.target,
+        content: behavior.content,
+      };
+      const toolEvaluations: EvalResult[] = [];
+      if (behavior.evaluations) {
+        for (const evalRule of behavior.evaluations) {
+          toolEvaluations.push(await evaluateRule(evalRule, observedTool, behavior, stepNum));
+        }
+      }
       stepResults.push({
         step: stepNum,
         behavior,
-        observed: { actor: "tool", action: "responds", target: behavior.target, content: behavior.content },
+        observed: observedTool,
         matched: true,
-        evaluations: [],
+        evaluations: toolEvaluations,
       });
     } else {
       // Match against the current turn's observed steps. The cursor advances only

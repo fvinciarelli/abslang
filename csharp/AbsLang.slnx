@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AbsLang.Adapters.Aws/AbsLang.Adapters.Aws.csproj" />
+    <Project Path="src/AbsLang.Adapters.Google/AbsLang.Adapters.Google.csproj" />
+    <Project Path="src/AbsLang/AbsLang.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AbsLang.Tests/AbsLang.Tests.csproj" />
+  </Folder>
+</Solution>
