@@ -45,6 +45,17 @@
 - `blocking` failure propagation to `inconclusive` downstream results implemented in both runners.
 - `python -m abslang` as an alternative entry point.
 
+## C# / .NET implementation
+
+- `csharp/` — library targeting `netstandard2.0` and `net10.0`.
+- Parser, JSON Schema, fragments, variables, datasets, runner with `openai`/`responses`/`claude`/`gemini`, auth (including OAuth2 refresh and forwarding), matching, optional behaviors, blocking.
+- Deterministic evaluators, `expected`/`when`, `f1`/`bleu`/`rouge`, composition, LLM judge (quality + safety), adapter registry and `azure`/`aievaluator` adapters.
+- Satellite NuGet packages: `AbsLang.Adapters.Aws` and `AbsLang.Adapters.Google`.
+- Config (`abs.config.yaml`), structured logging (pretty/JSONL/silent) and table/JSON/JUnit reports.
+- 131 C# tests + E2E against the Python mock agent.
+- NuGet publishing workflow (`nuget-v*` tags) ready; pending the nuget.org trusted-publishing policy and the first public release.
+- CLI (`dotnet tool`) and `chat` are intentionally deferred.
+
 ## Remaining open design questions
 
 - **Vocabulary extensibility.** Is `action` a closed enum or an open, extensible namespace? VOCABULARY.md currently recommends plain lowercase verbs as a stopgap; a formal extension syntax (`x-` prefix or similar) is still undecided.

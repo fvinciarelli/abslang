@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
+    <AssemblyName>AbsLang.Adapters.Google</AssemblyName>
+    <RootNamespace>AbsLang.Adapters.Google</RootNamespace>
+    <PackageId>AbsLang.Adapters.Google</PackageId>
+    <Authors>Franco Vinciarelli</Authors>
+    <Description>Google Vertex AI evaluator adapter for AbsLang (Agent Behavior Specification).</Description>
+    <PackageTags>abs;ai;agent;evaluation;google;vertex</PackageTags>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/fvinciarelli/abslang</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <IsPackable>true</IsPackable>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/README.md" />
+    <ProjectReference Include="../AbsLang/AbsLang.csproj" />
+    <PackageReference Include="Google.Apis.Auth" Version="1.78.0" />
+  </ItemGroup>
+
+</Project>

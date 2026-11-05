@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
+    <AssemblyName>AbsLang</AssemblyName>
+    <RootNamespace>AbsLang</RootNamespace>
+
+    <PackageId>AbsLang</PackageId>
+    <Authors>Franco Vinciarelli</Authors>
+    <Description>Agent Behavior Specification (ABS) — describe, run and evaluate AI agent behavior from C#.</Description>
+    <PackageTags>ai;agent;testing;evaluation;specification;llm</PackageTags>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://fvinciarelli.github.io/abslang</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/fvinciarelli/abslang</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
+    <PackageReference Include="JsonSchema.Net" Version="9.6.0" />
+    <PackageReference Include="System.Text.Json" Version="10.0.5" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/README.md" />
+    <EmbeddedResource Include="../../../schema/abs.schema.json" LogicalName="AbsLang.abs.schema.json" />
+  </ItemGroup>
+
+</Project>

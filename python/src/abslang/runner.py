@@ -729,15 +729,23 @@ async def run(
                 "behavior.match", step=step_num, behavior_id=behavior.id,
                 actor=behavior.actor, action=behavior.action, matched=True,
             )
+            observed_tool = ObservedStep(
+                actor="tool", action="responds",
+                target=behavior.target, content=behavior.content,
+                tool_call_id=tool_call_id,
+            )
+            tool_eval_results: list[EvalResult] = []
+            if behavior.evaluations:
+                for rule in behavior.evaluations:
+                    tool_eval_results.append(
+                        await _evaluate_rule(rule, observed_tool, behavior, step_num)
+                    )
             step_results.append(StepResult(
                 step=step_num,
                 behavior=behavior,
-                observed=ObservedStep(
-                    actor="tool", action="responds",
-                    target=behavior.target, content=behavior.content,
-                    tool_call_id=tool_call_id,
-                ),
+                observed=observed_tool,
                 matched=True,
+                evaluations=tool_eval_results,
             ))
 
         else:

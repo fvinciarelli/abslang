@@ -37,3 +37,19 @@ jobs:
 
       - run: npm ci
       - run: npm test
+
+  dotnet:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: csharp
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - run: dotnet restore AbsLang.slnx
+      - run: dotnet build AbsLang.slnx -c Release --no-restore
+      - run: dotnet test AbsLang.slnx -c Release --no-build
