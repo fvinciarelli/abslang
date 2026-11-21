@@ -119,6 +119,32 @@ test("variable from runtime binding", () => {
   assert(resolved[0].content === "Order 99999");
 });
 
+test("variable in target from runtime binding", () => {
+  // Dataset-bound tool name in target must resolve (regression: it used to stay literal)
+  const behaviors = [
+    { actor: "assistant", action: "calls", target: "{{cases.toolName}}" },
+  ];
+  const resolved = resolveVariables(behaviors, { "cases.toolName": "get_weather" });
+  assertEquals(resolved[0].target, "get_weather");
+});
+
+test("variable in target from capture", () => {
+  const behaviors = [
+    { actor: "user", action: "says", content: "tool-a", capture: { tool: "tool-a" } },
+    { actor: "assistant", action: "calls", target: "{{tool}}" },
+  ];
+  const resolved = resolveVariables(behaviors);
+  assertEquals(resolved[1].target, "tool-a");
+});
+
+test("variable in target not found is left unresolved", () => {
+  const behaviors = [
+    { actor: "assistant", action: "calls", target: "{{missing}}" },
+  ];
+  const resolved = resolveVariables(behaviors);
+  assertEquals(resolved[0].target, "{{missing}}");
+});
+
 test("variable not found is left unresolved", () => {
   const behaviors = [
     { actor: "user", action: "says", content: "Order {{missing}}" },

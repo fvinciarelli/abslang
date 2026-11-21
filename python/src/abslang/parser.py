@@ -210,7 +210,7 @@ def resolve_variables(
             id=b.id,
             actor=b.actor,
             action=b.action,
-            target=b.target,
+            target=_resolve_value(b.target, variables) if b.target else None,
             content=_resolve_value(b.content, variables),
             capture=b.capture,
             with_=_resolve_value(b.with_, variables) if b.with_ else None,

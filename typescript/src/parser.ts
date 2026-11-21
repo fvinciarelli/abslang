@@ -164,6 +164,10 @@ export function resolveVariables(
       resolved.content = resolveObject(b.content, variables);
     }
 
+    if (b.target) {
+      resolved.target = resolveString(b.target, variables);
+    }
+
     if (b.with) {
       resolved.with = resolveObject(b.with, variables) as Record<string, any>;
     }

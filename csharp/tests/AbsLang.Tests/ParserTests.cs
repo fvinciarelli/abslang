@@ -72,6 +72,41 @@ behaviors:
     }
 
     [Fact]
+    public void ResolvesTargetFromRuntimeBindings()
+    {
+        // Dataset-bound tool name in target must resolve (regression: it used to stay literal)
+        const string yaml = """
+session: Target from dataset
+behaviors:
+  - actor: assistant
+    action: calls
+    target: "{{cases.toolName}}"
+""";
+
+        var bindings = new Dictionary<string, object?>
+        {
+            ["cases.toolName"] = "get_weather",
+        };
+        var session = AbsParser.Parse(yaml, bindings);
+        Assert.Equal("get_weather", session.Behaviors[0].Target);
+    }
+
+    [Fact]
+    public void LeavesUnresolvedTargetLiteral()
+    {
+        const string yaml = """
+session: Unresolved target
+behaviors:
+  - actor: assistant
+    action: calls
+    target: "{{missing}}"
+""";
+
+        var session = AbsParser.Parse(yaml);
+        Assert.Equal("{{missing}}", session.Behaviors[0].Target);
+    }
+
+    [Fact]
     public void RejectsSequenceReferencingOptionalBehavior()
     {
         const string yaml = """

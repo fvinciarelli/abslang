@@ -129,6 +129,39 @@ def test_variable_runtime_binding():
 check("variable from runtime binding", test_variable_runtime_binding)
 
 
+def test_variable_target_binding():
+    # Dataset-bound tool name in target must resolve (regression: it used to stay literal)
+    behaviors = [
+        Behavior(actor="assistant", action="calls", target="{{cases.toolName}}"),
+    ]
+    resolved = resolve_variables(behaviors, {"cases.toolName": "get_weather"})
+    assert_equals(resolved[0].target, "get_weather")
+
+check("variable in target from runtime binding", test_variable_target_binding)
+
+
+def test_variable_target_capture():
+    # A captured value must also resolve inside a later target
+    behaviors = [
+        Behavior(actor="user", action="says", content="tool-a", capture={"tool": "tool-a"}),
+        Behavior(actor="assistant", action="calls", target="{{tool}}"),
+    ]
+    resolved = resolve_variables(behaviors)
+    assert_equals(resolved[1].target, "tool-a")
+
+check("variable in target from capture", test_variable_target_capture)
+
+
+def test_variable_target_not_found():
+    behaviors = [
+        Behavior(actor="assistant", action="calls", target="{{missing}}"),
+    ]
+    result = resolve_variables(behaviors)
+    assert_true(result[0].target == "{{missing}}")  # stays unresolved
+
+check("variable in target left unresolved", test_variable_target_not_found)
+
+
 def test_variable_not_found():
     behaviors = [
         Behavior(actor="user", action="says", content="Order {{missing}}"),

@@ -63,7 +63,7 @@ This is **not valid YAML** — a block mapping (`session: ...`) cannot be direct
 | `id` | string | No | Unique identifier for this Behavior. Used by evaluations to reference steps via `id.action`. |
 | `actor` | string | Yes | Who performs the Behavior. See CORE_MODEL.md §Actor. |
 | `action` | string | Yes | What is performed. See VOCABULARY.md. |
-| `target` | string | No | Object or destination of the action. Semantics are determined by the Action category — normative rule in §4. |
+| `target` | string | No | Object or destination of the action. Semantics are determined by the Action category — normative rule in §4. MAY contain `{{variable}}` references (§6). |
 | `content` | any | No | Payload of the Behavior: text, structured data, or displayed information. |
 | `capture` | map | No | Names runtime values observed in this Behavior for later reuse. See VARIABLES.md. |
 | `with` | map | No | Parameters passed on an outbound Action (typically `calls`), MAY reference captured variables. Partial match by default — observed arguments must contain all declared keys but may include extras. |
@@ -97,7 +97,7 @@ Behaviors within a Session's list MUST be interpreted as an ordered sequence unl
 
 ## 6. Variable resolution
 
-Any `content` or `with` value MAY contain a `{{variable}}` reference. A conforming implementation MUST resolve `{{variable}}` in this order of precedence:
+Any `content`, `with`, or `target` value MAY contain a `{{variable}}` reference. A conforming implementation MUST resolve `{{variable}}` in this order of precedence:
 
 1. **Captured value** — the nearest prior `capture:` of that name earlier in the same Session.
 2. **Runtime binding** — a value provided at execution time via dataset row, CLI flag, or environment variable (see VARIABLES.md, "Runtime bindings").

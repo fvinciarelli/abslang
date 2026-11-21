@@ -78,7 +78,7 @@
         },
         "target": {
           "type": "string",
-          "description": "Object or destination of the action. Meaning depends on the action category — see SPECIFICATION.md §4."
+          "description": "Object or destination of the action. Meaning depends on the action category — see SPECIFICATION.md §4. MAY contain {{variable}} references resolved at execution time (SPECIFICATION.md §6)."
         },
         "content": {
           "description": "Payload of the Behavior: free text, structured data, or displayed information. Intentionally untyped in v0.1."

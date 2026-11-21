@@ -18,7 +18,7 @@ Any Behavior may declare a `capture` map. Each key becomes a variable name, avai
 
 ## Reusing
 
-A captured variable is referenced with `{{variable_name}}` syntax, inside `content` or `with`.
+A captured variable is referenced with `{{variable_name}}` syntax, inside `content`, `with`, or `target` (e.g. a tool name taken from a dataset row).
 
 ```yaml
 - actor: assistant

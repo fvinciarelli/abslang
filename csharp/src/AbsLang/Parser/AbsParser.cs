@@ -159,6 +159,7 @@ public static class AbsParser
             var behavior = Clone(source);
 
             behavior.Content = ResolveValue(behavior.Content, variables);
+            behavior.Target = ResolveString(behavior.Target, variables);
             behavior.With = ResolveMap(behavior.With, variables);
             behavior.WithOnly = ResolveMap(behavior.WithOnly, variables);
 
