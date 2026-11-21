@@ -12,7 +12,7 @@ documents, run them against an HTTP agent, evaluate the observed trace, and emit
 table, JSON or JUnit reports — with structured events you can ship to Datadog,
 OpenTelemetry, Serilog or any telemetry pipeline.
 
-**Status:** `0.6.1` — library only (the CLI/`chat` remain in the npm/Python packages).
+**Status:** `0.6.2` — library only (the CLI/`chat` remain in the npm/Python packages).
 
 ## Install
 
