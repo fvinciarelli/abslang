@@ -3,6 +3,7 @@ name: Publish C# to NuGet
 on:
   push:
     tags: ['nuget-v*']
+    branches: ['publish/nuget-*']
 
 jobs:
   publish:
@@ -27,7 +28,7 @@ jobs:
         id: version
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME#nuget-v}"
+          VERSION="${GITHUB_REF_NAME#*nuget-v}"
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
           PROJECT_VERSION=$(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props)
           if [ "$PROJECT_VERSION" != "$VERSION" ]; then

@@ -3,6 +3,7 @@ name: Publish VS Code Extension
 on:
   push:
     tags: ['vscode-v*']
+    branches: ['publish/vscode-*']
 
 jobs:
   publish:
