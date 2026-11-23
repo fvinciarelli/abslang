@@ -32,6 +32,10 @@ jobs:
           npm ci
           npm run build
 
+      # 2.5 Install root deps (esbuild) needed by scripts/bundle.mjs
+      - name: Install root dependencies
+        run: npm ci
+
       # 3. Bundle CLI for extension
       - name: Bundle CLI for extension
         run: node scripts/bundle.mjs
