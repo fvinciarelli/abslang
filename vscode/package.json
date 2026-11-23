@@ -2,7 +2,7 @@
   "name": "abs-vscode",
   "displayName": "ABS — Agent Behavior Specification",
   "description": "Visual editor and test runner for ABS agent behavior specs",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "fvinciarelli",
   "license": "Apache-2.0",
   "engines": {
