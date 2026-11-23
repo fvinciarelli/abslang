@@ -49,8 +49,7 @@ public static class AbsParser
 
         var document = documents[0];
         var session = ExpandFragments(document);
-        session.Behaviors = ResolveVariables(session.Behaviors, runtimeBindings).ToList();
-        return session;
+        return ResolveSessionVariables(session, runtimeBindings);
     }
 
     public static IReadOnlyList<NormalizedSession> ParseMulti(
@@ -62,8 +61,7 @@ public static class AbsParser
         foreach (var document in documents)
         {
             var session = ExpandFragments(document);
-            session.Behaviors = ResolveVariables(session.Behaviors, runtimeBindings).ToList();
-            sessions.Add(session);
+            sessions.Add(ResolveSessionVariables(session, runtimeBindings));
         }
         return sessions;
     }
@@ -153,6 +151,52 @@ public static class AbsParser
             foreach (var pair in runtimeBindings) variables[pair.Key] = pair.Value;
         }
 
+        return ResolveVariablesWithScope(behaviors, variables);
+    }
+
+    /// <summary>
+    /// Resolve variables in a full session.
+    ///
+    /// Behaviors are resolved first so captures accumulate into the same variable
+    /// scope, then session-level evaluations are resolved with that final scope.
+    /// This lets chain selectors (sequence/never/count/within) and their fields
+    /// reference dataset columns or captured values.
+    /// </summary>
+    public static NormalizedSession ResolveSessionVariables(
+        NormalizedSession session,
+        IReadOnlyDictionary<string, object?>? runtimeBindings = null)
+    {
+        var variables = new Dictionary<string, object?>(StringComparer.Ordinal);
+        if (runtimeBindings != null)
+        {
+            foreach (var pair in runtimeBindings) variables[pair.Key] = pair.Value;
+        }
+
+        var resolved = new NormalizedSession
+        {
+            Session = session.Session,
+            Description = session.Description,
+            AbsVersion = session.AbsVersion,
+            Dataset = session.Dataset,
+            Behaviors = ResolveVariablesWithScope(session.Behaviors, variables).ToList(),
+            Evaluations = session.Evaluations?.Select(CloneEvaluation).ToList(),
+        };
+
+        if (resolved.Evaluations != null)
+        {
+            foreach (var evaluation in resolved.Evaluations)
+            {
+                ResolveEvaluationPreservingWhen(evaluation, variables);
+            }
+        }
+
+        return resolved;
+    }
+
+    private static IReadOnlyList<Behavior> ResolveVariablesWithScope(
+        IEnumerable<Behavior> behaviors,
+        Dictionary<string, object?> variables)
+    {
         var result = new List<Behavior>();
         foreach (var source in behaviors)
         {
@@ -554,6 +598,49 @@ public static class AbsParser
         {
             evaluation.Data[key] = ResolveValue(evaluation.Data[key], variables);
         }
+    }
+
+    /// <summary>
+    /// Resolve a session-level evaluation without touching <c>when</c>.
+    ///
+    /// <c>when</c> is a boolean expression evaluated by EvalWhen() at runtime,
+    /// where string values are quoted before substitution. Plain text
+    /// substitution here would change its meaning, so it is preserved.
+    /// </summary>
+    private static void ResolveEvaluationPreservingWhen(
+        Evaluation evaluation,
+        IReadOnlyDictionary<string, object?> variables)
+    {
+        var resolved = ResolveEvaluationMap(evaluation.Data, variables);
+        evaluation.Data.Clear();
+        foreach (var pair in resolved) evaluation.Data[pair.Key] = pair.Value;
+    }
+
+    private static Dictionary<string, object?> ResolveEvaluationMap(
+        Dictionary<string, object?> map,
+        IReadOnlyDictionary<string, object?> variables)
+    {
+        var resolved = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var pair in map)
+        {
+            if (pair.Key == "when")
+            {
+                resolved[pair.Key] = pair.Value;
+            }
+            else if (pair.Key == "evaluations" && pair.Value is List<object?> nested)
+            {
+                resolved[pair.Key] = nested
+                    .Select(item => item is Dictionary<string, object?> nestedMap
+                        ? (object?)ResolveEvaluationMap(nestedMap, variables)
+                        : ResolveValue(item, variables))
+                    .ToList();
+            }
+            else
+            {
+                resolved[pair.Key] = ResolveValue(pair.Value, variables);
+            }
+        }
+        return resolved;
     }
 
     private static object? ResolveValue(object? value, IReadOnlyDictionary<string, object?> variables)

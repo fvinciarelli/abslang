@@ -20,7 +20,7 @@ from typing import Any, Optional
 import click
 
 from . import __version__
-from .parser import parse, parse_multi, load_dataset, resolve_variables, NormalizedSession
+from .parser import parse, parse_multi, load_dataset, resolve_session, NormalizedSession
 from .runner import run, AgentConfig, RunResult
 from .evaluators.builtin_judge import configure_builtin_judge
 from .formatters.table import format_table, format_json_output, format_junit
@@ -506,7 +506,7 @@ def run_cmd(
         ):
             import copy
             sess_copy = copy.deepcopy(sess)
-            sess_copy.behaviors = resolve_variables(sess_copy.behaviors, vars_dict)
+            sess_copy = resolve_session(sess_copy, vars_dict)
             session_logger = RunLogger(
                 run_id=run_logger.run_id,
                 session=sess.session,

@@ -5,12 +5,12 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from abslang.parser import parse_yaml, expand_fragments, resolve_variables, load_dataset, Behavior
+from abslang.parser import parse, parse_yaml, expand_fragments, resolve_variables, load_dataset, Behavior
 from abslang.evaluators import (
     ObservedStep,
     exact_match, contains, regex_match, schema_eval,
     sequence, eventually, never_eval, count_eval, within,
-    matches_selector,
+    matches_selector, eval_when,
 )
 
 
@@ -160,6 +160,100 @@ def test_variable_target_not_found():
     assert_true(result[0].target == "{{missing}}")  # stays unresolved
 
 check("variable in target left unresolved", test_variable_target_not_found)
+
+
+def test_session_evaluation_target_binding():
+    # Dataset-bound tool names must resolve in chain selectors too (not only in behaviors).
+    yaml = """
+session: Test
+behaviors:
+  - actor: assistant
+    action: calls
+    target: "{{cases.toolName}}"
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: calls, target: "{{cases.toolName}}" }
+  - type: llm_judge
+    criteria: "Check {{cases.toolName}}"
+"""
+    session = parse(yaml, {"cases.toolName": "get_weather"})
+    rule = session.evaluations[0]
+    assert_equals(rule["order"][0]["target"], "get_weather")
+    assert_equals(session.evaluations[1]["criteria"], "Check get_weather")
+    assert_true(sequence(
+        [ObservedStep(actor="assistant", action="calls", target="get_weather")],
+        rule,
+    ).passed)
+
+check("session evaluation target from runtime binding", test_session_evaluation_target_binding)
+
+
+def test_session_evaluation_target_capture():
+    # Chain evaluations run at session scope, so they see every capture.
+    yaml = """
+session: Test
+behaviors:
+  - actor: user
+    action: says
+    content: "use the captured tool"
+    capture:
+      tool: "{{cases.toolName}}"
+  - actor: assistant
+    action: calls
+    target: "{{tool}}"
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: calls, target: "{{tool}}" }
+"""
+    session = parse(yaml, {"cases.toolName": "get_weather"})
+    assert_equals(session.evaluations[0]["order"][0]["target"], "get_weather")
+
+check("session evaluation target from capture", test_session_evaluation_target_capture)
+
+
+def test_session_evaluation_target_unresolved():
+    yaml = """
+session: Test
+behaviors:
+  - actor: assistant
+    action: calls
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: calls, target: "{{cases.toolName}}" }
+"""
+    session = parse(yaml)
+    assert_equals(session.evaluations[0]["order"][0]["target"], "{{cases.toolName}}")
+
+check("session evaluation target left unresolved", test_session_evaluation_target_unresolved)
+
+
+def test_session_evaluation_preserves_when():
+    # eval_when() resolves and quotes `when` at runtime; pre-resolving it would
+    # turn a string comparison into an invalid unquoted identifier.
+    yaml = """
+session: Test
+behaviors:
+  - actor: user
+    action: says
+    content: hi
+evaluations:
+  - type: all_of
+    when: "{{cases.expectedPath}} == 'process'"
+    evaluations:
+      - type: expected
+        behavior: ask_id
+        when: "{{cases.flag}} == true"
+"""
+    session = parse(yaml, {"cases.expectedPath": "process", "cases.flag": True})
+    rule = session.evaluations[0]
+    assert_equals(rule["when"], "{{cases.expectedPath}} == 'process'")
+    assert_equals(rule["evaluations"][0]["when"], "{{cases.flag}} == true")
+    assert_true(eval_when(rule["when"], {"cases.expectedPath": "process"}))
+
+check("session evaluation preserves when", test_session_evaluation_preserves_when)
 
 
 def test_variable_not_found():

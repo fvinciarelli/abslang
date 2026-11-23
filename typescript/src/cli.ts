@@ -9,7 +9,7 @@ import {
   parseMulti,
   loadDataset,
   NormalizedSession,
-  resolveVariables,
+  resolveSession,
 } from "./parser";
 import { run, AgentConfig, RunResult } from "./runner";
 import { registerAdapter } from "./evaluators";
@@ -390,13 +390,13 @@ program
     });
 
     const runOne = async (session: NormalizedSession, vars: Record<string, any>, rowVars?: Record<string, any>, rowIndex?: number) => {
-      const resolved = {
-        ...session,
-        behaviors: resolveVariables(
-          JSON.parse(JSON.stringify(session.behaviors)),
-          vars
-        ),
-      };
+      const resolved = resolveSession(
+        {
+          ...session,
+          behaviors: JSON.parse(JSON.stringify(session.behaviors)),
+        },
+        vars
+      );
       const sessionLogger = new RunLogger({
         runId: runLogger.runId,
         session: session.session,

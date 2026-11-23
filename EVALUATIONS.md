@@ -379,6 +379,8 @@ All of these are declared in a top-level `evaluations:` block, a sibling of `beh
 
 Every chain evaluator below identifies Behaviors using a **selector**: an object with any of `actor`, `action`, `target`. A field that's present must match exactly; a field that's omitted is a wildcard. Matching against `content` is not supported by the selector in v0.1 — use step-level evaluations for content assertions. The observed trace includes the user turns the Runner sent, so selectors like `{ actor: user, action: says }` work as expected.
 
+Selectors and other string fields in session-level rules resolve `{{variable}}` references exactly like Behavior fields: from a dataset row, CLI/environment binding, or a prior `capture:` in the same Session. `when` is the exception — it is a boolean expression evaluated at run time, not a plain string template.
+
 Text responses are recorded as `responds` unless a declared communication behavior (`asks`, `informs`, `greets`, …) matched them: the runner annotates the observed step with the action of the first behavior that matched it. So `{ actor: assistant, action: asks }` only matches responses your session classified as asks, and a response no behavior matched stays `responds`. Give the behavior a `matches_when` criterion when you need this distinction to be precise.
 
 ```yaml

@@ -3,7 +3,7 @@
  * No Node.js dependencies. Uses fetch() for agent communication.
  */
 
-import { parseYaml, expandFragments, resolveVariables, Behavior, NormalizedSession, ABSDocument } from "./parser";
+import { parseYaml, expandFragments, resolveSession, Behavior, NormalizedSession, ABSDocument } from "./parser";
 import { ObservedStep, EvalResult, evaluateStep, evaluateWithAdapter, applyThreshold, registerAdapter } from "./evaluators";
 
 // ── Agent adapter (browser-compatible — uses fetch) ──
@@ -116,8 +116,7 @@ export async function runBrowser(
   if (docs.length === 0) throw new Error("No ABS document found");
   const doc = docs[0];
 
-  const session = expandFragments(doc);
-  session.behaviors = resolveVariables(session.behaviors);
+  const session = resolveSession(expandFragments(doc));
 
   // Run
   const trace: ObservedStep[] = [];

@@ -1,10 +1,10 @@
 /// <reference types="node" />
 
-import { parseYaml, expandFragments, resolveVariables, loadDataset } from "../parser";
+import { parse, parseYaml, expandFragments, resolveVariables, loadDataset } from "../parser";
 import {
   exactMatch, contains, regex, schema as schemaEval,
   sequence, eventually, never, count, within,
-  matchesSelector, evaluateStep, ObservedStep,
+  matchesSelector, evaluateStep, evalWhen, ObservedStep,
 } from "../evaluators/builtin";
 
 // ── Simple test runner ──
@@ -151,6 +151,103 @@ test("variable not found is left unresolved", () => {
   ];
   const resolved = resolveVariables(behaviors);
   assertEquals(resolved[0].content, "Order {{missing}}"); // stays as placeholder
+});
+
+test("session evaluation target from runtime binding", () => {
+  // Dataset-bound tool names must resolve in chain selectors too (not only in behaviors).
+  const yaml = `
+session: Test
+behaviors:
+  - actor: assistant
+    action: calls
+    target: "{{cases.toolName}}"
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: calls, target: "{{cases.toolName}}" }
+  - type: llm_judge
+    criteria: "Check {{cases.toolName}}"
+`;
+  const session = parse(yaml, { "cases.toolName": "get_weather" });
+  const rule = session.evaluations![0] as any;
+
+  assertEquals(rule.order[0].target, "get_weather");
+  assertEquals((session.evaluations![1] as any).criteria, "Check get_weather");
+  assert(
+    sequence(
+      [{ actor: "assistant", action: "calls", target: "get_weather" }],
+      rule
+    ).passed
+  );
+});
+
+test("session evaluation target from capture", () => {
+  // Chain evaluations run at session scope, so they see every capture.
+  const yaml = `
+session: Test
+behaviors:
+  - actor: user
+    action: says
+    content: "use the captured tool"
+    capture:
+      tool: "{{cases.toolName}}"
+  - actor: assistant
+    action: calls
+    target: "{{tool}}"
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: calls, target: "{{tool}}" }
+`;
+  const session = parse(yaml, { "cases.toolName": "get_weather" });
+  const rule = session.evaluations![0] as any;
+
+  assertEquals(rule.order[0].target, "get_weather");
+});
+
+test("session evaluation target stays unresolved without binding", () => {
+  const yaml = `
+session: Test
+behaviors:
+  - actor: assistant
+    action: calls
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: calls, target: "{{cases.toolName}}" }
+`;
+  const session = parse(yaml);
+  const rule = session.evaluations![0] as any;
+
+  assertEquals(rule.order[0].target, "{{cases.toolName}}");
+});
+
+test("session evaluation preserves when expressions", () => {
+  // evalWhen() resolves and quotes `when` at runtime; pre-resolving it would
+  // turn a string comparison into an invalid unquoted identifier.
+  const yaml = `
+session: Test
+behaviors:
+  - actor: user
+    action: says
+    content: hi
+evaluations:
+  - type: all_of
+    when: "{{cases.expectedPath}} == 'process'"
+    evaluations:
+      - type: expected
+        behavior: ask_id
+        when: "{{cases.flag}} == true"
+`;
+  const session = parse(yaml, {
+    "cases.expectedPath": "process",
+    "cases.flag": true,
+  });
+  const rule = session.evaluations![0] as any;
+
+  assertEquals(rule.when, "{{cases.expectedPath}} == 'process'");
+  assertEquals(rule.evaluations[0].when, "{{cases.flag}} == true");
+  assert(evalWhen(rule.when, { "cases.expectedPath": "process" }));
 });
 
 // ── Evaluator tests ──

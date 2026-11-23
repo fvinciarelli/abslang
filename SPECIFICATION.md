@@ -97,7 +97,7 @@ Behaviors within a Session's list MUST be interpreted as an ordered sequence unl
 
 ## 6. Variable resolution
 
-Any `content`, `with`, or `target` value MAY contain a `{{variable}}` reference. A conforming implementation MUST resolve `{{variable}}` in this order of precedence:
+Any `content`, `with`, or `target` value MAY contain a `{{variable}}` reference. For session-level evaluation rules, the same resolution applies to string fields other than `when` — including selectors (`actor`, `action`, `target`) and values such as `criteria` or `ground_truth`. A conforming implementation MUST resolve `{{variable}}` in this order of precedence:
 
 1. **Captured value** — the nearest prior `capture:` of that name earlier in the same Session.
 2. **Runtime binding** — a value provided at execution time via dataset row, CLI flag, or environment variable (see VARIABLES.md, "Runtime bindings").

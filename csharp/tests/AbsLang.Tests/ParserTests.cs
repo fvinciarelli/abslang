@@ -107,6 +107,127 @@ behaviors:
     }
 
     [Fact]
+    public void ResolvesSessionEvaluationTargetFromRuntimeBindings()
+    {
+        // Dataset-bound tool names must resolve in chain selectors too (not only in behaviors).
+        const string yaml = """
+session: Session evaluation target
+behaviors:
+  - actor: assistant
+    action: calls
+    target: "{{cases.toolName}}"
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: calls, target: "{{cases.toolName}}" }
+  - type: llm_judge
+    criteria: "Check {{cases.toolName}}"
+""";
+
+        var bindings = new Dictionary<string, object?>
+        {
+            ["cases.toolName"] = "get_weather",
+        };
+        var session = AbsParser.Parse(yaml, bindings);
+        var rule = session.Evaluations![0];
+        var selector = Assert.IsType<Dictionary<string, object?>>(rule.GetList("order")![0]);
+
+        Assert.Equal("get_weather", selector["target"]);
+        Assert.Equal("Check get_weather", session.Evaluations[1].GetString("criteria"));
+        Assert.True(AbsEvaluators.Sequence(new List<ObservedStep>
+        {
+            TestData.Step("assistant", "calls", target: "get_weather"),
+        }, rule).Passed);
+    }
+
+    [Fact]
+    public void ResolvesSessionEvaluationTargetFromCapture()
+    {
+        // Chain evaluations run at session scope, so they see every capture.
+        const string yaml = """
+session: Session evaluation capture
+behaviors:
+  - actor: user
+    action: says
+    content: "use the captured tool"
+    capture:
+      tool: "{{cases.toolName}}"
+  - actor: assistant
+    action: calls
+    target: "{{tool}}"
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: calls, target: "{{tool}}" }
+""";
+
+        var bindings = new Dictionary<string, object?>
+        {
+            ["cases.toolName"] = "get_weather",
+        };
+        var session = AbsParser.Parse(yaml, bindings);
+        var selector = Assert.IsType<Dictionary<string, object?>>(
+            session.Evaluations![0].GetList("order")![0]);
+
+        Assert.Equal("get_weather", selector["target"]);
+    }
+
+    [Fact]
+    public void LeavesUnresolvedSessionEvaluationTargetLiteral()
+    {
+        const string yaml = """
+session: Session evaluation unresolved
+behaviors:
+  - actor: assistant
+    action: calls
+evaluations:
+  - type: sequence
+    order:
+      - { actor: assistant, action: calls, target: "{{cases.toolName}}" }
+""";
+
+        var session = AbsParser.Parse(yaml);
+        var selector = Assert.IsType<Dictionary<string, object?>>(
+            session.Evaluations![0].GetList("order")![0]);
+
+        Assert.Equal("{{cases.toolName}}", selector["target"]);
+    }
+
+    [Fact]
+    public void PreservesWhenExpressionInSessionEvaluations()
+    {
+        // EvalWhen() resolves and quotes `when` at runtime; pre-resolving it
+        // would turn a string comparison into an invalid unquoted identifier.
+        const string yaml = """
+session: Session evaluation when
+behaviors:
+  - actor: user
+    action: says
+    content: hi
+evaluations:
+  - type: all_of
+    when: "{{cases.expectedPath}} == 'process'"
+    evaluations:
+      - type: expected
+        behavior: ask_id
+        when: "{{cases.flag}} == true"
+""";
+
+        var bindings = new Dictionary<string, object?>
+        {
+            ["cases.expectedPath"] = "process",
+            ["cases.flag"] = true,
+        };
+        var session = AbsParser.Parse(yaml, bindings);
+        var rule = session.Evaluations![0];
+        var nested = Assert.IsType<Dictionary<string, object?>>(rule.GetList("evaluations")![0]);
+
+        Assert.Equal("{{cases.expectedPath}} == 'process'", rule.GetString("when"));
+        Assert.Equal("{{cases.flag}} == true", nested["when"]);
+        Assert.True(AbsEvaluators.EvalWhen(rule.GetString("when"), bindings));
+    }
+
+    [Fact]
     public void RejectsSequenceReferencingOptionalBehavior()
     {
         const string yaml = """

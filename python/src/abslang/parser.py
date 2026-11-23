@@ -203,6 +203,13 @@ def resolve_variables(
 ) -> list[Behavior]:
     """Resolve {{variable}} references in all Behaviors."""
     variables: dict[str, Any] = dict(runtime_bindings or {})
+    return _resolve_behaviors(behaviors, variables)
+
+
+def _resolve_behaviors(
+    behaviors: list[Behavior],
+    variables: dict[str, Any],
+) -> list[Behavior]:
     resolved: list[Behavior] = []
 
     for b in behaviors:
@@ -227,6 +234,48 @@ def resolve_variables(
 
         resolved.append(r)
 
+    return resolved
+
+
+def resolve_session(
+    session: NormalizedSession,
+    runtime_bindings: dict[str, Any] | None = None,
+) -> NormalizedSession:
+    """Resolve variables in a full session.
+
+    Behaviors are resolved first so captures accumulate into the same variable
+    scope, then session-level evaluations are resolved with that final scope.
+    """
+    variables: dict[str, Any] = dict(runtime_bindings or {})
+    return NormalizedSession(
+        session=session.session,
+        behaviors=_resolve_behaviors(session.behaviors, variables),
+        description=session.description,
+        abs_version=session.abs_version,
+        dataset=session.dataset,
+        evaluations=(
+            [_resolve_evaluation(rule, variables) for rule in session.evaluations]
+            if session.evaluations is not None
+            else None
+        ),
+    )
+
+
+def _resolve_evaluation(rule: dict[str, Any], variables: dict[str, Any]) -> dict[str, Any]:
+    """Resolve an evaluation rule without touching ``when``.
+
+    ``when`` is evaluated by eval_when() at runtime, where string values are
+    quoted before substitution. Plain text substitution here would change its
+    meaning (e.g. ``process`` would become an unquoted identifier).
+    """
+    resolved: dict[str, Any] = {}
+    for key, value in rule.items():
+        if key == "when":
+            resolved[key] = value
+        elif key == "evaluations" and isinstance(value, list):
+            resolved[key] = [_resolve_evaluation(nested, variables) for nested in value]
+        else:
+            resolved[key] = _resolve_value(value, variables)
     return resolved
 
 
@@ -263,8 +312,7 @@ def parse(
 
     doc = docs[0]
     expanded = expand_fragments(doc)
-    expanded.behaviors = resolve_variables(expanded.behaviors, runtime_bindings)
-    return expanded
+    return resolve_session(expanded, runtime_bindings)
 
 
 def parse_multi(
@@ -278,8 +326,7 @@ def parse_multi(
     results: list[NormalizedSession] = []
     for doc in docs:
         expanded = expand_fragments(doc)
-        expanded.behaviors = resolve_variables(expanded.behaviors, runtime_bindings)
-        results.append(expanded)
+        results.append(resolve_session(expanded, runtime_bindings))
     return results
 
 

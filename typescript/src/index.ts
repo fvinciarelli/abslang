@@ -1,4 +1,4 @@
-export { parse, parseMulti, parseYaml, parseYamlFile, expandFragments, resolveVariables, loadDataset } from "./parser";
+export { parse, parseMulti, parseYaml, parseYamlFile, expandFragments, resolveVariables, resolveSession, loadDataset } from "./parser";
 export type { Behavior, ABSDocument, NormalizedSession, Selector, Evaluation } from "./parser";
 
 export { run, openaiAdapter, responsesAdapter, buildAuthHeaders, resolveForwardedAuthorization, parseResponsesOutput, applyResponsesEvent, toResponsesInput, responsesStateToMessage } from "./runner";

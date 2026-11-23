@@ -152,8 +152,13 @@ export function resolveVariables(
   behaviors: Behavior[],
   runtimeBindings: Record<string, any> = {}
 ): Behavior[] {
-  const variables: Record<string, any> = { ...runtimeBindings };
+  return resolveBehaviorList(behaviors, { ...runtimeBindings });
+}
 
+function resolveBehaviorList(
+  behaviors: Behavior[],
+  variables: Record<string, any>
+): Behavior[] {
   return behaviors.map((b) => {
     // Resolve {{var}} references in content
     const resolved = { ...b };
@@ -198,6 +203,60 @@ export function resolveVariables(
 
     return resolved;
   });
+}
+
+/**
+ * Resolve variables in a full session.
+ *
+ * Behaviors are resolved first so captures accumulate into the same variable
+ * scope, then session-level evaluations are resolved with that final scope.
+ * This is what lets chain selectors (sequence/never/count/within) and their
+ * fields reference dataset columns or captured values.
+ */
+export function resolveSession(
+  session: NormalizedSession,
+  runtimeBindings: Record<string, any> = {}
+): NormalizedSession {
+  const variables: Record<string, any> = { ...runtimeBindings };
+  const behaviors = resolveBehaviorList(session.behaviors, variables);
+  const resolved: NormalizedSession = { ...session, behaviors };
+
+  if (session.evaluations) {
+    resolved.evaluations = session.evaluations.map((evaluation) =>
+      resolveEvaluationRule(evaluation, variables)
+    );
+  }
+
+  return resolved;
+}
+
+/**
+ * Resolve an evaluation rule without touching `when`.
+ *
+ * `when` is a boolean expression evaluated by evalWhen() at runtime, where
+ * string values are quoted before substitution. Resolving it here with plain
+ * text substitution would change its meaning (e.g. "process" would become an
+ * unquoted identifier), so it is intentionally preserved.
+ */
+function resolveEvaluationRule(
+  rule: Evaluation,
+  variables: Record<string, any>
+): Evaluation {
+  const resolved: Record<string, any> = {};
+
+  for (const [key, value] of Object.entries(rule)) {
+    if (key === "when") {
+      resolved[key] = value;
+    } else if (key === "evaluations" && Array.isArray(value)) {
+      resolved[key] = value.map((nested) =>
+        resolveEvaluationRule(nested, variables)
+      );
+    } else {
+      resolved[key] = resolveObject(value, variables);
+    }
+  }
+
+  return resolved as Evaluation;
 }
 
 function resolveString(
@@ -257,8 +316,7 @@ export function parse(
   }
 
   const expanded = expandFragments(doc);
-  expanded.behaviors = resolveVariables(expanded.behaviors, runtimeBindings);
-  return expanded;
+  return resolveSession(expanded, runtimeBindings);
 }
 
 export function parseMulti(
@@ -280,8 +338,7 @@ export function parseMulti(
       throw new Error(`Invalid ABS document:\n${errors.join("\n")}`);
     }
     const expanded = expandFragments(doc);
-    expanded.behaviors = resolveVariables(expanded.behaviors, runtimeBindings);
-    return expanded;
+    return resolveSession(expanded, runtimeBindings);
   });
 }
 
