@@ -13,6 +13,20 @@ public sealed class BuiltinJudgeConfig
     /// <summary>Defaults to Authorization; use api-key for Azure.</summary>
     public string? ApiKeyHeader { get; set; }
     public string? Model { get; set; }
+    /// <summary>
+    /// Token-limit field name sent to the OpenAI-compatible endpoint:
+    /// max_tokens (default) or max_completion_tokens (gpt-5/o-series).
+    /// </summary>
+    public string? MaxTokensParam { get; set; }
+    /// <summary>Token limit for judge responses. Default: 512.</summary>
+    public int? MaxTokens { get; set; }
+    /// <summary>When true, temperature is omitted from the request (o-series models reject it).</summary>
+    public bool? OmitTemperature { get; set; }
+    /// <summary>
+    /// Extra JSON body fields merged into the OpenAI-compatible request. Applied
+    /// last, so they can override fields such as temperature or the token limit.
+    /// </summary>
+    public Dictionary<string, object?>? ExtraParams { get; set; }
 }
 
 /// <summary>
@@ -169,6 +183,67 @@ public static class BuiltinJudge
     private static string JudgeModel(string fallback) =>
         ResolveSetting(_config.Model, "ABS_JUDGE_MODEL") ?? fallback;
 
+    private const string DefaultMaxTokensParam = "max_tokens";
+    private const string CompletionMaxTokensParam = "max_completion_tokens";
+    private const int DefaultJudgeMaxTokens = 512;
+
+    private static string JudgeMaxTokensParam()
+    {
+        var value = ResolveSetting(_config.MaxTokensParam, "ABS_JUDGE_MAX_TOKENS_PARAM") ?? DefaultMaxTokensParam;
+        if (value != DefaultMaxTokensParam && value != CompletionMaxTokensParam)
+        {
+            throw new AbsException(
+                $"Invalid judge token-limit field '{value}': " +
+                $"use {DefaultMaxTokensParam} or {CompletionMaxTokensParam} (gpt-5/o-series).");
+        }
+        return value;
+    }
+
+    private static int JudgeMaxTokens()
+    {
+        if (_config.MaxTokens is { } configured) return configured;
+        var environment = Environment.GetEnvironmentVariable("ABS_JUDGE_MAX_TOKENS");
+        return int.TryParse(environment, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : DefaultJudgeMaxTokens;
+    }
+
+    private static bool JudgeOmitTemperature()
+    {
+        if (_config.OmitTemperature is { } configured) return configured;
+        return IsTruthy(Environment.GetEnvironmentVariable("ABS_JUDGE_OMIT_TEMPERATURE"));
+    }
+
+    private static Dictionary<string, object?> JudgeExtraParams()
+    {
+        var merged = new Dictionary<string, object?>(
+            _config.ExtraParams ?? new Dictionary<string, object?>());
+        var environment = Environment.GetEnvironmentVariable("ABS_JUDGE_EXTRA_PARAMS");
+        if (string.IsNullOrEmpty(environment)) return merged;
+
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(environment);
+        }
+        catch (JsonException error)
+        {
+            throw new AbsException($"ABS_JUDGE_EXTRA_PARAMS must be a JSON object: {error.Message}");
+        }
+        using (document)
+        {
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                throw new AbsException("ABS_JUDGE_EXTRA_PARAMS must be a JSON object.");
+            }
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                merged[property.Name] = JsonValues.ToObject(property.Value);
+            }
+        }
+        return merged;
+    }
+
     private static string? ResolveSetting(string? configured, string environmentName)
     {
         if (!string.IsNullOrEmpty(configured)) return configured;
@@ -199,7 +274,7 @@ public static class BuiltinJudge
             request.Headers.TryAddWithoutValidation(header, value);
         }
 
-        request.Content = new StringContent(JsonSerializer.Serialize(new Dictionary<string, object?>
+        var body = new Dictionary<string, object?>
         {
             ["model"] = model,
             ["messages"] = new List<object?>
@@ -207,9 +282,13 @@ public static class BuiltinJudge
                 new Dictionary<string, object?> { ["role"] = "system", ["content"] = JudgeSystem },
                 new Dictionary<string, object?> { ["role"] = "user", ["content"] = BuildPrompt(trace, criteria) },
             },
-            ["temperature"] = 0,
-            ["max_tokens"] = 512,
-        }), Encoding.UTF8, "application/json");
+        };
+        if (!JudgeOmitTemperature()) body["temperature"] = 0;
+        body[JudgeMaxTokensParam()] = JudgeMaxTokens();
+        // Extra params go last: they can override anything above when a provider needs it.
+        foreach (var pair in JudgeExtraParams()) body[pair.Key] = pair.Value;
+
+        request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
         using var response = await AbsAdapterHttp.Client.SendAsync(request, cancellationToken).ConfigureAwait(false);
         var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);

@@ -257,6 +257,11 @@ def init():
             "  # api_key: ...         # built-in judge API key\n"
             "  # api_key_header: ...  # header for the API key\n"
             "  # model: ...           # judge model / deployment name\n"
+            "  # max_tokens_param: max_completion_tokens  # for gpt-5/o-series models\n"
+            "  # max_tokens: 512      # token limit for judge responses\n"
+            "  # omit_temperature: true  # o-series models reject temperature\n"
+            "  # extra_params:        # extra request body fields (merged last, can override)\n"
+            "  #   reasoning_effort: low\n"
             "\n"
             "defaults:\n"
             "  timeout: 300\n"
@@ -343,6 +348,16 @@ def init():
 @click.option("--judge-api-key", help="Built-in judge: API key (overrides OPENAI_API_KEY / ANTHROPIC_API_KEY)", default=None, envvar="ABS_JUDGE_API_KEY")
 @click.option("--judge-api-key-header", help="Built-in judge: header for the API key (default: Authorization; use api-key for Azure)", default=None, envvar="ABS_JUDGE_API_KEY_HEADER")
 @click.option("--judge-model", help="Built-in judge: model or Azure deployment name", default=None, envvar="ABS_JUDGE_MODEL")
+@click.option("--judge-max-tokens-param", type=click.Choice(["max_tokens", "max_completion_tokens"]),
+              help="Built-in judge: token-limit field name (max_completion_tokens for gpt-5/o-series)",
+              default=None, envvar="ABS_JUDGE_MAX_TOKENS_PARAM")
+@click.option("--judge-max-tokens", type=int,
+              help="Built-in judge: token limit for judge responses (default: 512)",
+              default=None, envvar="ABS_JUDGE_MAX_TOKENS")
+@click.option("--judge-omit-temperature", is_flag=True, envvar="ABS_JUDGE_OMIT_TEMPERATURE",
+              help="Built-in judge: omit temperature from the request (o-series models)")
+@click.option("--judge-param", "judge_params", multiple=True,
+              help="Built-in judge: extra request body parameter (--judge-param key=value, repeatable)")
 @click.option("--format", "output_format", help="table, json, or junit", default="table", envvar="ABS_FORMAT")
 @click.option("--ci", is_flag=True, envvar="ABS_CI", help="CI mode (no colors, no prompts)")
 @click.option("--timeout", type=int, default=300, envvar="ABS_TIMEOUT", help="Timeout per session run in seconds")
@@ -378,6 +393,10 @@ def run_cmd(
     judge_api_key: Optional[str],
     judge_api_key_header: Optional[str],
     judge_model: Optional[str],
+    judge_max_tokens_param: Optional[str],
+    judge_max_tokens: Optional[int],
+    judge_omit_temperature: bool,
+    judge_params: tuple[str, ...],
     output_format: str,
     ci: bool,
     timeout: int,
@@ -424,11 +443,26 @@ def run_cmd(
     run_logger = RunLogger(run_id=new_run_id())
 
     # Configure built-in LLM judge (CLI flags override env vars)
+    cli_extra_params: dict[str, Any] = {}
+    for raw in judge_params:
+        if "=" not in raw:
+            click.echo(f"❌ --judge-param expects key=value, got '{raw}'.", err=True)
+            sys.exit(2)
+        key, value = raw.split("=", 1)
+        try:
+            cli_extra_params[key.strip()] = json.loads(value)
+        except (TypeError, ValueError):
+            cli_extra_params[key.strip()] = value
     configure_builtin_judge(
         base_url=judge_base_url,
         api_key=judge_api_key,
         api_key_header=judge_api_key_header,
         model=judge_model,
+        max_tokens_param=judge_max_tokens_param,
+        max_tokens=judge_max_tokens,
+        omit_temperature=judge_omit_temperature,
+        extra_params=cli_extra_params or None,
+        config_extra_params=(config.get("judge") or {}).get("extra_params"),
     )
 
     agent_config = AgentConfig(

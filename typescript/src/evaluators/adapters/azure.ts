@@ -37,6 +37,14 @@ export interface AzureAdapterConfig {
   apiKey?: string;
   deployment?: string;
   apiVersion?: string;
+  /** Token-limit field name: max_tokens (default) or max_completion_tokens (o-series/gpt-5, newer api-versions). */
+  maxTokensParam?: "max_tokens" | "max_completion_tokens";
+  /** Token limit for judge responses. Default: 800 (dimensions) / 512 (llm_judge). */
+  maxTokens?: number;
+  /** When true, temperature is omitted from the request (o-series models reject it). */
+  omitTemperature?: boolean;
+  /** Extra JSON body fields merged into the request (applied last, can override). */
+  extraParams?: Record<string, unknown>;
 }
 
 let azureConfig: AzureAdapterConfig = {};
@@ -50,7 +58,14 @@ export function configureAzure(config: AzureAdapterConfig = {}): void {
   azureConfig = { ...config };
 }
 
-function resolveConfig(): Required<AzureAdapterConfig> | null {
+interface ResolvedAzureConfig {
+  endpoint: string;
+  apiKey: string;
+  deployment: string;
+  apiVersion: string;
+}
+
+function resolveConfig(): ResolvedAzureConfig | null {
   const endpoint = azureConfig.endpoint || process.env.AZURE_OPENAI_ENDPOINT;
   const apiKey = azureConfig.apiKey || process.env.AZURE_OPENAI_KEY;
   const deployment = azureConfig.deployment || process.env.AZURE_OPENAI_DEPLOYMENT;
@@ -75,6 +90,16 @@ function notConfigured(type: string): EvalResult {
   };
 }
 
+function envTruthy(name: string): boolean {
+  return ["1", "true", "yes", "on"].includes((process.env[name] || "").toLowerCase());
+}
+
+function envMaxTokens(): number | undefined {
+  const env = process.env.AZURE_OPENAI_MAX_TOKENS;
+  const parsed = env !== undefined && env !== "" ? Number(env) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 // ── Chat completions ──
 
 async function chatCompletion(
@@ -90,15 +115,31 @@ async function chatCompletion(
     `${base}/openai/deployments/${encodeURIComponent(cfg.deployment)}` +
     `/chat/completions?api-version=${encodeURIComponent(cfg.apiVersion)}`;
 
+  const maxTokensParam =
+    azureConfig.maxTokensParam ||
+    process.env.AZURE_OPENAI_MAX_TOKENS_PARAM ||
+    "max_tokens";
+  if (maxTokensParam !== "max_tokens" && maxTokensParam !== "max_completion_tokens") {
+    throw new Error(
+      `Invalid Azure judge token-limit field '${maxTokensParam}': use max_tokens or max_completion_tokens (o-series/gpt-5, newer api-versions).`
+    );
+  }
+
   const body: Record<string, any> = {
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ],
-    temperature: 0,
-    max_tokens: options.maxTokens ?? 800,
   };
+  const omitTemperature = azureConfig.omitTemperature ?? envTruthy("AZURE_OPENAI_OMIT_TEMPERATURE");
+  if (!omitTemperature) body.temperature = 0;
+  body[maxTokensParam] = azureConfig.maxTokens ?? envMaxTokens() ?? options.maxTokens ?? 800;
   if (options.json) body.response_format = { type: "json_object" };
+  // Extra params go last: they can override anything above when a provider needs it.
+  Object.assign(body, azureConfig.extraParams ?? {});
+  if (process.env.AZURE_OPENAI_EXTRA_PARAMS) {
+    Object.assign(body, JSON.parse(process.env.AZURE_OPENAI_EXTRA_PARAMS));
+  }
 
   const resp = await fetch(url, {
     method: "POST",

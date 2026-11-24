@@ -51,6 +51,94 @@ public class BuiltinJudgeTests
             Assert.Equal("http://judge/v1/chat/completions", stub.Requests[0].RequestUri!.ToString());
             Assert.Equal("Bearer sk-test", stub.Requests[0].Headers.Authorization!.ToString());
             Assert.Contains("Is it friendly?", stub.Bodies[0]);
+            Assert.Contains("\"max_tokens\":512", stub.Bodies[0]);
+            Assert.Contains("\"temperature\":0", stub.Bodies[0]);
+        }
+        finally
+        {
+            AbsAdapterHttp.Client = previous;
+            BuiltinJudge.Configure(new BuiltinJudgeConfig());
+        }
+    }
+
+    [Fact]
+    public async Task SendsMaxCompletionTokensAndOmitsTemperatureWhenConfigured()
+    {
+        var stub = new StubHandler().Json("""{"choices":[{"message":{"content":"Score: 0.9\nReason: good"}}]}""");
+        var previous = AbsAdapterHttp.Client;
+        AbsAdapterHttp.Client = new HttpClient(stub);
+        try
+        {
+            using var env = new EnvScope(
+                ("OPENAI_API_KEY", "sk-test"),
+                ("ANTHROPIC_API_KEY", null),
+                ("GEMINI_API_KEY", null),
+                ("ABS_JUDGE_BASE_URL", null),
+                ("ABS_JUDGE_PROVIDER", null),
+                ("ABS_MOCK_JUDGE", null),
+                ("ABS_JUDGE_MAX_TOKENS_PARAM", null),
+                ("ABS_JUDGE_MAX_TOKENS", null),
+                ("ABS_JUDGE_OMIT_TEMPERATURE", null),
+                ("ABS_JUDGE_EXTRA_PARAMS", null));
+            BuiltinJudge.Configure(new BuiltinJudgeConfig
+            {
+                BaseUrl = "http://judge/v1",
+                MaxTokensParam = "max_completion_tokens",
+                MaxTokens = 256,
+                OmitTemperature = true,
+                ExtraParams = new Dictionary<string, object?> { ["reasoning_effort"] = "low" },
+            });
+
+            var result = await AbsAdapterRegistry.EvaluateAsync(
+                "llm_judge",
+                new[] { TestData.Step("assistant", "informs", "hello") },
+                TestData.Rule("llm_judge", ("criteria", "Is it friendly?")));
+
+            Assert.NotNull(result);
+            Assert.True(result!.Passed);
+            Assert.Contains("\"max_completion_tokens\":256", stub.Bodies[0]);
+            Assert.DoesNotContain("max_tokens", stub.Bodies[0]);
+            Assert.DoesNotContain("temperature", stub.Bodies[0]);
+            Assert.Contains("\"reasoning_effort\":\"low\"", stub.Bodies[0]);
+        }
+        finally
+        {
+            AbsAdapterHttp.Client = previous;
+            BuiltinJudge.Configure(new BuiltinJudgeConfig());
+        }
+    }
+
+    [Fact]
+    public async Task RejectsInvalidMaxTokensParam()
+    {
+        var stub = new StubHandler().Json("""{"choices":[{"message":{"content":"Score: 0.9\nReason: good"}}]}""");
+        var previous = AbsAdapterHttp.Client;
+        AbsAdapterHttp.Client = new HttpClient(stub);
+        try
+        {
+            using var env = new EnvScope(
+                ("OPENAI_API_KEY", "sk-test"),
+                ("ANTHROPIC_API_KEY", null),
+                ("GEMINI_API_KEY", null),
+                ("ABS_JUDGE_BASE_URL", null),
+                ("ABS_JUDGE_PROVIDER", null),
+                ("ABS_MOCK_JUDGE", null),
+                ("ABS_JUDGE_MAX_TOKENS_PARAM", null));
+            BuiltinJudge.Configure(new BuiltinJudgeConfig
+            {
+                BaseUrl = "http://judge/v1",
+                MaxTokensParam = "max_output_tokens",
+            });
+
+            var result = await AbsAdapterRegistry.EvaluateAsync(
+                "llm_judge",
+                new[] { TestData.Step("assistant", "informs", "hello") },
+                TestData.Rule("llm_judge", ("criteria", "x")));
+
+            Assert.NotNull(result);
+            Assert.False(result!.Passed);
+            Assert.Equal("adapter.error", result.Code);
+            Assert.Contains("max_completion_tokens", result.Reason);
         }
         finally
         {

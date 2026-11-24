@@ -8,6 +8,7 @@ Detects available providers from environment variables:
 Set ABS_JUDGE_PROVIDER to pick one explicitly.
 """
 
+import json
 import os
 import re
 from typing import Any
@@ -63,7 +64,9 @@ def _resolve_criteria(evaluation: dict[str, Any]) -> str:
 
 # ── Configuration (CLI flags override env vars) ──
 
-_JUDGE_CONFIG: dict[str, str] = {}
+_JUDGE_CONFIG: dict[str, Any] = {}
+
+_MAX_TOKENS_PARAM_CHOICES = ("max_tokens", "max_completion_tokens")
 
 
 def configure_builtin_judge(
@@ -71,11 +74,20 @@ def configure_builtin_judge(
     api_key: str | None = None,
     api_key_header: str | None = None,
     model: str | None = None,
+    max_tokens_param: str | None = None,
+    max_tokens: int | None = None,
+    omit_temperature: bool | None = None,
+    extra_params: dict[str, Any] | None = None,
+    config_extra_params: dict[str, Any] | None = None,
 ) -> None:
     """Configure the built-in judge.
 
     Replaces previous values; anything not provided falls back to environment
     variables. CLI flags take precedence over env vars.
+
+    extra_params (CLI ``--judge-param``) wins over ``ABS_JUDGE_EXTRA_PARAMS``
+    (JSON object) which wins over ``config_extra_params`` (abs.config.yaml
+    ``judge.extra_params``).
     """
     _JUDGE_CONFIG.clear()
     for key, value in (
@@ -83,9 +95,26 @@ def configure_builtin_judge(
         ("api_key", api_key),
         ("api_key_header", api_key_header),
         ("model", model),
+        ("max_tokens_param", max_tokens_param),
+        ("max_tokens", max_tokens),
+        ("omit_temperature", omit_temperature),
     ):
         if value:
             _JUDGE_CONFIG[key] = value
+
+    merged_extra: dict[str, Any] = {}
+    if config_extra_params:
+        merged_extra.update(config_extra_params)
+    env_extra = os.environ.get("ABS_JUDGE_EXTRA_PARAMS")
+    if env_extra:
+        parsed = json.loads(env_extra)
+        if not isinstance(parsed, dict):
+            raise ValueError("ABS_JUDGE_EXTRA_PARAMS must be a JSON object")
+        merged_extra.update(parsed)
+    if extra_params:
+        merged_extra.update(extra_params)
+    if merged_extra:
+        _JUDGE_CONFIG["extra_params"] = merged_extra
 
 
 def _resolve_setting(cli_key: str, env_name: str) -> str | None:
@@ -110,6 +139,37 @@ def _judge_api_key_header() -> str:
 
 def _judge_model(fallback: str) -> str:
     return _resolve_setting("model", "ABS_JUDGE_MODEL") or fallback
+
+
+def _judge_max_tokens_param() -> str:
+    value = _resolve_setting("max_tokens_param", "ABS_JUDGE_MAX_TOKENS_PARAM") or "max_tokens"
+    if value not in _MAX_TOKENS_PARAM_CHOICES:
+        raise ValueError(
+            f"invalid judge token-limit field '{value}': "
+            "use max_tokens or max_completion_tokens (gpt-5/o-series)"
+        )
+    return value
+
+
+def _judge_max_tokens() -> int:
+    value = _JUDGE_CONFIG.get("max_tokens")
+    if value is None:
+        value = os.environ.get("ABS_JUDGE_MAX_TOKENS")
+    try:
+        return int(value) if value is not None else 512
+    except (TypeError, ValueError):
+        return 512
+
+
+def _judge_omit_temperature() -> bool:
+    value = _JUDGE_CONFIG.get("omit_temperature")
+    if value is not None:
+        return bool(value)
+    return os.environ.get("ABS_JUDGE_OMIT_TEMPERATURE", "").lower() in ("1", "true", "yes", "on")
+
+
+def _judge_extra_params() -> dict[str, Any]:
+    return _JUDGE_CONFIG.get("extra_params") or {}
 
 
 def _build_prompt(trace: list[Any], criteria: str) -> str:
@@ -160,18 +220,23 @@ async def _judge_openai(trace: list[Any], criteria: str) -> dict:
             headers[header_name] = api_key
 
     async with httpx.AsyncClient(timeout=60) as client:
+        body: dict[str, Any] = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": JUDGE_SYSTEM},
+                {"role": "user", "content": _build_prompt(trace, criteria)},
+            ],
+        }
+        if not _judge_omit_temperature():
+            body["temperature"] = 0.0
+        body[_judge_max_tokens_param()] = _judge_max_tokens()
+        # Extra params go last: they can override anything above when a provider needs it.
+        body.update(_judge_extra_params())
+
         resp = await client.post(
             f"{base_url}/chat/completions",
             headers=headers,
-            json={
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": JUDGE_SYSTEM},
-                    {"role": "user", "content": _build_prompt(trace, criteria)},
-                ],
-                "temperature": 0.0,
-                "max_tokens": 512,
-            },
+            json=body,
         )
         resp.raise_for_status()
         data = resp.json()

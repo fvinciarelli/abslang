@@ -22,6 +22,10 @@ public sealed class JudgeConfigSection
     public string? ApiKey { get; set; }
     public string? ApiKeyHeader { get; set; }
     public string? Model { get; set; }
+    public string? MaxTokensParam { get; set; }
+    public int? MaxTokens { get; set; }
+    public bool? OmitTemperature { get; set; }
+    public Dictionary<string, object?>? ExtraParams { get; set; }
 }
 
 public sealed class DefaultsConfigSection
@@ -75,7 +79,11 @@ public sealed class AbsConfig
             "authorization", "refresh_url", "refresh_token", "client_id",
         },
         ["adapters"] = null,
-        ["judge"] = new[] { "base_url", "api_key", "api_key_header", "model" },
+        ["judge"] = new[]
+        {
+            "base_url", "api_key", "api_key_header", "model",
+            "max_tokens_param", "max_tokens", "omit_temperature", "extra_params",
+        },
         ["defaults"] = new[] { "dataset", "filter", "timeout", "parallel", "output", "vars" },
         ["run"] = new[] { "format", "ci" },
         ["logging"] = new[] { "format", "level", "file", "no_content" },
@@ -167,6 +175,10 @@ public sealed class AbsConfig
             ApiKey = Judge.ApiKey,
             ApiKeyHeader = Judge.ApiKeyHeader,
             Model = Judge.Model,
+            MaxTokensParam = Judge.MaxTokensParam,
+            MaxTokens = Judge.MaxTokens,
+            OmitTemperature = Judge.OmitTemperature,
+            ExtraParams = Judge.ExtraParams,
         });
     }
 
@@ -248,6 +260,10 @@ public sealed class AbsConfig
                 ApiKey = Str(judge, "api_key"),
                 ApiKeyHeader = Str(judge, "api_key_header"),
                 Model = Str(judge, "model"),
+                MaxTokensParam = Str(judge, "max_tokens_param"),
+                MaxTokens = Int(judge, "max_tokens"),
+                OmitTemperature = Bool(judge, "omit_temperature"),
+                ExtraParams = Map(judge, "extra_params"),
             };
         }
 

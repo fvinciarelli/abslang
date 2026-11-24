@@ -11,6 +11,14 @@ public sealed class AzureAdapterConfig
     public string? ApiKey { get; set; }
     public string? Deployment { get; set; }
     public string? ApiVersion { get; set; }
+    /// <summary>Token-limit field name: max_tokens (default) or max_completion_tokens (o-series/gpt-5, newer api-versions).</summary>
+    public string? MaxTokensParam { get; set; }
+    /// <summary>Token limit for judge responses. Default: 800 (dimensions) / 512 (llm_judge).</summary>
+    public int? MaxTokens { get; set; }
+    /// <summary>When true, temperature is omitted from the request (o-series models reject it).</summary>
+    public bool? OmitTemperature { get; set; }
+    /// <summary>Extra JSON body fields merged into the request (applied last, can override).</summary>
+    public Dictionary<string, object?>? ExtraParams { get; set; }
 }
 
 /// <summary>
@@ -236,10 +244,12 @@ public static class AzureAdapter
                 new Dictionary<string, object?> { ["role"] = "system", ["content"] = system },
                 new Dictionary<string, object?> { ["role"] = "user", ["content"] = user },
             },
-            ["temperature"] = 0,
-            ["max_tokens"] = 800,
         };
+        if (!ResolveOmitTemperature()) body["temperature"] = 0;
+        body[ResolveMaxTokensParam()] = ResolveMaxTokens();
         if (json) body["response_format"] = new Dictionary<string, object?> { ["type"] = "json_object" };
+        // Extra params go last: they can override anything above when a provider needs it.
+        foreach (var pair in ResolveExtraParams()) body[pair.Key] = pair.Value;
 
         using var request = new HttpRequestMessage(HttpMethod.Post, url)
         {
@@ -260,6 +270,71 @@ public static class AzureAdapter
             .GetProperty("message")
             .GetProperty("content")
             .GetString() ?? "";
+    }
+
+    private static string ResolveMaxTokensParam()
+    {
+        var value = ResolveSetting(_config.MaxTokensParam, "AZURE_OPENAI_MAX_TOKENS_PARAM") ?? "max_tokens";
+        if (value != "max_tokens" && value != "max_completion_tokens")
+        {
+            throw new AbsException(
+                $"Invalid Azure judge token-limit field '{value}': " +
+                "use max_tokens or max_completion_tokens (o-series/gpt-5, newer api-versions).");
+        }
+        return value;
+    }
+
+    private static int ResolveMaxTokens()
+    {
+        if (_config.MaxTokens is { } configured) return configured;
+        var environment = Environment.GetEnvironmentVariable("AZURE_OPENAI_MAX_TOKENS");
+        return int.TryParse(environment, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : 800;
+    }
+
+    private static bool ResolveOmitTemperature()
+    {
+        if (_config.OmitTemperature is { } configured) return configured;
+        var value = Environment.GetEnvironmentVariable("AZURE_OPENAI_OMIT_TEMPERATURE");
+        return value != null && new[] { "1", "true", "yes", "on" }.Contains(value.Trim().ToLowerInvariant());
+    }
+
+    private static Dictionary<string, object?> ResolveExtraParams()
+    {
+        var merged = new Dictionary<string, object?>(
+            _config.ExtraParams ?? new Dictionary<string, object?>());
+        var environment = Environment.GetEnvironmentVariable("AZURE_OPENAI_EXTRA_PARAMS");
+        if (string.IsNullOrEmpty(environment)) return merged;
+
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(environment);
+        }
+        catch (JsonException error)
+        {
+            throw new AbsException($"AZURE_OPENAI_EXTRA_PARAMS must be a JSON object: {error.Message}");
+        }
+        using (document)
+        {
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                throw new AbsException("AZURE_OPENAI_EXTRA_PARAMS must be a JSON object.");
+            }
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                merged[property.Name] = JsonValues.ToObject(property.Value);
+            }
+        }
+        return merged;
+    }
+
+    private static string? ResolveSetting(string? configured, string environmentName)
+    {
+        if (!string.IsNullOrEmpty(configured)) return configured;
+        var value = Environment.GetEnvironmentVariable(environmentName);
+        return string.IsNullOrEmpty(value) ? null : value;
     }
 
     private static RequiredConfig? ResolveConfig()

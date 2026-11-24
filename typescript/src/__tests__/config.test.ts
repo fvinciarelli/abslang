@@ -38,6 +38,11 @@ describe("loadConfig", () => {
   forward_auth: true
 judge:
   model: jm
+  max_tokens_param: max_completion_tokens
+  max_tokens: 1024
+  omit_temperature: true
+  extra_params:
+    reasoning_effort: low
 defaults:
   timeout: 120
   vars:
@@ -56,6 +61,10 @@ report:
     assert.equal(cfg.agent?.auth, "bearer");
     assert.equal(cfg.agent?.forward_auth, true);
     assert.equal(cfg.judge?.model, "jm");
+    assert.equal(cfg.judge?.max_tokens_param, "max_completion_tokens");
+    assert.equal(cfg.judge?.max_tokens, 1024);
+    assert.equal(cfg.judge?.omit_temperature, true);
+    assert.deepEqual(cfg.judge?.extra_params, { reasoning_effort: "low" });
     assert.equal(cfg.defaults?.timeout, 120);
     assert.deepEqual(cfg.defaults?.vars, { orderId: "cfg-v" });
     assert.equal(cfg.run?.format, "json");

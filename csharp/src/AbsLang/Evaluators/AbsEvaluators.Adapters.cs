@@ -38,4 +38,30 @@ public static partial class AbsEvaluators
             ApiKeyHeader = apiKeyHeader,
             Model = model,
         });
+
+    /// <summary>
+    /// Configure the built-in judge, including token-limit details for
+    /// OpenAI-compatible endpoints that require max_completion_tokens
+    /// (gpt-5/o-series) or reject temperature (o-series).
+    /// </summary>
+    public static void ConfigureBuiltinJudge(
+        string baseUrl,
+        string? apiKey = null,
+        string? apiKeyHeader = null,
+        string? model = null,
+        string? maxTokensParam = null,
+        int? maxTokens = null,
+        bool? omitTemperature = null,
+        Dictionary<string, object?>? extraParams = null) =>
+        BuiltinJudge.Configure(new BuiltinJudgeConfig
+        {
+            BaseUrl = baseUrl,
+            ApiKey = apiKey,
+            ApiKeyHeader = apiKeyHeader,
+            Model = model,
+            MaxTokensParam = maxTokensParam,
+            MaxTokens = maxTokens,
+            OmitTemperature = omitTemperature,
+            ExtraParams = extraParams,
+        });
 }

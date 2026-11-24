@@ -112,6 +112,11 @@ judge:
   # api_key: ...         # built-in judge API key
   # api_key_header: ...  # header for the API key
   # model: ...           # judge model / deployment name
+  # max_tokens_param: max_completion_tokens  # for gpt-5/o-series models
+  # max_tokens: 512      # token limit for judge responses
+  # omit_temperature: true  # o-series models reject temperature
+  # extra_params:        # extra request body fields (merged last, can override)
+  #   reasoning_effort: low
 
 defaults:
   timeout: 300
@@ -205,6 +210,15 @@ program
   .option("--judge-api-key <key>", "Built-in judge: API key (overrides ABS_JUDGE_API_KEY / OPENAI_API_KEY)")
   .option("--judge-api-key-header <header>", "Built-in judge: header for the API key (default: Authorization; use api-key for Azure)")
   .option("--judge-model <model>", "Built-in judge: model or Azure deployment name")
+  .option("--judge-max-tokens-param <name>", "Built-in judge: token-limit field name: max_tokens (default) or max_completion_tokens (gpt-5/o-series)")
+  .option("--judge-max-tokens <n>", "Built-in judge: token limit for judge responses (default: 512)")
+  .option("--judge-omit-temperature", "Built-in judge: omit temperature from the request (o-series models)")
+  .option(
+    "--judge-param <key=value>",
+    "Built-in judge: extra request body parameter, repeatable (e.g. --judge-param reasoning_effort=low)",
+    (value: string, previous: string[]) => previous.concat([value]),
+    []
+  )
   .option("--format <format>", "table, json, or junit")
   .option("--ci", "CI mode (no colors, no prompts)")
   .option("--timeout <n>", "Timeout per session run in seconds")
@@ -248,6 +262,71 @@ program
     const judgeApiKey = pickValue(options.judgeApiKey, process.env.ABS_JUDGE_API_KEY, cfg.judge?.api_key, undefined);
     const judgeApiKeyHeader = pickValue(options.judgeApiKeyHeader, process.env.ABS_JUDGE_API_KEY_HEADER, cfg.judge?.api_key_header, undefined);
     const judgeModel = pickValue(options.judgeModel, process.env.ABS_JUDGE_MODEL, cfg.judge?.model, undefined);
+    const judgeMaxTokensParam = pickValue(
+      options.judgeMaxTokensParam,
+      process.env.ABS_JUDGE_MAX_TOKENS_PARAM,
+      cfg.judge?.max_tokens_param,
+      undefined
+    );
+    if (
+      judgeMaxTokensParam &&
+      judgeMaxTokensParam !== "max_tokens" &&
+      judgeMaxTokensParam !== "max_completion_tokens"
+    ) {
+      console.error(
+        chalk.red(
+          `❌ --judge-max-tokens-param must be max_tokens or max_completion_tokens, got '${judgeMaxTokensParam}'.`
+        )
+      );
+      process.exit(2);
+    }
+    const judgeMaxTokensStr = pickValue(
+      options.judgeMaxTokens,
+      process.env.ABS_JUDGE_MAX_TOKENS,
+      cfg.judge?.max_tokens !== undefined ? String(cfg.judge.max_tokens) : undefined,
+      undefined
+    );
+    const judgeMaxTokens = judgeMaxTokensStr !== undefined ? Number(judgeMaxTokensStr) : undefined;
+    if (judgeMaxTokens !== undefined && !(Number.isFinite(judgeMaxTokens) && judgeMaxTokens > 0)) {
+      console.error(chalk.red(`❌ --judge-max-tokens must be a positive number, got '${judgeMaxTokensStr}'.`));
+      process.exit(2);
+    }
+    const judgeOmitTemperature = pickFlag(
+      options.judgeOmitTemperature,
+      process.env.ABS_JUDGE_OMIT_TEMPERATURE,
+      cfg.judge?.omit_temperature,
+      false
+    );
+    // Extra params: CLI --judge-param > ABS_JUDGE_EXTRA_PARAMS (JSON object) > judge.extra_params
+    const judgeExtraParams: Record<string, unknown> = { ...(cfg.judge?.extra_params ?? {}) };
+    if (process.env.ABS_JUDGE_EXTRA_PARAMS) {
+      let parsedEnv: any;
+      try {
+        parsedEnv = JSON.parse(process.env.ABS_JUDGE_EXTRA_PARAMS);
+      } catch {
+        console.error(chalk.red("❌ ABS_JUDGE_EXTRA_PARAMS must be a valid JSON object."));
+        process.exit(2);
+      }
+      if (typeof parsedEnv !== "object" || parsedEnv === null || Array.isArray(parsedEnv)) {
+        console.error(chalk.red("❌ ABS_JUDGE_EXTRA_PARAMS must be a JSON object."));
+        process.exit(2);
+      }
+      Object.assign(judgeExtraParams, parsedEnv);
+    }
+    for (const raw of (options.judgeParam as string[]) ?? []) {
+      const eq = raw.indexOf("=");
+      if (eq <= 0) {
+        console.error(chalk.red(`❌ --judge-param expects key=value, got '${raw}'.`));
+        process.exit(2);
+      }
+      const key = raw.slice(0, eq).trim();
+      const value = raw.slice(eq + 1);
+      try {
+        judgeExtraParams[key] = JSON.parse(value);
+      } catch {
+        judgeExtraParams[key] = value;
+      }
+    }
     const outputFormat = pickValue(options.format, process.env.ABS_FORMAT, cfg.run?.format, "table");
     const ci = pickFlag(options.ci, process.env.ABS_CI, cfg.run?.ci, false);
     const timeoutStr = pickValue(
@@ -287,6 +366,10 @@ program
       apiKey: judgeApiKey,
       apiKeyHeader: judgeApiKeyHeader,
       model: judgeModel,
+      maxTokensParam: judgeMaxTokensParam as "max_tokens" | "max_completion_tokens" | undefined,
+      maxTokens: judgeMaxTokens,
+      omitTemperature: judgeOmitTemperature,
+      extraParams: judgeExtraParams,
     });
 
     const agentConfig: AgentConfig = {

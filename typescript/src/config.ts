@@ -21,6 +21,10 @@ export interface ABSConfig {
     api_key?: string;
     api_key_header?: string;
     model?: string;
+    max_tokens_param?: string;
+    max_tokens?: number;
+    omit_temperature?: boolean;
+    extra_params?: Record<string, any>;
   };
   defaults?: {
     dataset?: string;
@@ -54,7 +58,10 @@ const KNOWN_KEYS: Record<string, string[] | null> = {
     "authorization", "refresh_url", "refresh_token", "client_id",
   ],
   adapters: null,
-  judge: ["base_url", "api_key", "api_key_header", "model"],
+  judge: [
+    "base_url", "api_key", "api_key_header", "model",
+    "max_tokens_param", "max_tokens", "omit_temperature", "extra_params",
+  ],
   defaults: ["dataset", "filter", "timeout", "parallel", "output", "vars"],
   run: ["format", "ci"],
   logging: ["format", "level", "file", "no_content"],

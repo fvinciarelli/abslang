@@ -59,6 +59,17 @@ export interface BuiltinJudgeConfig {
   apiKeyHeader?: string;
   /** Model (or Azure deployment name) for the judge. */
   model?: string;
+  /** Token-limit field name sent to the OpenAI-compatible endpoint. Default: max_tokens. Use max_completion_tokens for gpt-5/o-series. */
+  maxTokensParam?: "max_tokens" | "max_completion_tokens";
+  /** Token limit for judge responses. Default: 512. */
+  maxTokens?: number;
+  /** When true, temperature is omitted from the request (o-series models reject it). */
+  omitTemperature?: boolean;
+  /**
+   * Extra JSON body fields merged into the OpenAI-compatible request. Applied
+   * last, so they can override fields such as temperature or the token limit.
+   */
+  extraParams?: Record<string, unknown>;
 }
 
 let judgeConfig: BuiltinJudgeConfig = {};
@@ -89,6 +100,49 @@ function judgeApiKeyHeader(): string {
 
 function judgeModel(fallback: string): string {
   return resolveSetting(judgeConfig.model, "ABS_JUDGE_MODEL") || fallback;
+}
+
+const JUDGE_DEFAULT_MAX_TOKENS = 512;
+
+function judgeMaxTokensParam(): "max_tokens" | "max_completion_tokens" {
+  const value =
+    resolveSetting(judgeConfig.maxTokensParam, "ABS_JUDGE_MAX_TOKENS_PARAM") || "max_tokens";
+  if (value !== "max_tokens" && value !== "max_completion_tokens") {
+    throw new Error(
+      `Invalid judge token-limit field '${value}': use max_tokens or max_completion_tokens (gpt-5/o-series).`
+    );
+  }
+  return value;
+}
+
+function judgeMaxTokens(): number {
+  if (typeof judgeConfig.maxTokens === "number") return judgeConfig.maxTokens;
+  const env = process.env.ABS_JUDGE_MAX_TOKENS;
+  const parsed = env !== undefined && env !== "" ? Number(env) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : JUDGE_DEFAULT_MAX_TOKENS;
+}
+
+function judgeOmitTemperature(): boolean {
+  if (judgeConfig.omitTemperature !== undefined) return judgeConfig.omitTemperature;
+  return ["1", "true", "yes", "on"].includes(
+    (process.env.ABS_JUDGE_OMIT_TEMPERATURE || "").toLowerCase()
+  );
+}
+
+function judgeExtraParams(): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...(judgeConfig.extraParams ?? {}) };
+  const env = process.env.ABS_JUDGE_EXTRA_PARAMS;
+  if (!env) return merged;
+  let parsed: any;
+  try {
+    parsed = JSON.parse(env);
+  } catch {
+    throw new Error("ABS_JUDGE_EXTRA_PARAMS must be a valid JSON object.");
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("ABS_JUDGE_EXTRA_PARAMS must be a JSON object.");
+  }
+  return { ...merged, ...parsed };
 }
 
 function buildPrompt(trace: ObservedStep[], criteria: string): string {
@@ -129,18 +183,22 @@ async function judgeOpenAI(trace: ObservedStep[], criteria: string, threshold: n
         : apiKey;
   }
 
+  const body: Record<string, any> = {
+    model,
+    messages: [
+      { role: "system", content: JUDGE_SYSTEM },
+      { role: "user", content: buildPrompt(trace, criteria) },
+    ],
+  };
+  if (!judgeOmitTemperature()) body.temperature = 0;
+  body[judgeMaxTokensParam()] = judgeMaxTokens();
+  // Extra params go last: they can override anything above when a provider needs it.
+  Object.assign(body, judgeExtraParams());
+
   const resp = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers,
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: JUDGE_SYSTEM },
-        { role: "user", content: buildPrompt(trace, criteria) },
-      ],
-      temperature: 0,
-      max_tokens: 512,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!resp.ok) {

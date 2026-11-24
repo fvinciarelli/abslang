@@ -31,6 +31,26 @@ export AZURE_OPENAI_API_VERSION="2024-02-15-preview"       # optional
 The evaluators are AI-assisted: they call an Azure OpenAI model as the judge and
 incur token usage per evaluation.
 
+### o-series / gpt-5 deployments
+
+Deployments that reject `max_tokens` (o-series, gpt-5, or newer api-versions)
+need `max_completion_tokens`; o-series models also reject `temperature`:
+
+```bash
+export AZURE_OPENAI_API_VERSION="2024-12-01-preview"
+export AZURE_OPENAI_MAX_TOKENS_PARAM="max_completion_tokens"
+export AZURE_OPENAI_MAX_TOKENS="1024"
+export AZURE_OPENAI_OMIT_TEMPERATURE="true"
+# Optional: extra JSON body fields for the direct llm_judge chat-completions call
+export AZURE_OPENAI_EXTRA_PARAMS='{"reasoning_effort": "low"}'
+```
+
+The same options are available in code via `configure(...)` / `configureAzure(...)`
+(`max_tokens_param`, `max_tokens`, `omit_temperature`, `extra_params`) and in C#
+via `AzureAdapterConfig`. Note: the Python SDK-based evaluators
+(`azure-ai-evaluation`) manage their own request parameters; these options apply
+to the direct `llm_judge` chat-completions call.
+
 ## Run
 
 ```bash

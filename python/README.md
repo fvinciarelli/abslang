@@ -92,6 +92,10 @@ abslang run sessions/ --agent $STAGING --dataset datasets/ --format junit --ci >
 | `--judge-api-key` | Built-in judge API key (overrides `ABS_JUDGE_API_KEY` / `OPENAI_API_KEY`) |
 | `--judge-api-key-header` | Header for the judge key (default `Authorization`; use `api-key` for Azure) |
 | `--judge-model` | Built-in judge model or Azure deployment name |
+| `--judge-max-tokens-param` | Token-limit field name: `max_tokens` (default) or `max_completion_tokens` (gpt-5/o-series) |
+| `--judge-max-tokens` | Built-in judge token limit for judge responses (default: 512) |
+| `--judge-omit-temperature` | Omit `temperature` from the request (o-series models reject it) |
+| `--judge-param <key=value>` | Extra request body parameter, repeatable (merged last, can override) |
 | `--format` | `table` (default), `json`, or `junit` |
 | `--ci` | CI mode (no colors) |
 | `--timeout <n>` | Timeout per session in seconds (default: 300) |
@@ -166,6 +170,16 @@ abslang run session.abs.yaml --agent $URL \
   --judge-api-key "$AZURE_OPENAI_API_KEY" \
   --judge-api-key-header api-key \
   --judge-model gpt-4o-mini
+```
+
+Models that reject `max_tokens` (gpt-5/o-series) use `max_completion_tokens`;
+o-series models also reject `temperature`:
+
+```bash
+abslang run session.abs.yaml --agent $URL \
+  --judge-base-url "https://api.openai.com/v1" --judge-api-key "$OPENAI_API_KEY" \
+  --judge-model gpt-5 --judge-max-tokens-param max_completion_tokens \
+  --judge-max-tokens 1024 --judge-omit-temperature --judge-param reasoning_effort=low
 ```
 
 **Azure AI Foundry** (quality dimensions + agentic evaluators):

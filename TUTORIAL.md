@@ -394,6 +394,11 @@ adapters:
 
 judge:
   model: gpt-4o-mini                # --judge-model / ABS_JUDGE_MODEL
+  # max_tokens_param: max_completion_tokens  # gpt-5/o-series models
+  # max_tokens: 512                 # token limit for judge responses
+  # omit_temperature: true          # o-series models reject temperature
+  # extra_params:                   # merged last into the /chat/completions body
+  #   reasoning_effort: low
 
 defaults:
   dataset: datasets/                # --dataset / ABS_DATASET

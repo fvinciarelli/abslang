@@ -18,6 +18,10 @@ const JUDGE_ENV_VARS = [
   "ABS_JUDGE_API_KEY_HEADER",
   "ABS_JUDGE_MODEL",
   "ABS_JUDGE_PROVIDER",
+  "ABS_JUDGE_MAX_TOKENS_PARAM",
+  "ABS_JUDGE_MAX_TOKENS",
+  "ABS_JUDGE_OMIT_TEMPERATURE",
+  "ABS_JUDGE_EXTRA_PARAMS",
   "OPENAI_API_KEY",
   "ANTHROPIC_API_KEY",
   "GEMINI_API_KEY",
@@ -66,9 +70,53 @@ describe("builtin judge — custom endpoint", () => {
         assert.equal(srv.requests[0].headers["api-key"], "secret");
         assert.equal(srv.requests[0].headers.authorization, undefined);
         assert.equal(srv.requests[0].body.model, "gpt-4o-mini");
+        // Defaults: max_tokens field present with the standard 512 limit
+        assert.equal(srv.requests[0].body.max_tokens, 512);
+        assert.equal(srv.requests[0].body.temperature, 0);
       } finally {
         await srv.close();
       }
+    });
+  });
+
+  it("sends max_completion_tokens, omits temperature, and merges extra params when configured", async () => {
+    await withCleanJudgeEnv(async () => {
+      const srv = await startServer((_req, res) => sendJson(res, JUDGE_RESPONSE), "/v1");
+      try {
+        configureBuiltinJudge({
+          baseUrl: srv.url,
+          apiKey: "secret",
+          maxTokensParam: "max_completion_tokens",
+          maxTokens: 256,
+          omitTemperature: true,
+          extraParams: { reasoning_effort: "low" },
+        });
+
+        const result = await builtinLlmJudge(TRACE, { criteria: "Is it helpful?" });
+
+        assert.equal(result.passed, true);
+        assert.equal(srv.requests[0].body.max_completion_tokens, 256);
+        assert.equal(srv.requests[0].body.max_tokens, undefined);
+        assert.equal(srv.requests[0].body.temperature, undefined);
+        assert.equal(srv.requests[0].body.reasoning_effort, "low");
+      } finally {
+        await srv.close();
+      }
+    });
+  });
+
+  it("rejects an invalid max-tokens-param with an adapter error", async () => {
+    await withCleanJudgeEnv(async () => {
+      configureBuiltinJudge({
+        baseUrl: "http://127.0.0.1:9/v1",
+        maxTokensParam: "max_output_tokens" as any,
+      });
+
+      const result = await builtinLlmJudge(TRACE, { criteria: "x" });
+
+      assert.equal(result.passed, false);
+      assert.equal(result.code, "adapter.error");
+      assert.match(result.reason ?? "", /max_completion_tokens/);
     });
   });
 

@@ -423,6 +423,12 @@ abslang run session.abs.yaml --agent $URL \
   --judge-api-key "$AZURE_OPENAI_API_KEY" --judge-api-key-header api-key \
   --judge-model gpt-4o-mini
 
+# gpt-5 / o-series judge (rejects max_tokens; o-series also rejects temperature)
+abslang run session.abs.yaml --agent $URL \
+  --judge-base-url "https://api.openai.com/v1" --judge-api-key "$OPENAI_API_KEY" \
+  --judge-model gpt-5 --judge-max-tokens-param max_completion_tokens \
+  --judge-max-tokens 1024 --judge-omit-temperature --judge-param reasoning_effort=low
+
 # Azure AI Foundry — quality + safety evaluators
 AZURE_OPENAI_ENDPOINT=... AZURE_OPENAI_KEY=... AZURE_OPENAI_DEPLOYMENT=... \
   abslang run session.abs.yaml --agent $URL --adapter azure

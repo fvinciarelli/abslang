@@ -14,6 +14,7 @@ Run flags:
 - Agent: `--agent <url>`, `--agent-format openai|responses|claude|gemini`, `--agent-auth none|api_key|bearer|oauth2`, `--agent-token`, `--agent-model`, `--agent-forward-auth`.
 - Data: `--dataset <file|dir>`, `--filter key:value`, `--var k=v`.
 - Evaluator adapters: `--adapter llm_judge=azure` (repeatable), `--judge-base-url`, `--judge-api-key`, `--judge-api-key-header`, `--judge-model`.
+- Judge params (for models with different fields): `--judge-max-tokens-param max_tokens|max_completion_tokens`, `--judge-max-tokens`, `--judge-omit-temperature`, `--judge-param key=value` (repeatable).
 - Output: `--format table|json|junit` (default table), `--output <file>`, `--ci`, `--timeout <s>`, `--parallel <n>`.
 - Logs: `--log-format pretty|jsonl`, `--log-level error|warn|info|debug`, `--log-file <file>`, `--no-log-content`.
 - Chat params (for models with different fields): `--model`, `--base-url`, `--max-tokens`, `--max-tokens-param max_tokens|max_completion_tokens`, `--temperature`, `--omit-temperature`, `--param key=value` (repeatable).

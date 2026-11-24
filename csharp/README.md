@@ -185,9 +185,31 @@ AbsEvaluators.ConfigureBuiltinJudge(
     model: "gpt-4o");
 ```
 
+Models that reject `max_tokens` (gpt-5/o-series via OpenAI-compatible
+endpoints) use `max_completion_tokens` instead; o-series models also reject
+the `temperature` field:
+
+```csharp
+AbsEvaluators.ConfigureBuiltinJudge(
+    baseUrl: "https://api.openai.com/v1",
+    apiKey: "...",
+    model: "gpt-5",
+    maxTokensParam: "max_completion_tokens", // max_tokens (default) | max_completion_tokens
+    maxTokens: 1024,                         // token limit for judge responses (default: 512)
+    omitTemperature: true,                   // o-series models reject temperature
+    extraParams: new Dictionary<string, object?> { ["reasoning_effort"] = "low" });
+```
+
+`extraParams` is merged into the `/chat/completions` request body last, so it
+can set or override any field a provider requires. The same options work
+through `abs.config.yaml` (`judge:` section keys `max_tokens_param`,
+`max_tokens`, `omit_temperature`, `extra_params`) or environment variables.
+
 Environment variables: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`,
 `ABS_JUDGE_BASE_URL`, `ABS_JUDGE_API_KEY`, `ABS_JUDGE_API_KEY_HEADER`,
-`ABS_JUDGE_MODEL`, `ABS_JUDGE_PROVIDER`, `ABS_MOCK_JUDGE`.
+`ABS_JUDGE_MODEL`, `ABS_JUDGE_PROVIDER`, `ABS_JUDGE_MAX_TOKENS_PARAM`,
+`ABS_JUDGE_MAX_TOKENS`, `ABS_JUDGE_OMIT_TEMPERATURE`, `ABS_JUDGE_EXTRA_PARAMS`
+(JSON object), `ABS_MOCK_JUDGE`.
 
 ## Adapters
 
@@ -205,6 +227,12 @@ Supported: `llm_judge`, `Groundedness`, `Relevance`, `Coherence`, `Fluency`, and
 `custom` (`azure.task_adherence`, `azure.intent_resolution`,
 `azure.tool_call_accuracy`). Environment: `AZURE_OPENAI_ENDPOINT`,
 `AZURE_OPENAI_KEY`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_VERSION`.
+For o-series/gpt-5 deployments or newer api-versions that reject `max_tokens`,
+set `maxTokensParam: "max_completion_tokens"` (and `omitTemperature: true` for
+o-series models) in `AzureAdapterConfig`, or use the
+`AZURE_OPENAI_MAX_TOKENS_PARAM`, `AZURE_OPENAI_MAX_TOKENS`,
+`AZURE_OPENAI_OMIT_TEMPERATURE`, and `AZURE_OPENAI_EXTRA_PARAMS` environment
+variables.
 
 ### AI Evaluator (core package)
 

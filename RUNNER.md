@@ -271,6 +271,20 @@ abslang run session.abs.yaml --agent $AGENT_URL \
   --judge-model gpt-4o-mini
 ```
 
+Models that reject `max_tokens` (gpt-5/o-series via OpenAI-compatible endpoints)
+use `max_completion_tokens`; o-series models also reject `temperature`:
+
+```bash
+abslang run session.abs.yaml --agent $AGENT_URL \
+  --judge-base-url "https://api.openai.com/v1" \
+  --judge-api-key "$OPENAI_API_KEY" \
+  --judge-model gpt-5 \
+  --judge-max-tokens-param max_completion_tokens \
+  --judge-max-tokens 1024 \
+  --judge-omit-temperature \
+  --judge-param reasoning_effort=low   # repeatable; merged last, can override
+```
+
 **Azure AI Foundry** — `Groundedness`, `Relevance`, `Coherence`, `Fluency`, plus
 agentic evaluators (`azure.task_adherence`, `azure.tool_call_accuracy`, …):
 

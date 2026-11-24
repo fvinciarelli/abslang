@@ -34,6 +34,10 @@ const ENV_KEYS = [
   "AZURE_OPENAI_KEY",
   "AZURE_OPENAI_DEPLOYMENT",
   "AZURE_OPENAI_API_VERSION",
+  "AZURE_OPENAI_MAX_TOKENS_PARAM",
+  "AZURE_OPENAI_MAX_TOKENS",
+  "AZURE_OPENAI_OMIT_TEMPERATURE",
+  "AZURE_OPENAI_EXTRA_PARAMS",
 ];
 
 interface CapturedRequest {
@@ -140,6 +144,32 @@ describe("azure llm_judge", () => {
     assert.equal(captured[0].headers["api-key"], "k");
     assert.ok(String(captured[0].body.messages[0].content).includes("expert evaluator"));
     assert.ok(String(captured[0].body.messages[1].content).includes("helpful"));
+    // Defaults: max_tokens field with the standard 512 limit for llm_judge
+    assert.equal(captured[0].body.max_tokens, 512);
+    assert.equal(captured[0].body.temperature, 0);
+  });
+
+  it("sends max_completion_tokens, omits temperature, and merges extra params when configured", async () => {
+    setAzureEnv();
+    installFetch("Score: 0.9\nReason: looks good");
+    configureAzure({
+      endpoint: "https://x.services.ai.azure.com",
+      apiKey: "k",
+      deployment: "dep",
+      apiVersion: "2024-12-01-preview",
+      maxTokensParam: "max_completion_tokens",
+      maxTokens: 256,
+      omitTemperature: true,
+      extraParams: { reasoning_effort: "low" },
+    });
+
+    const result = await azureAdapter(TRACE, { type: "llm_judge", criteria: "helpful" });
+
+    assert.equal(result.passed, true);
+    assert.equal(captured[0].body.max_completion_tokens, 256);
+    assert.equal(captured[0].body.max_tokens, undefined);
+    assert.equal(captured[0].body.temperature, undefined);
+    assert.equal(captured[0].body.reasoning_effort, "low");
   });
 });
 

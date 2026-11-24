@@ -21,6 +21,10 @@ JUDGE_ENV_VARS = (
     "ABS_JUDGE_API_KEY_HEADER",
     "ABS_JUDGE_MODEL",
     "ABS_JUDGE_PROVIDER",
+    "ABS_JUDGE_MAX_TOKENS_PARAM",
+    "ABS_JUDGE_MAX_TOKENS",
+    "ABS_JUDGE_OMIT_TEMPERATURE",
+    "ABS_JUDGE_EXTRA_PARAMS",
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
     "GEMINI_API_KEY",
@@ -57,6 +61,51 @@ class TestBuiltinJudgeCustomEndpoint:
         assert req["headers"]["api-key"] == "secret"
         assert "authorization" not in req["headers"]
         assert req["body"]["model"] == "gpt-4o-mini"
+        # Defaults: max_tokens field present with the standard 512 limit
+        assert req["body"]["max_tokens"] == 512
+        assert req["body"]["temperature"] == 0.0
+
+    def test_sends_max_completion_tokens_and_omits_temperature(self, server_factory):
+        httpd, url = server_factory(_judge_responder, "/v1")
+        configure_builtin_judge(
+            base_url=url,
+            max_tokens_param="max_completion_tokens",
+            max_tokens=256,
+            omit_temperature=True,
+            extra_params={"reasoning_effort": "low"},
+        )
+
+        result = _run(evaluate(TRACE, {"type": "llm_judge", "criteria": "Is it helpful?"}))
+
+        assert result.passed is True
+        req = httpd.requests[0]
+        assert req["body"]["max_completion_tokens"] == 256
+        assert "max_tokens" not in req["body"]
+        assert "temperature" not in req["body"]
+        assert req["body"]["reasoning_effort"] == "low"
+
+    def test_extra_params_override_merged_defaults(self, server_factory):
+        httpd, url = server_factory(_judge_responder, "/v1")
+        configure_builtin_judge(
+            base_url=url,
+            extra_params={"max_tokens": 999, "temperature": 0.5},
+        )
+
+        _run(evaluate(TRACE, {"type": "llm_judge", "criteria": "x"}))
+
+        req = httpd.requests[0]
+        assert req["body"]["max_tokens"] == 999
+        assert req["body"]["temperature"] == 0.5
+
+    def test_invalid_max_tokens_param_fails_clearly(self, server_factory):
+        httpd, url = server_factory(_judge_responder, "/v1")
+        configure_builtin_judge(base_url=url, max_tokens_param="max_output_tokens")
+
+        result = _run(evaluate(TRACE, {"type": "llm_judge", "criteria": "x"}))
+
+        assert result.passed is False
+        assert result.code == "adapter.error"
+        assert "max_completion_tokens" in result.reason
 
     def test_defaults_to_authorization_bearer(self, server_factory):
         httpd, url = server_factory(_judge_responder, "/v1")

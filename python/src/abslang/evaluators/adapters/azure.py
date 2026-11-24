@@ -59,8 +59,17 @@ def configure(
     deployment: str | None = None,
     api_version: str | None = None,
     project: str | None = None,
+    max_tokens_param: str | None = None,
+    max_tokens: int | None = None,
+    omit_temperature: bool | None = None,
+    extra_params: dict[str, Any] | None = None,
 ) -> None:
-    """Prepare the Azure adapter. All values default to environment variables."""
+    """Prepare the Azure adapter. All values default to environment variables.
+
+    max_tokens_param / max_tokens / omit_temperature / extra_params apply to the
+    direct llm_judge chat-completions call (e.g. max_completion_tokens for
+    o-series/gpt-5 deployments or newer api-versions).
+    """
     if endpoint:
         os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
     if api_key:
@@ -71,6 +80,14 @@ def configure(
         os.environ["AZURE_OPENAI_API_VERSION"] = api_version
     if project:
         os.environ["AZURE_AI_PROJECT_CONNECTION_STRING"] = project
+    if max_tokens_param:
+        os.environ["AZURE_OPENAI_MAX_TOKENS_PARAM"] = max_tokens_param
+    if max_tokens:
+        os.environ["AZURE_OPENAI_MAX_TOKENS"] = str(max_tokens)
+    if omit_temperature is not None:
+        os.environ["AZURE_OPENAI_OMIT_TEMPERATURE"] = "true" if omit_temperature else "false"
+    if extra_params:
+        os.environ["AZURE_OPENAI_EXTRA_PARAMS"] = json.dumps(extra_params)
     _evaluators_cache.clear()
 
 
@@ -258,14 +275,35 @@ async def _llm_judge(trace: list[ObservedStep], evaluation: dict[str, Any]) -> E
         f"{cfg['azure_deployment']}/chat/completions?api-version={api_version}"
     )
     headers = {"api-key": cfg["api_key"], "Content-Type": "application/json"}
-    body = {
+    body: dict[str, Any] = {
         "messages": [
             {"role": "system", "content": JUDGE_SYSTEM},
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0.0,
-        "max_tokens": 512,
     }
+    max_tokens_param = os.environ.get("AZURE_OPENAI_MAX_TOKENS_PARAM", "max_tokens")
+    if max_tokens_param not in ("max_tokens", "max_completion_tokens"):
+        raise ValueError(
+            f"invalid Azure judge token-limit field '{max_tokens_param}': "
+            "use max_tokens or max_completion_tokens (o-series/gpt-5, newer api-versions)"
+        )
+    omit_temperature = os.environ.get("AZURE_OPENAI_OMIT_TEMPERATURE", "").lower() in (
+        "1", "true", "yes", "on",
+    )
+    if not omit_temperature:
+        body["temperature"] = 0.0
+    max_tokens = os.environ.get("AZURE_OPENAI_MAX_TOKENS", "512")
+    try:
+        body[max_tokens_param] = int(max_tokens)
+    except ValueError:
+        body[max_tokens_param] = 512
+    # Extra params go last: they can override anything above when a provider needs it.
+    extra = os.environ.get("AZURE_OPENAI_EXTRA_PARAMS")
+    if extra:
+        parsed = json.loads(extra)
+        if not isinstance(parsed, dict):
+            raise ValueError("AZURE_OPENAI_EXTRA_PARAMS must be a JSON object")
+        body.update(parsed)
 
     try:
         async with httpx.AsyncClient(timeout=60) as http:

@@ -26,6 +26,11 @@ judge:
   api_key: judge-key
   api_key_header: api-key
   model: judge-model
+  max_tokens_param: max_completion_tokens
+  max_tokens: 1024
+  omit_temperature: true
+  extra_params:
+    reasoning_effort: low
 defaults:
   timeout: 120
   parallel: 4
@@ -113,6 +118,11 @@ def test_all_options_from_config_file(tmp_path, monkeypatch):
         "api_key": "judge-key",
         "api_key_header": "api-key",
         "model": "judge-model",
+        "max_tokens_param": "max_completion_tokens",
+        "max_tokens": 1024,
+        "omit_temperature": True,
+        "extra_params": None,
+        "config_extra_params": {"reasoning_effort": "low"},
     }
     assert captured["logging"]["format"] == "jsonl"
     assert captured["logging"]["level"] == "debug"

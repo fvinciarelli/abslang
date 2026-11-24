@@ -24,6 +24,11 @@ judge:
   api_key: key
   api_key_header: api-key
   model: deployment
+  max_tokens_param: max_completion_tokens
+  max_tokens: 1024
+  omit_temperature: true
+  extra_params:
+    reasoning_effort: low
 defaults:
   dataset: cases.jsonl
   filter: "kind:refund"
@@ -53,6 +58,10 @@ report:
             Assert.True(config.Agent.ForwardAuth);
             Assert.Equal("azure", config.Adapters!["llm_judge"]);
             Assert.Equal("http://judge/v1", config.Judge!.BaseUrl);
+            Assert.Equal("max_completion_tokens", config.Judge.MaxTokensParam);
+            Assert.Equal(1024, config.Judge.MaxTokens);
+            Assert.True(config.Judge.OmitTemperature);
+            Assert.Equal("low", config.Judge.ExtraParams!["reasoning_effort"]);
             Assert.Equal("cases.jsonl", config.Defaults!.Dataset);
             Assert.Equal(30, config.Defaults.Timeout);
             Assert.Equal(4, config.Defaults.Parallel);

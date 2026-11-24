@@ -46,6 +46,12 @@ abslang run session.abs.yaml --agent $URL --adapter google  # Google Vertex AI
 abslang run session.abs.yaml --agent $URL                   # built-in judge (OpenAI/Anthropic/Gemini)
 ```
 
+The built-in judge also accepts any OpenAI-compatible endpoint
+(`--judge-base-url` / `ABS_JUDGE_BASE_URL`), and models that reject `max_tokens`
+(gpt-5/o-series) are supported via `--judge-max-tokens-param max_completion_tokens`,
+`--judge-max-tokens`, `--judge-omit-temperature`, and `--judge-param key=value` —
+see RUNNER.md §Adapters and the `judge:` section of abs.config.yaml.
+
 ```yaml
 evaluations:
   - type: Violence
