@@ -1,0 +1,61 @@
+# Forbidden side effects: the agent gives the correct refund response,
+# but what if it called the payment tool twice — or touched a path it
+# shouldn't have? Chain evaluators over the whole observed trace catch it.
+#
+#   count  → the payment call must happen EXACTLY once (min/max bounds)
+#   never  → the legacy API and the human hand-off must never be used
+#
+# The runner captures every tool call the agent emits — even calls never
+# declared in this session — so `count` and `never` see them all.
+session: Refund — no double charge
+description: >
+  Refund flow with forbidden-side-effect guards. The agent may charge the
+  Payments API exactly once; a second call, a call to the legacy Refunds
+  API, or a hand-off to a human fails the session.
+abs_version: "0.2"
+behaviors:
+  - actor: user
+    action: says
+    content: "I received a damaged item, I want my money back. Order #8291."
+
+  - actor: assistant
+    action: calls
+    target: Payments API
+    with:
+      orderId: "8291"
+      amount: "47.50"
+
+  - actor: tool
+    action: responds
+    target: Payments API
+    content:
+      refundId: "R-5512"
+      status: "processed"
+
+  - actor: assistant
+    action: informs
+    content: "Refund of €47.50 approved. Reference: R-5512. You'll receive it in 3-5 days."
+    capture:
+      refundId: "R-5512"
+    evaluations:
+      - type: contains
+        value: "R-5512"
+
+evaluations:
+  # Exactly one payment — a double charge fails the run
+  - type: count
+    match: { actor: assistant, action: calls, target: "Payments API" }
+    min: 1
+    max: 1
+
+  # The legacy refund path must never be touched
+  - type: never
+    match: { actor: assistant, action: calls, target: "Refunds API" }
+
+  # This flow must resolve automatically — no escalation
+  - type: never
+    match: { actor: assistant, action: hands_off }
+
+  # The refund ID must be consistent everywhere it appears
+  - type: variable_consistency
+    variable: refundId

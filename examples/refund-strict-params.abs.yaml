@@ -1,0 +1,61 @@
+# Strict parameter matching with `with_only`: the observed call must contain
+# EXACTLY these keys and no others. Any extra argument — a currency injection,
+# a duplicate amount field, an internal flag — fails the step.
+#
+# Two complementary guards here:
+#   with_only (on the Behavior) → step-level strict match. A call with extra
+#       parameters is reported as "no match" in the steps table and the JSON
+#       trace (matched: false).
+#   tool_call (evaluation)      → run-level check that the tool was called with
+#       the declared parameters. `with` is partial by design (extra keys OK),
+#       so it catches MISSING or WRONG parameters and fails the run;
+#       `blocking: true` marks this payment call as a checkpoint.
+#
+# Contrast with `with` (partial match, the default): observed arguments must
+# contain all declared keys but may include extras. See TOOLS.md.
+session: Refund — strict payment parameters
+description: >
+  Refund flow where the payment call is security-sensitive: the exact
+  parameter set matters. with_only rejects any extra argument at the step
+  level; the tool_call evaluation fails the run on missing or wrong
+  parameters.
+abs_version: "0.2"
+behaviors:
+  - actor: user
+    action: says
+    content: "I received a damaged item, I want my money back. Order #8291."
+
+  # with_only = strict match: exactly orderId and amount, nothing else
+  - actor: assistant
+    action: calls
+    target: Payments API
+    with_only:
+      orderId: "8291"
+      amount: "47.50"
+    evaluations:
+      - type: tool_call
+        target: "Payments API"
+        with:
+          orderId: "8291"
+          amount: "47.50"
+        blocking: true
+
+  - actor: tool
+    action: responds
+    target: Payments API
+    content:
+      refundId: "R-5512"
+      status: "processed"
+
+  - actor: assistant
+    action: informs
+    content: "Refund of €47.50 approved. Reference: R-5512. You'll receive it in 3-5 days."
+    evaluations:
+      - type: contains
+        value: "R-5512"
+
+evaluations:
+  # Same guard as refund-side-effects: a second payment call fails
+  - type: count
+    match: { actor: assistant, action: calls, target: "Payments API" }
+    max: 1

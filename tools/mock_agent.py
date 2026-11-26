@@ -166,6 +166,115 @@ APPOINTMENT_HANDOFF = Scenario(
 )
 
 
+# Refund: one payment call with the expected parameters, then confirm
+REFUND = Scenario(
+    name="refund",
+    responses=[
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "Payments API",
+                        "arguments": '{"orderId": "8291", "amount": "47.50"}',
+                    },
+                }
+            ],
+        },
+        {  # After tool result
+            "role": "assistant",
+            "content": "Refund of €47.50 approved. Reference: R-5512. You'll receive it in 3-5 days.",
+        },
+    ],
+)
+
+# Refund, forbidden side effect: the payment tool is called twice
+REFUND_DOUBLE_CALL = Scenario(
+    name="refund_double_call",
+    responses=[
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "Payments API",
+                        "arguments": '{"orderId": "8291", "amount": "47.50"}',
+                    },
+                },
+                {
+                    "id": "call_2",
+                    "type": "function",
+                    "function": {
+                        "name": "Payments API",
+                        "arguments": '{"orderId": "8291", "amount": "47.50"}',
+                    },
+                },
+            ],
+        },
+        {  # After tool results
+            "role": "assistant",
+            "content": "Refund of €47.50 approved. Reference: R-5512. You'll receive it in 3-5 days.",
+        },
+    ],
+)
+
+# Refund, parameter injection: an extra argument sneaks into the call
+REFUND_EXTRA_PARAM = Scenario(
+    name="refund_extra_param",
+    responses=[
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "Payments API",
+                        "arguments": '{"orderId": "8291", "amount": "47.50", "currency": "USD"}',
+                    },
+                }
+            ],
+        },
+        {  # After tool result
+            "role": "assistant",
+            "content": "Refund of €47.50 approved. Reference: R-5512. You'll receive it in 3-5 days.",
+        },
+    ],
+)
+
+# Refund, missing parameter: the call omits the amount
+REFUND_MISSING_PARAM = Scenario(
+    name="refund_missing_param",
+    responses=[
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "Payments API",
+                        "arguments": '{"orderId": "8291"}',
+                    },
+                }
+            ],
+        },
+        {  # After tool result
+            "role": "assistant",
+            "content": "Refund of €47.50 approved. Reference: R-5512. You'll receive it in 3-5 days.",
+        },
+    ],
+)
+
+
 SCENARIOS: dict[str, Scenario] = {
     "happy": HAPPY,
     "order": HAPPY,
@@ -177,6 +286,10 @@ SCENARIOS: dict[str, Scenario] = {
     "booking": APPOINTMENT,
     "appointment_handoff": APPOINTMENT_HANDOFF,
     "handoff": APPOINTMENT_HANDOFF,
+    "refund": REFUND,
+    "refund_double_call": REFUND_DOUBLE_CALL,
+    "refund_extra_param": REFUND_EXTRA_PARAM,
+    "refund_missing_param": REFUND_MISSING_PARAM,
 }
 
 
